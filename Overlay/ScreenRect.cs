@@ -1,0 +1,36 @@
+﻿namespace FocusTool.Win.Overlay;
+
+internal readonly record struct ScreenRect(double Left, double Top, double Right, double Bottom)
+{
+    public double Width => Math.Max(0, Right - Left);
+    public double Height => Math.Max(0, Bottom - Top);
+
+    public static ScreenRect FromPoints(ScreenPoint first, ScreenPoint second)
+    {
+        return new ScreenRect(
+            Math.Min(first.X, second.X),
+            Math.Min(first.Y, second.Y),
+            Math.Max(first.X, second.X),
+            Math.Max(first.Y, second.Y));
+    }
+
+    public ScreenRect Inflate(double amount)
+    {
+        return new ScreenRect(Left - amount, Top - amount, Right + amount, Bottom + amount);
+    }
+
+    public ScreenRect Offset(double dx, double dy)
+    {
+        return new ScreenRect(Left + dx, Top + dy, Right + dx, Bottom + dy);
+    }
+
+    public bool Contains(ScreenPoint point)
+    {
+        return point.X >= Left && point.X <= Right && point.Y >= Top && point.Y <= Bottom;
+    }
+
+    public bool Intersects(ScreenRect other)
+    {
+        return Left < other.Right && Right > other.Left && Top < other.Bottom && Bottom > other.Top;
+    }
+}

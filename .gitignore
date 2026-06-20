@@ -1,0 +1,52 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET / NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+# Test and coverage output
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+coverage.cobertura.xml
+
+# Logs and crash dumps
+*.log
+*.dmp
+*.mdmp
+
+# Publish binaries and archives
+publish/**
+!publish/
+!publish/readme.txt
+!publish/license.txt
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.swp
+~$*
+
+# Windows / macOS noise
+Thumbs.db
+Desktop.ini
+.DS_Store
