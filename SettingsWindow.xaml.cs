@@ -55,6 +55,9 @@ public partial class SettingsWindow : Window
         PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
         RegionMaskColorBox.Text = settings.RegionMaskColor;
         RegionMaskOpacitySlider.Value = settings.RegionMaskOpacity * 100;
+        FadingAnnotationsCheckBox.IsChecked = settings.FadingAnnotationsEnabled;
+        FadingAnnotationVisibleSlider.Value = settings.FadingAnnotationVisibleMs / 1000.0;
+        FadingAnnotationFadeSlider.Value = settings.FadingAnnotationFadeMs / 1000.0;
 
         var annotationPresets = GetAnnotationPresetValues(settings);
         if (!TryFindPreset(settings.AnnotationColor, annotationPresets, out _selectedAnnotationPresetIndex)
@@ -204,6 +207,9 @@ public partial class SettingsWindow : Window
         updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
         updated.RegionMaskColor = RegionMaskColorBox.Text.Trim();
         updated.RegionMaskOpacity = RegionMaskOpacitySlider.Value / 100.0;
+        updated.FadingAnnotationsEnabled = FadingAnnotationsCheckBox.IsChecked == true;
+        updated.FadingAnnotationVisibleMs = (int)Math.Round(FadingAnnotationVisibleSlider.Value * 1000);
+        updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
         updated.AnnotationColor = _annotationColor;
         while (updated.AnnotationColorPresets.Count < 5)
         {
@@ -237,6 +243,7 @@ public partial class SettingsWindow : Window
         TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
         ToggleRegionMaskBox.Text = settings.Shortcuts.ToggleRegionMask;
         ClearRegionMasksBox.Text = settings.Shortcuts.ClearRegionMasks;
+        ToggleFadingAnnotationsBox.Text = settings.Shortcuts.ToggleFadingAnnotations;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
@@ -278,6 +285,7 @@ public partial class SettingsWindow : Window
         shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
         shortcuts.ToggleRegionMask = ReadShortcutText(ToggleRegionMaskBox);
         shortcuts.ClearRegionMasks = ReadShortcutText(ClearRegionMasksBox);
+        shortcuts.ToggleFadingAnnotations = ReadShortcutText(ToggleFadingAnnotationsBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
@@ -314,6 +322,7 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
             || !ValidateShortcut("Region mask", shortcuts.ToggleRegionMask)
             || !ValidateShortcut("Clear region masks", shortcuts.ClearRegionMasks)
+            || !ValidateShortcut("Fading annotations", shortcuts.ToggleFadingAnnotations)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
@@ -393,6 +402,7 @@ public partial class SettingsWindow : Window
             ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -434,6 +444,7 @@ public partial class SettingsWindow : Window
             ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -519,6 +530,8 @@ public partial class SettingsWindow : Window
             || PinnedLensZoomValue is null
             || PinnedLensRefreshFpsValue is null
             || RegionMaskOpacityValue is null
+            || FadingAnnotationVisibleValue is null
+            || FadingAnnotationFadeValue is null
             || AnnotationThicknessValue is null
             || AnnotationFontSizeValue is null)
         {
@@ -535,6 +548,8 @@ public partial class SettingsWindow : Window
         PinnedLensZoomValue.Text = $"{PinnedLensZoomSlider.Value:0.##}x";
         PinnedLensRefreshFpsValue.Text = $"{PinnedLensRefreshFpsSlider.Value:0} fps";
         RegionMaskOpacityValue.Text = $"{RegionMaskOpacitySlider.Value:0}%";
+        FadingAnnotationVisibleValue.Text = $"{FadingAnnotationVisibleSlider.Value:0.#}s";
+        FadingAnnotationFadeValue.Text = $"{FadingAnnotationFadeSlider.Value:0.#}s";
         AnnotationThicknessValue.Text = $"{AnnotationThicknessSlider.Value:0}px";
         AnnotationFontSizeValue.Text = $"{AnnotationFontSizeSlider.Value:0}px";
     }

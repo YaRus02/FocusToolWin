@@ -22,6 +22,7 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _closePinnedLensesItem;
     private readonly ToolStripMenuItem _regionMaskItem;
     private readonly ToolStripMenuItem _clearRegionMasksItem;
+    private readonly ToolStripMenuItem _fadingAnnotationsItem;
     private readonly ToolStripMenuItem _toolbarItem;
     private readonly ToolStripMenuItem _screenshotItem;
     private readonly ToolStripMenuItem _screenBoardItem;
@@ -109,6 +110,15 @@ internal sealed class TrayIconController : IDisposable
         };
 
         _clearRegionMasksItem = new ToolStripMenuItem("Clear region masks", null, (_, _) => _controller.ClearRegionMasks());
+
+        _fadingAnnotationsItem = new ToolStripMenuItem("Fading annotations") { CheckOnClick = true };
+        _fadingAnnotationsItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.SetFadingAnnotationsEnabled(_fadingAnnotationsItem.Checked);
+            }
+        };
 
         _toolbarItem = new ToolStripMenuItem("Toolbar") { CheckOnClick = true };
         _toolbarItem.Click += (_, _) =>
@@ -199,6 +209,7 @@ internal sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(_closePinnedLensesItem);
         _contextMenu.Items.Add(_regionMaskItem);
         _contextMenu.Items.Add(_clearRegionMasksItem);
+        _contextMenu.Items.Add(_fadingAnnotationsItem);
         _contextMenu.Items.Add(_toolbarItem);
         _contextMenu.Items.Add(_screenshotItem);
         _contextMenu.Items.Add(_screenBoardItem);
@@ -304,6 +315,9 @@ internal sealed class TrayIconController : IDisposable
         _regionMaskItem.ShortcutKeyDisplayString = _controller.RegionMaskShortcut;
         _clearRegionMasksItem.Enabled = _controller.RegionMaskActive;
         _clearRegionMasksItem.ShortcutKeyDisplayString = _controller.ClearRegionMasksShortcut;
+
+        _fadingAnnotationsItem.Checked = _controller.FadingAnnotationsEnabled;
+        _fadingAnnotationsItem.ShortcutKeyDisplayString = _controller.FadingAnnotationsShortcut;
 
         _toolbarItem.Checked = _controller.ToolbarVisible;
         _toolbarItem.ShortcutKeyDisplayString = _controller.ToolbarShortcut;

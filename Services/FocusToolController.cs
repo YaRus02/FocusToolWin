@@ -27,7 +27,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly SettingsStore _settingsStore = new();
     private readonly ScreenshotService _screenshotService = new();
     private readonly TrailModel _trail = new();
-    private readonly AnnotationDocument _annotations = new();
+    private readonly AnnotationDocument _annotations;
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _settingsSaveTimer;
     private readonly DispatcherTimer _pinnedLensRefreshTimer;
@@ -97,16 +97,19 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool RegionMaskActive => _regionMasks.Count > 0;
     public int RegionMaskCount => _regionMasks.Count;
     public bool RegionMaskSelectionActive => _mode == InteractionMode.RegionMaskSelect;
+    public bool FadingAnnotationsEnabled => Settings.FadingAnnotationsEnabled;
     public string MagnifierShortcut => Settings.Shortcuts.ToggleMagnifier;
     public string PinnedLensShortcut => Settings.Shortcuts.TogglePinnedLens;
     public string RegionMaskShortcut => Settings.Shortcuts.ToggleRegionMask;
     public string ClearRegionMasksShortcut => Settings.Shortcuts.ClearRegionMasks;
+    public string FadingAnnotationsShortcut => Settings.Shortcuts.ToggleFadingAnnotations;
     public string ToolbarShortcut => Settings.Shortcuts.ToggleToolbar;
     public string ScreenshotShortcut => Settings.Shortcuts.TakeScreenshot;
     public string ScreenBoardShortcut => Settings.Shortcuts.ToggleScreenBoard;
 
     public FocusToolController()
     {
+        _annotations = new AnnotationDocument(NowMs);
         Settings = _settingsStore.Load();
         CacheParsedSettings();
         Settings.SpotlightEnabled = false;
@@ -879,6 +882,23 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         ApplySettings(updated);
     }
 
+    public void ToggleFadingAnnotations()
+    {
+        SetFadingAnnotationsEnabled(!Settings.FadingAnnotationsEnabled);
+    }
+
+    public void SetFadingAnnotationsEnabled(bool enabled)
+    {
+        if (Settings.FadingAnnotationsEnabled == enabled)
+        {
+            return;
+        }
+
+        var updated = Settings.Clone();
+        updated.FadingAnnotationsEnabled = enabled;
+        ApplySettings(updated);
+    }
+
     public void SetLaserActivationMode(LaserActivationMode mode)
     {
         if (ActivationMode == mode)
@@ -1396,6 +1416,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        var fadingAnnotationsAnimating = UpdateFadingAnnotations();
         var magnifierActive = Settings.MagnifierEnabled;
         var spotlightActive = IsSpotlightVisibleInMode(_mode);
         var holdActive = ActivationMode == LaserActivationMode.Always
@@ -1431,6 +1452,23 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _timer.Interval = ActiveInterval;
         }
+        else if (fadingAnnotationsAnimating)
+        {
+            _timer.Interval = FadeInterval;
+        }
+    }
+
+    private bool UpdateFadingAnnotations()
+    {
+        var nowMs = NowMs();
+        var fadingAnnotationsAnimating = _annotations.HasFadingTemporaryAnnotations(nowMs);
+        var removedExpired = _annotations.RemoveExpiredTemporaryAnnotations(nowMs);
+        if (fadingAnnotationsAnimating && !removedExpired)
+        {
+            _overlayManager?.Invalidate();
+        }
+
+        return _annotations.HasFadingTemporaryAnnotations(nowMs);
     }
 
     private void TrackLaserWhileHeld()
@@ -1504,6 +1542,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void OnAnnotationsChanged(object? sender, EventArgs e)
     {
+        if (_annotations.HasFadingTemporaryAnnotations(NowMs()))
+        {
+            _timer.Interval = FadeInterval;
+        }
+
         _overlayManager?.Invalidate();
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -1881,6 +1924,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TogglePinnedLens, TogglePinnedLens);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleRegionMask, ToggleRegionMask);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ClearRegionMasks, ClearRegionMasks);
+        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleFadingAnnotations, ToggleFadingAnnotations);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleToolbar, ToggleToolbar);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TakeScreenshot, TakeScreenshot);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleScreenBoard, ToggleScreenBoard);
@@ -1921,6 +1965,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             && string.Equals(left.TogglePinnedLens, right.TogglePinnedLens, StringComparison.Ordinal)
             && string.Equals(left.ToggleRegionMask, right.ToggleRegionMask, StringComparison.Ordinal)
             && string.Equals(left.ClearRegionMasks, right.ClearRegionMasks, StringComparison.Ordinal)
+            && string.Equals(left.ToggleFadingAnnotations, right.ToggleFadingAnnotations, StringComparison.Ordinal)
             && string.Equals(left.ToggleToolbar, right.ToggleToolbar, StringComparison.Ordinal)
             && string.Equals(left.TakeScreenshot, right.TakeScreenshot, StringComparison.Ordinal)
             && string.Equals(left.ToggleScreenBoard, right.ToggleScreenBoard, StringComparison.Ordinal)

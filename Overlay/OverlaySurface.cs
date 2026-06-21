@@ -235,14 +235,19 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawAnnotations(DrawingContext drawingContext)
     {
+        var nowMs = _clockProvider();
         foreach (var shape in _annotations.Shapes)
         {
-            DrawShape(drawingContext, shape, isDraft: false);
+            var opacityScale = shape.GetOpacityScale(nowMs);
+            if (opacityScale > 0.001)
+            {
+                DrawShape(drawingContext, shape, isDraft: false, opacityScale);
+            }
         }
 
         if (_annotations.Draft is { Tool: not AnnotationTool.Move } draft)
         {
-            DrawShape(drawingContext, draft, isDraft: true);
+            DrawShape(drawingContext, draft, isDraft: true, opacityScale: 1);
         }
 
         if (_annotations.SelectionBounds is { } selectionBounds)
@@ -256,13 +261,18 @@ internal sealed class OverlaySurface : FrameworkElement
         }
     }
 
-    private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft)
+    private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft, double opacityScale)
     {
-        var opacity = isDraft ? 0.72 : 0.95;
+        var opacity = (isDraft ? 0.72 : 0.95) * opacityScale;
+        if (opacity <= 0.001)
+        {
+            return;
+        }
+
         var color = AppSettings.TryParseColor(shape.Color, out var parsedColor)
             ? parsedColor
             : Colors.Red;
-        var haloOpacity = isDraft ? 0.16 : 0.24;
+        var haloOpacity = (isDraft ? 0.16 : 0.24) * opacityScale;
         var haloPen = CreatePen(Colors.Black, haloOpacity, shape.Thickness + 2.2);
         var pen = CreatePen(color, opacity, shape.Thickness);
 
@@ -292,10 +302,10 @@ internal sealed class OverlaySurface : FrameworkElement
                 DrawPencil(drawingContext, shape, pen);
                 break;
             case AnnotationTool.Highlighter:
-                DrawHighlighter(drawingContext, shape, color, isDraft);
+                DrawHighlighter(drawingContext, shape, color, isDraft, opacityScale);
                 break;
             case AnnotationTool.Text:
-                DrawText(drawingContext, shape, Colors.Black, haloOpacity + 0.12, new Vector(1.2, 1.2));
+                DrawText(drawingContext, shape, Colors.Black, haloOpacity + 0.12 * opacityScale, new Vector(1.2, 1.2));
                 DrawText(drawingContext, shape, color, opacity, default);
                 break;
             case AnnotationTool.Move:
@@ -401,14 +411,14 @@ internal sealed class OverlaySurface : FrameworkElement
         return new Rect(center.X - half, center.Y - half, size, size);
     }
 
-    private void DrawHighlighter(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, bool isDraft)
+    private void DrawHighlighter(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, bool isDraft, double opacityScale)
     {
         if (shape.Points.Count < 2)
         {
             return;
         }
 
-        var brush = new SolidColorBrush(color) { Opacity = isDraft ? 0.28 : 0.36 };
+        var brush = new SolidColorBrush(color) { Opacity = (isDraft ? 0.28 : 0.36) * opacityScale };
         brush.Freeze();
         var pen = new WpfPen(brush, Math.Max(12, shape.Thickness * 4.2))
         {

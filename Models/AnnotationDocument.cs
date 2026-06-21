@@ -11,6 +11,8 @@ internal sealed class AnnotationDocument
     private readonly Stack<List<AnnotationShape>> _undo = new();
     private readonly Stack<List<AnnotationShape>> _redo = new();
     private readonly List<int> _selectedIndices = [];
+    private readonly Func<double> _clockProvider;
+    private bool _historyMayContainTemporaryAnnotations;
     private bool _movingSelection;
     private bool _selectionUndoPushed;
 
@@ -31,6 +33,11 @@ internal sealed class AnnotationDocument
     public event EventHandler? Changed;
     public event EventHandler? DraftProgressed;
 
+    public AnnotationDocument(Func<double> clockProvider)
+    {
+        _clockProvider = clockProvider;
+    }
+
     public void BeginStroke(AnnotationTool tool, ScreenPoint start, AppSettings settings)
     {
         CommitTextDraft();
@@ -45,6 +52,7 @@ internal sealed class AnnotationDocument
             Thickness = settings.AnnotationThickness,
             FontSize = settings.AnnotationFontSize
         };
+        Draft.ApplyFadingSettings(settings);
 
         if (tool is AnnotationTool.Pencil or AnnotationTool.Highlighter)
         {
@@ -86,6 +94,7 @@ internal sealed class AnnotationDocument
         if (IsMeaningful(Draft))
         {
             PushUndo();
+            Draft.MarkCreated(_clockProvider());
             _shapes.Add(Draft.Clone());
         }
 
@@ -265,6 +274,7 @@ internal sealed class AnnotationDocument
             FontSize = settings.AnnotationFontSize,
             Text = string.Empty
         };
+        Draft.ApplyFadingSettings(settings);
 
         OnChanged();
     }
@@ -304,6 +314,7 @@ internal sealed class AnnotationDocument
         if (!string.IsNullOrWhiteSpace(Draft.Text))
         {
             PushUndo();
+            Draft.MarkCreated(_clockProvider());
             _shapes.Add(Draft.Clone());
         }
 
@@ -327,13 +338,23 @@ internal sealed class AnnotationDocument
         CommitTextDraft();
         EndSelectionMove();
 
+        var nowMs = _clockProvider();
+        var shouldNormalizeTemporaryState = HasTemporaryAnnotationsInCurrentOrHistory();
+        var removedExpired = shouldNormalizeTemporaryState && RemoveExpiredTemporaryAnnotationsCore(nowMs);
+        var historyChanged = shouldNormalizeTemporaryState && NormalizeHistory(nowMs);
+
         if (_undo.Count == 0)
         {
+            if (removedExpired || historyChanged)
+            {
+                OnChanged();
+            }
+
             return;
         }
 
-        PushBounded(_redo, Snapshot());
-        Restore(_undo.Pop());
+        PushHistory(_redo, Snapshot(nowMs));
+        Restore(_undo.Pop(), nowMs);
         OnChanged();
     }
 
@@ -342,13 +363,23 @@ internal sealed class AnnotationDocument
         CommitTextDraft();
         EndSelectionMove();
 
+        var nowMs = _clockProvider();
+        var shouldNormalizeTemporaryState = HasTemporaryAnnotationsInCurrentOrHistory();
+        var removedExpired = shouldNormalizeTemporaryState && RemoveExpiredTemporaryAnnotationsCore(nowMs);
+        var historyChanged = shouldNormalizeTemporaryState && NormalizeHistory(nowMs);
+
         if (_redo.Count == 0)
         {
+            if (removedExpired || historyChanged)
+            {
+                OnChanged();
+            }
+
             return;
         }
 
-        PushBounded(_undo, Snapshot());
-        Restore(_redo.Pop());
+        PushHistory(_undo, Snapshot(nowMs));
+        Restore(_redo.Pop(), nowMs);
         OnChanged();
     }
 
@@ -372,10 +403,47 @@ internal sealed class AnnotationDocument
         OnChanged();
     }
 
+    public bool HasFadingTemporaryAnnotations(double nowMs)
+    {
+        return _shapes.Any(shape => shape.IsFadeInProgress(nowMs));
+    }
+
+    public bool RemoveExpiredTemporaryAnnotations(double nowMs)
+    {
+        if (!RemoveExpiredTemporaryAnnotationsCore(nowMs))
+        {
+            return false;
+        }
+
+        NormalizeHistory(nowMs);
+        OnChanged();
+        return true;
+    }
+
     private void PushUndo()
     {
-        PushBounded(_undo, Snapshot());
+        var nowMs = _clockProvider();
+        if (HasTemporaryAnnotationsInCurrentOrHistory())
+        {
+            RemoveExpiredTemporaryAnnotationsCore(nowMs);
+            _ = NormalizeHistory(nowMs);
+        }
+
+        PushHistory(_undo, Snapshot(nowMs));
         _redo.Clear();
+        if (_historyMayContainTemporaryAnnotations)
+        {
+            RefreshHistoryTemporaryFlag();
+        }
+    }
+
+    private void PushHistory(Stack<List<AnnotationShape>> history, List<AnnotationShape> snapshot)
+    {
+        PushBounded(history, snapshot);
+        if (!_historyMayContainTemporaryAnnotations && snapshot.Any(shape => shape.IsTemporary))
+        {
+            _historyMayContainTemporaryAnnotations = true;
+        }
     }
 
     private static void PushBounded(
@@ -399,17 +467,159 @@ internal sealed class AnnotationDocument
         }
     }
 
-    private List<AnnotationShape> Snapshot()
+    private List<AnnotationShape> Snapshot(double nowMs)
     {
-        return _shapes.Select(shape => shape.Clone()).ToList();
+        return _shapes
+            .Where(shape => !shape.IsExpired(nowMs))
+            .Select(shape => shape.Clone())
+            .ToList();
     }
 
-    private void Restore(IEnumerable<AnnotationShape> snapshot)
+    private void Restore(IEnumerable<AnnotationShape> snapshot, double nowMs)
     {
         _shapes.Clear();
-        _shapes.AddRange(snapshot.Select(shape => shape.Clone()));
+        _shapes.AddRange(snapshot
+            .Where(shape => !shape.IsExpired(nowMs))
+            .Select(shape => shape.Clone()));
         Draft = null;
         ClearSelectionCore();
+    }
+
+    private bool RemoveExpiredTemporaryAnnotationsCore(double nowMs)
+    {
+        var removed = false;
+        for (var i = _shapes.Count - 1; i >= 0; i--)
+        {
+            if (_shapes[i].IsExpired(nowMs))
+            {
+                _shapes.RemoveAt(i);
+                removed = true;
+            }
+        }
+
+        if (removed)
+        {
+            ClearSelectionCore();
+        }
+
+        return removed;
+    }
+
+    private bool NormalizeHistory(double nowMs)
+    {
+        var current = Snapshot(nowMs);
+        var changed = NormalizeHistoryStack(_undo, current, nowMs)
+            | NormalizeHistoryStack(_redo, current, nowMs);
+        RefreshHistoryTemporaryFlag();
+        return changed;
+    }
+
+    private bool HasTemporaryAnnotationsInCurrentOrHistory()
+    {
+        return _historyMayContainTemporaryAnnotations || _shapes.Any(shape => shape.IsTemporary);
+    }
+
+    private void RefreshHistoryTemporaryFlag()
+    {
+        _historyMayContainTemporaryAnnotations = HistoryContainsTemporaryAnnotations(_undo)
+            || HistoryContainsTemporaryAnnotations(_redo);
+    }
+
+    private static bool HistoryContainsTemporaryAnnotations(Stack<List<AnnotationShape>> history)
+    {
+        return history.Any(snapshot => snapshot.Any(shape => shape.IsTemporary));
+    }
+
+    private static bool NormalizeHistoryStack(
+        Stack<List<AnnotationShape>> history,
+        IReadOnlyList<AnnotationShape> current,
+        double nowMs)
+    {
+        if (history.Count == 0)
+        {
+            return false;
+        }
+
+        var original = history.ToList();
+        var normalized = new List<List<AnnotationShape>>();
+        var previous = current;
+        foreach (var snapshot in original)
+        {
+            var filtered = snapshot
+                .Where(shape => !shape.IsExpired(nowMs))
+                .Select(shape => shape.Clone())
+                .ToList();
+
+            if (SnapshotsEqual(filtered, previous))
+            {
+                continue;
+            }
+
+            normalized.Add(filtered);
+            previous = filtered;
+        }
+
+        var changed = normalized.Count != original.Count;
+        if (!changed)
+        {
+            for (var i = 0; i < original.Count; i++)
+            {
+                if (!SnapshotsEqual(original[i], normalized[i]))
+                {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!changed)
+        {
+            return false;
+        }
+
+        history.Clear();
+        for (var i = normalized.Count - 1; i >= 0; i--)
+        {
+            history.Push(normalized[i]);
+        }
+
+        return true;
+    }
+
+    private static bool SnapshotsEqual(
+        IReadOnlyList<AnnotationShape> left,
+        IReadOnlyList<AnnotationShape> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!ShapesEqual(left[i], right[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ShapesEqual(AnnotationShape left, AnnotationShape right)
+    {
+        return left.Tool == right.Tool
+            && left.Start.Equals(right.Start)
+            && left.End.Equals(right.End)
+            && left.Points.SequenceEqual(right.Points)
+            && string.Equals(left.Color, right.Color, StringComparison.Ordinal)
+            && Math.Abs(left.Thickness - right.Thickness) < 0.0001
+            && string.Equals(left.Text, right.Text, StringComparison.Ordinal)
+            && Math.Abs(left.FontSize - right.FontSize) < 0.0001
+            && left.IsTemporary == right.IsTemporary
+            && Math.Abs(left.CreatedAtMs - right.CreatedAtMs) < 0.0001
+            && left.TemporaryVisibleMs == right.TemporaryVisibleMs
+            && left.TemporaryFadeMs == right.TemporaryFadeMs;
     }
 
     private bool ClearSelectionCore()

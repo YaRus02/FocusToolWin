@@ -37,6 +37,9 @@ public sealed class AppSettings
     public double AnnotationThickness { get; set; } = 4;
     public double AnnotationFontSize { get; set; } = 28;
     public string AnnotationTool { get; set; } = "Pencil";
+    public bool FadingAnnotationsEnabled { get; set; }
+    public int FadingAnnotationVisibleMs { get; set; } = 6000;
+    public int FadingAnnotationFadeMs { get; set; } = 1200;
     public ShortcutSettings Shortcuts { get; set; } = new();
 
     public AppSettings Clone() => new()
@@ -63,6 +66,9 @@ public sealed class AppSettings
         AnnotationThickness = AnnotationThickness,
         AnnotationFontSize = AnnotationFontSize,
         AnnotationTool = AnnotationTool,
+        FadingAnnotationsEnabled = FadingAnnotationsEnabled,
+        FadingAnnotationVisibleMs = FadingAnnotationVisibleMs,
+        FadingAnnotationFadeMs = FadingAnnotationFadeMs,
         Shortcuts = Shortcuts.Clone()
     };
 
@@ -90,6 +96,9 @@ public sealed class AppSettings
         AnnotationThickness = other.AnnotationThickness;
         AnnotationFontSize = other.AnnotationFontSize;
         AnnotationTool = other.AnnotationTool;
+        FadingAnnotationsEnabled = other.FadingAnnotationsEnabled;
+        FadingAnnotationVisibleMs = other.FadingAnnotationVisibleMs;
+        FadingAnnotationFadeMs = other.FadingAnnotationFadeMs;
         Shortcuts = other.Shortcuts.Clone();
         Normalize();
     }
@@ -167,6 +176,8 @@ public sealed class AppSettings
         RegionMaskOpacity = Math.Clamp(RegionMaskOpacity, 0.1, 1.0);
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
+        FadingAnnotationVisibleMs = Math.Clamp(FadingAnnotationVisibleMs, 500, 60000);
+        FadingAnnotationFadeMs = Math.Clamp(FadingAnnotationFadeMs, 100, 10000);
         Shortcuts ??= new ShortcutSettings();
         Shortcuts.Normalize();
     }
@@ -260,6 +271,7 @@ public sealed class ShortcutSettings
     public string TogglePinnedLens { get; set; } = "Ctrl+Alt+P";
     public string ToggleRegionMask { get; set; } = "Ctrl+Alt+H";
     public string ClearRegionMasks { get; set; } = "Ctrl+Alt+Shift+H";
+    public string ToggleFadingAnnotations { get; set; } = "Ctrl+Alt+F";
     public string ToggleToolbar { get; set; } = "Ctrl+Alt+T";
     public string TakeScreenshot { get; set; } = "Ctrl+Alt+C";
     public string ToggleScreenBoard { get; set; } = "Ctrl+Alt+G";
@@ -297,6 +309,7 @@ public sealed class ShortcutSettings
         TogglePinnedLens = TogglePinnedLens,
         ToggleRegionMask = ToggleRegionMask,
         ClearRegionMasks = ClearRegionMasks,
+        ToggleFadingAnnotations = ToggleFadingAnnotations,
         ToggleToolbar = ToggleToolbar,
         TakeScreenshot = TakeScreenshot,
         ToggleScreenBoard = ToggleScreenBoard,
@@ -335,6 +348,7 @@ public sealed class ShortcutSettings
         TogglePinnedLens = NormalizeShortcut(TogglePinnedLens, "Ctrl+Alt+P");
         ToggleRegionMask = NormalizeShortcut(ToggleRegionMask, "Ctrl+Alt+H");
         ClearRegionMasks = NormalizeShortcut(ClearRegionMasks, "Ctrl+Alt+Shift+H");
+        ToggleFadingAnnotations = NormalizeShortcut(ToggleFadingAnnotations, "Ctrl+Alt+F");
         ToggleToolbar = NormalizeShortcut(ToggleToolbar, "Ctrl+Alt+T");
         TakeScreenshot = NormalizeShortcut(TakeScreenshot, "Ctrl+Alt+C");
         ToggleScreenBoard = NormalizeShortcut(ToggleScreenBoard, "Ctrl+Alt+G");

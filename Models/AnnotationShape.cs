@@ -14,6 +14,10 @@ internal sealed class AnnotationShape
     public double Thickness { get; set; } = 4;
     public string Text { get; set; } = string.Empty;
     public double FontSize { get; set; } = 28;
+    public bool IsTemporary { get; set; }
+    public double CreatedAtMs { get; set; }
+    public int TemporaryVisibleMs { get; set; }
+    public int TemporaryFadeMs { get; set; }
     public double TextLineHeight => Math.Max(1, FontSize * TextLineHeightFactor);
     internal int GeometryVersion { get; private set; }
 
@@ -29,8 +33,65 @@ internal sealed class AnnotationShape
             Thickness = Thickness,
             Text = Text,
             FontSize = FontSize,
+            IsTemporary = IsTemporary,
+            CreatedAtMs = CreatedAtMs,
+            TemporaryVisibleMs = TemporaryVisibleMs,
+            TemporaryFadeMs = TemporaryFadeMs,
             GeometryVersion = GeometryVersion
         };
+    }
+
+    public void ApplyFadingSettings(AppSettings settings)
+    {
+        IsTemporary = settings.FadingAnnotationsEnabled;
+        TemporaryVisibleMs = Math.Max(0, settings.FadingAnnotationVisibleMs);
+        TemporaryFadeMs = Math.Max(0, settings.FadingAnnotationFadeMs);
+    }
+
+    public void MarkCreated(double nowMs)
+    {
+        CreatedAtMs = nowMs;
+    }
+
+    public bool IsExpired(double nowMs)
+    {
+        if (!IsTemporary)
+        {
+            return false;
+        }
+
+        var expireAtMs = CreatedAtMs + TemporaryVisibleMs + Math.Max(0, TemporaryFadeMs);
+        return nowMs >= expireAtMs;
+    }
+
+    public bool IsFadeInProgress(double nowMs)
+    {
+        return IsTemporary
+            && TemporaryFadeMs > 0
+            && nowMs >= CreatedAtMs + TemporaryVisibleMs
+            && !IsExpired(nowMs);
+    }
+
+    public double GetOpacityScale(double nowMs)
+    {
+        if (!IsTemporary)
+        {
+            return 1;
+        }
+
+        var fadeStartMs = CreatedAtMs + TemporaryVisibleMs;
+        if (nowMs < fadeStartMs)
+        {
+            return 1;
+        }
+
+        if (TemporaryFadeMs <= 0)
+        {
+            return 0;
+        }
+
+        var progress = Math.Clamp((nowMs - fadeStartMs) / TemporaryFadeMs, 0, 1);
+        return 1 - SmoothStep(progress);
     }
 
     public ScreenRect GetBounds()
@@ -217,6 +278,12 @@ internal sealed class AnnotationShape
             && point.X <= Math.Max(a.X, b.X) + 0.0001
             && point.Y >= Math.Min(a.Y, b.Y) - 0.0001
             && point.Y <= Math.Max(a.Y, b.Y) + 0.0001;
+    }
+
+    private static double SmoothStep(double value)
+    {
+        var t = Math.Clamp(value, 0, 1);
+        return t * t * (3 - 2 * t);
     }
 
     private static ScreenRect BoundsFromPoints(IReadOnlyList<ScreenPoint> points)

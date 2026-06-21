@@ -41,6 +41,7 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _magnifierButton = null!;
     private WpfButton _pinnedLensButton = null!;
     private WpfButton _regionMaskButton = null!;
+    private WpfButton _fadingAnnotationsButton = null!;
     private WpfButton _undoButton = null!;
     private WpfButton _redoButton = null!;
     private WpfButton _clearButton = null!;
@@ -165,11 +166,12 @@ internal sealed class OverlayToolbarWindow : Window
         _magnifierButton = CreateButton("Zoom", "Toggle magnifier", (_, _) => _controller.ToggleMagnifierMode(), width: 43);
         _pinnedLensButton = CreateButton("Pin", "Select a live pinned lens area", (_, _) => _controller.TogglePinnedLens(), width: 34);
         _regionMaskButton = CreateButton("Mask", "Select a region to cover", (_, _) => _controller.ToggleRegionMask(), width: 38);
+        _fadingAnnotationsButton = CreateButton("Fade", "Toggle fading annotations", (_, _) => _controller.ToggleFadingAnnotations(), width: 39);
 
         var row1 = CreateRow();
         row1.Children.Add(CreateHandle());
         row1.Children.Add(CreateSeparator());
-        row1.Children.Add(CreateLabeledGroup("Modes", _laserButton, _screenshotButton, _annotateButton, _spotlightButton, _magnifierButton, _pinnedLensButton, _regionMaskButton));
+        row1.Children.Add(CreateLabeledGroup("Modes", _laserButton, _screenshotButton, _annotateButton, _spotlightButton, _magnifierButton, _pinnedLensButton, _regionMaskButton, _fadingAnnotationsButton));
         row1.Children.Add(CreateSeparator());
         row1.Children.Add(CreateLabeledGroup("Board", _screenBoardButton, _blackButton, _whiteButton));
         row1.Children.Add(CreateSeparator());
@@ -498,6 +500,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_magnifierButton, _controller.MagnifierEnabled);
             SetButtonActive(_pinnedLensButton, _controller.PinnedLensSelectionActive);
             SetButtonActive(_regionMaskButton, _controller.RegionMaskSelectionActive || _controller.RegionMaskActive);
+            SetButtonActive(_fadingAnnotationsButton, _controller.FadingAnnotationsEnabled);
 
             foreach (var (tool, button) in _toolButtons)
             {
