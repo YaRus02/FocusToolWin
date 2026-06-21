@@ -20,6 +20,7 @@ internal static class NativeMethods
     public const uint SwpNoZOrder = 0x0004;
     public const uint SwpFrameChanged = 0x0020;
     public const uint SwpShowWindow = 0x0040;
+    public const uint SwpHideWindow = 0x0080;
     public const uint SwpNoOwnerZOrder = 0x0200;
 
     public const uint ModAlt = 0x0001;
@@ -35,7 +36,10 @@ internal static class NativeMethods
     public const int WmCancelMode = 0x001F;
     public const int WmCaptureChanged = 0x0215;
     public const int WmNcHitTest = 0x0084;
+    public const int WmNcLButtonDown = 0x00A1;
+    public const int WmMoving = 0x0216;
     public static readonly IntPtr HtTransparent = new(-1);
+    public static readonly IntPtr HtCaption = new(2);
 
     public const string WcMagnifier = "Magnifier";
     public const int MwFilterModeExclude = 0;
@@ -135,6 +139,9 @@ internal static class NativeMethods
         int cx,
         int cy,
         uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);

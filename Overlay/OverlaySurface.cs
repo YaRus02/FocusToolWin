@@ -40,6 +40,7 @@ internal sealed class OverlaySurface : FrameworkElement
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
+    private readonly Func<ScreenRect?> _pinnedLensSelectionProvider;
     private readonly ScreenRect _screenBounds;
     // Cached frozen polyline geometry per pencil/highlighter shape, so we don't
     // re-tessellate committed strokes on every laser frame. Cleared whenever the
@@ -73,6 +74,7 @@ internal sealed class OverlaySurface : FrameworkElement
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
+        Func<ScreenRect?> pinnedLensSelectionProvider,
         ScreenRect screenBounds)
     {
         _trailModel = trailModel;
@@ -82,6 +84,7 @@ internal sealed class OverlaySurface : FrameworkElement
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
         _screenBoardProvider = screenBoardProvider;
+        _pinnedLensSelectionProvider = pinnedLensSelectionProvider;
         _screenBounds = screenBounds;
         _annotations.Changed += OnAnnotationsChanged;
         SnapsToDevicePixels = false;
@@ -162,7 +165,7 @@ internal sealed class OverlaySurface : FrameworkElement
             DrawBlankScreen(drawingContext, mode);
         }
 
-        if (mode == InteractionMode.Annotate)
+        if (mode is InteractionMode.Annotate or InteractionMode.PinnedLensSelect)
         {
             DrawInputCatcher(drawingContext);
         }
@@ -172,6 +175,11 @@ internal sealed class OverlaySurface : FrameworkElement
         if (!blankScreen || magnifierActive)
         {
             DrawSpotlight(drawingContext, lensPoint, magnifierActive);
+        }
+
+        if (mode == InteractionMode.PinnedLensSelect)
+        {
+            DrawPinnedLensSelection(drawingContext);
         }
 
         if (IsAnnotationMode(mode))
@@ -309,6 +317,16 @@ internal sealed class OverlaySurface : FrameworkElement
         };
         pen.Freeze();
         drawingContext.DrawRectangle(null, pen, rect);
+    }
+
+    private void DrawPinnedLensSelection(DrawingContext drawingContext)
+    {
+        if (_pinnedLensSelectionProvider() is not { } selection || !selection.Intersects(_screenBounds))
+        {
+            return;
+        }
+
+        DrawSelectionRectangle(drawingContext, selection, isDraft: true);
     }
 
     private void DrawHighlighter(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, bool isDraft)

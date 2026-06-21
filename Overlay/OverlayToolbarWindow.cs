@@ -39,6 +39,7 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _whiteButton = null!;
     private WpfButton _spotlightButton = null!;
     private WpfButton _magnifierButton = null!;
+    private WpfButton _pinnedLensButton = null!;
     private WpfButton _undoButton = null!;
     private WpfButton _redoButton = null!;
     private WpfButton _clearButton = null!;
@@ -161,11 +162,12 @@ internal sealed class OverlayToolbarWindow : Window
         _whiteButton = CreateButton("White", "White board", (_, _) => ToggleMode(InteractionMode.WhiteScreen), width: 45);
         _spotlightButton = CreateButton("Spot", "Toggle spotlight", (_, _) => _controller.ToggleSpotlight(), width: 39);
         _magnifierButton = CreateButton("Zoom", "Toggle magnifier", (_, _) => _controller.ToggleMagnifierMode(), width: 43);
+        _pinnedLensButton = CreateButton("Pin", "Select a live pinned lens area", (_, _) => _controller.TogglePinnedLens(), width: 34);
 
         var row1 = CreateRow();
         row1.Children.Add(CreateHandle());
         row1.Children.Add(CreateSeparator());
-        row1.Children.Add(CreateLabeledGroup("Modes", _laserButton, _screenshotButton, _annotateButton, _spotlightButton, _magnifierButton));
+        row1.Children.Add(CreateLabeledGroup("Modes", _laserButton, _screenshotButton, _annotateButton, _spotlightButton, _magnifierButton, _pinnedLensButton));
         row1.Children.Add(CreateSeparator());
         row1.Children.Add(CreateLabeledGroup("Board", _screenBoardButton, _blackButton, _whiteButton));
         row1.Children.Add(CreateSeparator());
@@ -492,6 +494,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_whiteButton, _controller.Mode == InteractionMode.WhiteScreen);
             SetButtonActive(_spotlightButton, _controller.SpotlightEnabled);
             SetButtonActive(_magnifierButton, _controller.MagnifierEnabled);
+            SetButtonActive(_pinnedLensButton, _controller.PinnedLensSelectionActive);
 
             foreach (var (tool, button) in _toolButtons)
             {

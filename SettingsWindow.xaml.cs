@@ -51,6 +51,8 @@ public partial class SettingsWindow : Window
         SpotlightOpacitySlider.Value = settings.SpotlightOpacity * 100;
         MagnifierRadiusSlider.Value = settings.MagnifierRadius;
         MagnifierZoomSlider.Value = settings.MagnifierZoom;
+        PinnedLensZoomSlider.Value = settings.PinnedLensZoom;
+        PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
 
         var annotationPresets = GetAnnotationPresetValues(settings);
         if (!TryFindPreset(settings.AnnotationColor, annotationPresets, out _selectedAnnotationPresetIndex)
@@ -181,6 +183,8 @@ public partial class SettingsWindow : Window
         updated.SpotlightOpacity = SpotlightOpacitySlider.Value / 100.0;
         updated.MagnifierRadius = MagnifierRadiusSlider.Value;
         updated.MagnifierZoom = MagnifierZoomSlider.Value;
+        updated.PinnedLensZoom = PinnedLensZoomSlider.Value;
+        updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
         updated.AnnotationColor = _annotationColor;
         while (updated.AnnotationColorPresets.Count < 5)
         {
@@ -211,6 +215,7 @@ public partial class SettingsWindow : Window
         ToggleLaserActivationBox.Text = settings.Shortcuts.ToggleLaserActivation;
         ToggleSpotlightBox.Text = settings.Shortcuts.ToggleSpotlight;
         ToggleMagnifierBox.Text = settings.Shortcuts.ToggleMagnifier;
+        TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
@@ -249,6 +254,7 @@ public partial class SettingsWindow : Window
         shortcuts.ToggleLaserActivation = ReadShortcutText(ToggleLaserActivationBox);
         shortcuts.ToggleSpotlight = ReadShortcutText(ToggleSpotlightBox);
         shortcuts.ToggleMagnifier = ReadShortcutText(ToggleMagnifierBox);
+        shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
@@ -282,6 +288,7 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Toggle laser mode", shortcuts.ToggleLaserActivation)
             || !ValidateShortcut("Toggle spotlight", shortcuts.ToggleSpotlight)
             || !ValidateShortcut("Toggle magnifier", shortcuts.ToggleMagnifier)
+            || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
@@ -358,6 +365,7 @@ public partial class SettingsWindow : Window
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
+            ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -396,6 +404,7 @@ public partial class SettingsWindow : Window
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
+            ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -478,6 +487,8 @@ public partial class SettingsWindow : Window
             || SpotlightOpacityValue is null
             || MagnifierRadiusValue is null
             || MagnifierZoomValue is null
+            || PinnedLensZoomValue is null
+            || PinnedLensRefreshFpsValue is null
             || AnnotationThicknessValue is null
             || AnnotationFontSizeValue is null)
         {
@@ -491,6 +502,8 @@ public partial class SettingsWindow : Window
         SpotlightOpacityValue.Text = $"{SpotlightOpacitySlider.Value:0}%";
         MagnifierRadiusValue.Text = $"{MagnifierRadiusSlider.Value:0}px";
         MagnifierZoomValue.Text = $"{MagnifierZoomSlider.Value:0.##}x";
+        PinnedLensZoomValue.Text = $"{PinnedLensZoomSlider.Value:0.##}x";
+        PinnedLensRefreshFpsValue.Text = $"{PinnedLensRefreshFpsSlider.Value:0} fps";
         AnnotationThicknessValue.Text = $"{AnnotationThicknessSlider.Value:0}px";
         AnnotationFontSizeValue.Text = $"{AnnotationFontSizeSlider.Value:0}px";
     }

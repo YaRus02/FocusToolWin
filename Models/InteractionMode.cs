@@ -4,6 +4,7 @@ internal enum InteractionMode
 {
     Passthrough,
     Annotate,
+    PinnedLensSelect,
     ScreenBoard,
     BlackScreen,
     WhiteScreen

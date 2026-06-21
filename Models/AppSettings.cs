@@ -21,6 +21,8 @@ public sealed class AppSettings
     public bool MagnifierEnabled { get; set; }
     public double MagnifierRadius { get; set; } = 150;
     public double MagnifierZoom { get; set; } = 2.0;
+    public double PinnedLensZoom { get; set; } = 2.0;
+    public int PinnedLensRefreshFps { get; set; } = 30;
     public string AnnotationColor { get; set; } = "#FFFF2020";
     public List<string> AnnotationColorPresets { get; set; } =
     [
@@ -50,6 +52,8 @@ public sealed class AppSettings
         MagnifierEnabled = MagnifierEnabled,
         MagnifierRadius = MagnifierRadius,
         MagnifierZoom = MagnifierZoom,
+        PinnedLensZoom = PinnedLensZoom,
+        PinnedLensRefreshFps = PinnedLensRefreshFps,
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
         AnnotationThickness = AnnotationThickness,
@@ -73,6 +77,8 @@ public sealed class AppSettings
         MagnifierEnabled = other.MagnifierEnabled;
         MagnifierRadius = other.MagnifierRadius;
         MagnifierZoom = other.MagnifierZoom;
+        PinnedLensZoom = other.PinnedLensZoom;
+        PinnedLensRefreshFps = other.PinnedLensRefreshFps;
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
         AnnotationThickness = other.AnnotationThickness;
@@ -145,6 +151,8 @@ public sealed class AppSettings
         SpotlightOpacity = Math.Clamp(SpotlightOpacity, 0.2, 0.88);
         MagnifierRadius = Math.Clamp(MagnifierRadius, 80, 360);
         MagnifierZoom = Math.Clamp(MagnifierZoom, 1.25, 4.0);
+        PinnedLensZoom = Math.Clamp(PinnedLensZoom, 1.0, 4.0);
+        PinnedLensRefreshFps = Math.Clamp(PinnedLensRefreshFps, 10, 60);
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
         Shortcuts ??= new ShortcutSettings();
@@ -237,6 +245,7 @@ public sealed class ShortcutSettings
     public string ToggleAnnotate { get; set; } = "Ctrl+Alt+D";
     public string ToggleSpotlight { get; set; } = "Ctrl+Alt+S";
     public string ToggleMagnifier { get; set; } = "Ctrl+Alt+M";
+    public string TogglePinnedLens { get; set; } = "Ctrl+Alt+P";
     public string ToggleToolbar { get; set; } = "Ctrl+Alt+T";
     public string TakeScreenshot { get; set; } = "Ctrl+Alt+C";
     public string ToggleScreenBoard { get; set; } = "Ctrl+Alt+G";
@@ -271,6 +280,7 @@ public sealed class ShortcutSettings
         ToggleAnnotate = ToggleAnnotate,
         ToggleSpotlight = ToggleSpotlight,
         ToggleMagnifier = ToggleMagnifier,
+        TogglePinnedLens = TogglePinnedLens,
         ToggleToolbar = ToggleToolbar,
         TakeScreenshot = TakeScreenshot,
         ToggleScreenBoard = ToggleScreenBoard,
@@ -306,6 +316,7 @@ public sealed class ShortcutSettings
         ToggleAnnotate = NormalizeShortcut(ToggleAnnotate, "Ctrl+Alt+D");
         ToggleSpotlight = NormalizeShortcut(ToggleSpotlight, "Ctrl+Alt+S");
         ToggleMagnifier = NormalizeShortcut(ToggleMagnifier, "Ctrl+Alt+M");
+        TogglePinnedLens = NormalizeShortcut(TogglePinnedLens, "Ctrl+Alt+P");
         ToggleToolbar = NormalizeShortcut(ToggleToolbar, "Ctrl+Alt+T");
         TakeScreenshot = NormalizeShortcut(TakeScreenshot, "Ctrl+Alt+C");
         ToggleScreenBoard = NormalizeShortcut(ToggleScreenBoard, "Ctrl+Alt+G");

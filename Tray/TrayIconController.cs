@@ -18,6 +18,8 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _laserHoldModeItem;
     private readonly ToolStripMenuItem _spotlightItem;
     private readonly ToolStripMenuItem _magnifierItem;
+    private readonly ToolStripMenuItem _pinnedLensItem;
+    private readonly ToolStripMenuItem _closePinnedLensesItem;
     private readonly ToolStripMenuItem _toolbarItem;
     private readonly ToolStripMenuItem _screenshotItem;
     private readonly ToolStripMenuItem _screenBoardItem;
@@ -83,6 +85,17 @@ internal sealed class TrayIconController : IDisposable
                 _controller.SetMagnifierEnabled(_magnifierItem.Checked);
             }
         };
+
+        _pinnedLensItem = new ToolStripMenuItem("New pinned lens");
+        _pinnedLensItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.TogglePinnedLens();
+            }
+        };
+
+        _closePinnedLensesItem = new ToolStripMenuItem("Close pinned lenses", null, (_, _) => _controller.ClosePinnedLenses());
 
         _toolbarItem = new ToolStripMenuItem("Toolbar") { CheckOnClick = true };
         _toolbarItem.Click += (_, _) =>
@@ -169,6 +182,8 @@ internal sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(_laserActivationItem);
         _contextMenu.Items.Add(_spotlightItem);
         _contextMenu.Items.Add(_magnifierItem);
+        _contextMenu.Items.Add(_pinnedLensItem);
+        _contextMenu.Items.Add(_closePinnedLensesItem);
         _contextMenu.Items.Add(_toolbarItem);
         _contextMenu.Items.Add(_screenshotItem);
         _contextMenu.Items.Add(_screenBoardItem);
@@ -233,6 +248,7 @@ internal sealed class TrayIconController : IDisposable
         _modeItem.Text = _controller.Mode switch
         {
             InteractionMode.Annotate => "Mode: Annotate",
+            InteractionMode.PinnedLensSelect => "Mode: Select lens area",
             InteractionMode.ScreenBoard => "Mode: Screen board",
             InteractionMode.BlackScreen => "Mode: Black board",
             InteractionMode.WhiteScreen => "Mode: White board",
@@ -253,6 +269,15 @@ internal sealed class TrayIconController : IDisposable
 
         _magnifierItem.Checked = _controller.MagnifierEnabled;
         _magnifierItem.ShortcutKeyDisplayString = _controller.MagnifierShortcut;
+
+        _pinnedLensItem.Checked = _controller.PinnedLensActive || _controller.PinnedLensSelectionActive;
+        _pinnedLensItem.Text = _controller.PinnedLensSelectionActive
+            ? "Pinned lens: select area"
+            : _controller.PinnedLensCount > 0
+                ? $"New pinned lens ({_controller.PinnedLensCount} active)"
+                : "New pinned lens";
+        _pinnedLensItem.ShortcutKeyDisplayString = _controller.PinnedLensShortcut;
+        _closePinnedLensesItem.Enabled = _controller.PinnedLensActive;
 
         _toolbarItem.Checked = _controller.ToolbarVisible;
         _toolbarItem.ShortcutKeyDisplayString = _controller.ToolbarShortcut;
@@ -297,6 +322,10 @@ internal sealed class TrayIconController : IDisposable
                 ? "FocusTool: Screen board"
             : _controller.MagnifierEnabled
                 ? "FocusTool: Magnifier"
+            : _controller.PinnedLensSelectionActive
+                ? "FocusTool: Select lens area"
+            : _controller.PinnedLensActive
+                ? $"FocusTool: {_controller.PinnedLensCount} pinned lens"
             : _controller.BlackScreenEnabled
                 ? "FocusTool: Black board"
             : _controller.WhiteScreenEnabled

@@ -149,6 +149,21 @@
                         <Slider x:Name="MagnifierZoomSlider" Minimum="1.25" Maximum="4" TickFrequency="0.25" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
 
                         <Separator Margin="0,18,0,14" />
+                        <TextBlock Text="Pinned lens" FontSize="16" FontWeight="SemiBold" />
+
+                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                            <TextBlock Text="Zoom" FontWeight="SemiBold" />
+                            <TextBlock x:Name="PinnedLensZoomValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                        </DockPanel>
+                        <Slider x:Name="PinnedLensZoomSlider" Minimum="1" Maximum="4" TickFrequency="0.25" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                            <TextBlock Text="Refresh" FontWeight="SemiBold" />
+                            <TextBlock x:Name="PinnedLensRefreshFpsValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                        </DockPanel>
+                        <Slider x:Name="PinnedLensRefreshFpsSlider" Minimum="10" Maximum="60" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                        <Separator Margin="0,18,0,14" />
                         <TextBlock Text="Annotation" FontSize="16" FontWeight="SemiBold" />
 
                         <TextBlock Text="Color presets" FontWeight="SemiBold" Margin="0,12,0,0" />
@@ -212,6 +227,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Toggle annotate" VerticalAlignment="Center" Margin="0,4" />
@@ -222,20 +238,22 @@
                                 <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToggleSpotlightBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="3" Text="Toggle magnifier" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToggleMagnifierBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="4" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="5" Text="Screenshot" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="TakeScreenshotBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="6" Text="Screen board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToggleScreenBoardBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="7" Text="Black board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="8" Text="White board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="9" Text="Hold laser" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="9" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="10" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="10" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="4" Text="Pinned lens" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="TogglePinnedLensBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="5" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="6" Text="Screenshot" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="TakeScreenshotBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="7" Text="Screen board" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToggleScreenBoardBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="8" Text="Black board" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="9" Text="White board" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="9" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="10" Text="Hold laser" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="10" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="11" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="11" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
                             </Grid>
                         </GroupBox>
 

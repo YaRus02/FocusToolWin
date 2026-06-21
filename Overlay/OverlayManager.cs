@@ -15,7 +15,9 @@ internal sealed class OverlayManager : IDisposable
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
+    private readonly Func<ScreenRect?> _pinnedLensSelectionProvider;
     private readonly IOverlayInputHandler _inputHandler;
+    private readonly Action? _beforeTopmostReassert;
     private readonly Action? _afterTopmostReassert;
     private readonly List<OverlayWindow> _windows = [];
     private readonly System.Windows.Threading.DispatcherTimer _topmostTimer;
@@ -30,7 +32,9 @@ internal sealed class OverlayManager : IDisposable
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
+        Func<ScreenRect?> pinnedLensSelectionProvider,
         IOverlayInputHandler inputHandler,
+        Action? beforeTopmostReassert = null,
         Action? afterTopmostReassert = null)
     {
         _trailModel = trailModel;
@@ -40,7 +44,9 @@ internal sealed class OverlayManager : IDisposable
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
         _screenBoardProvider = screenBoardProvider;
+        _pinnedLensSelectionProvider = pinnedLensSelectionProvider;
         _inputHandler = inputHandler;
+        _beforeTopmostReassert = beforeTopmostReassert;
         _afterTopmostReassert = afterTopmostReassert;
         _topmostTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -71,7 +77,7 @@ internal sealed class OverlayManager : IDisposable
             window.PositionOverScreen();
         }
 
-        _afterTopmostReassert?.Invoke();
+        ReassertTopmost();
         _topmostTimer.Start();
     }
 
@@ -140,6 +146,12 @@ internal sealed class OverlayManager : IDisposable
     }
 
     public void ReassertTopmost()
+    {
+        _beforeTopmostReassert?.Invoke();
+        ReassertOverlayAndChromeTopmost();
+    }
+
+    public void ReassertOverlayAndChromeTopmost()
     {
         foreach (var window in _windows)
         {
@@ -219,7 +231,7 @@ internal sealed class OverlayManager : IDisposable
 
         foreach (var screen in Screen.AllScreens)
         {
-            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _screenBoardProvider, _inputHandler));
+            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _screenBoardProvider, _pinnedLensSelectionProvider, _inputHandler));
         }
     }
 
