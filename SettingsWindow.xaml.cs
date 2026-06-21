@@ -10,29 +10,25 @@ public partial class SettingsWindow : Window
 {
     private const string ReservedVisualExitShortcut = "Esc";
 
-    private static readonly string[] LaserColorPresets =
-    [
-        "#FFFF2020",
-        "#FF00D26A",
-        "#FF2080FF",
-        "#FF00D7FF",
-        "#FFFF2BD6",
-        "#FFFFD400",
-        "#FFFFFFFF"
-    ];
-
     private readonly Action<AppSettings> _applySettings;
+    private readonly string _settingsPath;
     private AppSettings _settings;
     private bool _loading = true;
+    private readonly string[] _laserPresets = new string[5];
+    private readonly string[] _annotationPresets = new string[5];
+    private readonly string[] _regionMaskPresets = new string[5];
     private string _laserColor = "#FFFF2020";
     private string _annotationColor = "#FFFF2020";
+    private string _regionMaskColor = "#FF000000";
     private int _selectedLaserPresetIndex;
     private int _selectedAnnotationPresetIndex;
+    private int _selectedRegionMaskPresetIndex;
 
     public SettingsWindow(AppSettings settings, Action<AppSettings> applySettings, string settingsPath)
     {
         _settings = settings;
         _applySettings = applySettings;
+        _settingsPath = settingsPath;
         InitializeComponent();
         LoadSettings(settings, settingsPath);
     }
@@ -41,7 +37,6 @@ public partial class SettingsWindow : Window
     {
         _loading = true;
 
-        _laserColor = GetPresetOrDefault(settings.Color, LaserColorPresets, out _selectedLaserPresetIndex);
         PointSizeSlider.Value = settings.PointSize;
         TrailLengthSlider.Value = settings.TrailLengthMs;
         FadeDurationSlider.Value = settings.FadeDurationMs;
@@ -51,29 +46,47 @@ public partial class SettingsWindow : Window
         SpotlightOpacitySlider.Value = settings.SpotlightOpacity * 100;
         MagnifierRadiusSlider.Value = settings.MagnifierRadius;
         MagnifierZoomSlider.Value = settings.MagnifierZoom;
+        PinnedLensZoomSlider.Value = settings.PinnedLensZoom;
+        PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
+        RegionMaskOpacitySlider.Value = settings.RegionMaskOpacity * 100;
+        FadingAnnotationsCheckBox.IsChecked = settings.FadingAnnotationsEnabled;
+        FadingAnnotationVisibleSlider.Value = settings.FadingAnnotationVisibleMs / 1000.0;
+        FadingAnnotationFadeSlider.Value = settings.FadingAnnotationFadeMs / 1000.0;
 
-        var annotationPresets = GetAnnotationPresetValues(settings);
-        if (!TryFindPreset(settings.AnnotationColor, annotationPresets, out _selectedAnnotationPresetIndex)
-            && AppSettings.TryParseColor(settings.AnnotationColor, out _))
-        {
-            annotationPresets[4] = settings.AnnotationColor;
-            _selectedAnnotationPresetIndex = 4;
-        }
+        var laserPresets = GetPresetValues(settings.LaserColorPresets, AppSettings.DefaultLaserColorPresets());
+        Array.Copy(laserPresets, _laserPresets, _laserPresets.Length);
+        SelectColorSlot(settings.Color, _laserPresets, ref _selectedLaserPresetIndex, fallbackIndex: 4);
+        _laserColor = _laserPresets[_selectedLaserPresetIndex];
+        LaserColorBox.Text = _laserPresets[_selectedLaserPresetIndex];
 
-        _annotationColor = annotationPresets[_selectedAnnotationPresetIndex];
-        AnnotationPreset5Box.Text = annotationPresets[4];
+        var regionMaskPresets = GetPresetValues(settings.RegionMaskColorPresets, AppSettings.DefaultRegionMaskColorPresets());
+        Array.Copy(regionMaskPresets, _regionMaskPresets, _regionMaskPresets.Length);
+        SelectColorSlot(settings.RegionMaskColor, _regionMaskPresets, ref _selectedRegionMaskPresetIndex, fallbackIndex: 4);
+        _regionMaskColor = _regionMaskPresets[_selectedRegionMaskPresetIndex];
+        RegionMaskColorBox.Text = _regionMaskPresets[_selectedRegionMaskPresetIndex];
+
+        var annotationPresets = GetPresetValues(settings.AnnotationColorPresets, AppSettings.DefaultAnnotationColorPresets());
+        Array.Copy(annotationPresets, _annotationPresets, _annotationPresets.Length);
+        SelectColorSlot(settings.AnnotationColor, _annotationPresets, ref _selectedAnnotationPresetIndex, fallbackIndex: 4);
+        _annotationColor = _annotationPresets[_selectedAnnotationPresetIndex];
+        AnnotationPreset5Box.Text = _annotationPresets[_selectedAnnotationPresetIndex];
         AnnotationThicknessSlider.Value = settings.AnnotationThickness;
         AnnotationFontSizeSlider.Value = settings.AnnotationFontSize;
         SettingsPathText.Text = $"JSON: {settingsPath}";
         LoadShortcutFields(settings);
 
-        ApplyAnnotationPresetBrushes(annotationPresets);
+        ApplyPresetBrushes(GetLaserPresetButtons(), _laserPresets);
+        ApplyPresetBrushes(GetRegionMaskPresetButtons(), _regionMaskPresets);
+        ApplyPresetBrushes(GetAnnotationPresetButtons(), _annotationPresets);
 
         _loading = false;
         UpdateLabels();
+        UpdateSelectedLaserSwatch();
+        UpdateSelectedAnnotationSwatch();
+        UpdateSelectedRegionMaskSwatch();
         UpdateLaserPresetSelection();
-        UpdateAnnotationPreset5Preview();
         UpdateAnnotationPresetSelection();
+        UpdateRegionMaskPresetSelection();
         UpdateLaserHoldFieldState();
     }
 
@@ -95,37 +108,59 @@ public partial class SettingsWindow : Window
         Close();
     }
 
-    private void LaserPreset_OnClick(object sender, RoutedEventArgs e)
+    private void RestoreDefaults_OnClick(object sender, RoutedEventArgs e)
     {
-        if (sender is System.Windows.Controls.Button button
-            && button.Tag is string color
-            && AppSettings.TryParseColor(color, out _)
-            && TryFindPreset(color, LaserColorPresets, out var index))
-        {
-            _laserColor = color;
-            _selectedLaserPresetIndex = index;
-            UpdateLaserPresetSelection();
-        }
-    }
-
-    private void AnnotationPreset_OnClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.Button button || !int.TryParse(button.Tag?.ToString(), out var index))
+        var result = System.Windows.MessageBox.Show(
+            this,
+            "Reset all settings (including shortcuts) to their defaults?\n\nThis only fills the form - nothing is applied until you click OK or Apply.",
+            "Restore defaults",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.OK)
         {
             return;
         }
 
-        // Preset 5 is the editable custom slot, so take its live value from the box.
-        var hex = index == 4
-            ? AnnotationPreset5Box.Text.Trim()
-            : index < _settings.AnnotationColorPresets.Count ? _settings.AnnotationColorPresets[index] : null;
+        var defaults = new AppSettings();
+        defaults.Normalize();
+        LoadSettings(defaults, _settingsPath);
+    }
 
-        if (hex is not null && AppSettings.TryParseColor(hex, out _))
+    private void LaserPreset_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button
+            || !int.TryParse(button.Tag?.ToString(), out var index)
+            || index < 0 || index >= _laserPresets.Length)
         {
-            _annotationColor = hex;
-            _selectedAnnotationPresetIndex = index;
-            UpdateAnnotationPresetSelection();
+            return;
         }
+
+        _selectedLaserPresetIndex = index;
+        _laserColor = _laserPresets[index];
+        _loading = true;
+        LaserColorBox.Text = _laserPresets[index];
+        _loading = false;
+        UpdateSelectedLaserSwatch();
+        UpdateLaserPresetSelection();
+    }
+
+    private void AnnotationPreset_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button
+            || !int.TryParse(button.Tag?.ToString(), out var index)
+            || index < 0 || index >= _annotationPresets.Length)
+        {
+            return;
+        }
+
+        // Select this slot as the active colour and load it into the editable hex box.
+        _selectedAnnotationPresetIndex = index;
+        _annotationColor = _annotationPresets[index];
+        _loading = true;
+        AnnotationPreset5Box.Text = _annotationPresets[index];
+        _loading = false;
+        UpdateSelectedAnnotationSwatch();
+        UpdateAnnotationPresetSelection();
     }
 
     private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -138,15 +173,68 @@ public partial class SettingsWindow : Window
 
     private void AnnotationPreset5Box_OnTextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_loading)
+        {
+            return;
+        }
+
+        // The hex box edits whichever palette slot is selected; it is also the active colour.
+        var hex = AnnotationPreset5Box.Text.Trim();
+        if (AppSettings.TryParseColor(hex, out _))
+        {
+            _annotationPresets[_selectedAnnotationPresetIndex] = hex;
+            _annotationColor = hex;
+        }
+
+        UpdateSelectedAnnotationSwatch();
+    }
+
+    private void RegionMaskColorBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
         if (!_loading)
         {
-            UpdateAnnotationPreset5Preview();
-            if (_selectedAnnotationPresetIndex == 4 && AppSettings.TryParseColor(AnnotationPreset5Box.Text.Trim(), out _))
+            var hex = RegionMaskColorBox.Text.Trim();
+            if (AppSettings.TryParseColor(hex, out _))
             {
-                _annotationColor = AnnotationPreset5Box.Text.Trim();
-                UpdateAnnotationPresetSelection();
+                _regionMaskPresets[_selectedRegionMaskPresetIndex] = hex;
+                _regionMaskColor = hex;
             }
+
+            UpdateSelectedRegionMaskSwatch();
         }
+    }
+
+    private void LaserColorBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            var hex = LaserColorBox.Text.Trim();
+            if (AppSettings.TryParseColor(hex, out _))
+            {
+                _laserPresets[_selectedLaserPresetIndex] = hex;
+                _laserColor = hex;
+            }
+
+            UpdateSelectedLaserSwatch();
+        }
+    }
+
+    private void MaskColorPreset_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button
+            || !int.TryParse(button.Tag?.ToString(), out var index)
+            || index < 0 || index >= _regionMaskPresets.Length)
+        {
+            return;
+        }
+
+        _selectedRegionMaskPresetIndex = index;
+        _regionMaskColor = _regionMaskPresets[index];
+        _loading = true;
+        RegionMaskColorBox.Text = _regionMaskPresets[index];
+        _loading = false;
+        UpdateSelectedRegionMaskSwatch();
+        UpdateRegionMaskPresetSelection();
     }
 
     private void LaserActivationMode_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -159,16 +247,30 @@ public partial class SettingsWindow : Window
 
     private bool TryApply()
     {
-        if (!AppSettings.TryParseColor(AnnotationPreset5Box.Text.Trim(), out _))
+        if (!AppSettings.TryParseColor(LaserColorBox.Text.Trim(), out _))
         {
-            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the color 5 preset.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
+            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the laser color.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
 
-        if (_selectedAnnotationPresetIndex == 4)
+        if (!AppSettings.TryParseColor(AnnotationPreset5Box.Text.Trim(), out _))
         {
-            _annotationColor = AnnotationPreset5Box.Text.Trim();
+            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the annotation color.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
         }
+
+        if (!AppSettings.TryParseColor(RegionMaskColorBox.Text.Trim(), out _))
+        {
+            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the region mask color.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        _laserPresets[_selectedLaserPresetIndex] = LaserColorBox.Text.Trim();
+        _laserColor = _laserPresets[_selectedLaserPresetIndex];
+        _annotationPresets[_selectedAnnotationPresetIndex] = AnnotationPreset5Box.Text.Trim();
+        _annotationColor = _annotationPresets[_selectedAnnotationPresetIndex];
+        _regionMaskPresets[_selectedRegionMaskPresetIndex] = RegionMaskColorBox.Text.Trim();
+        _regionMaskColor = _regionMaskPresets[_selectedRegionMaskPresetIndex];
 
         var updated = _settings.Clone();
         updated.Color = _laserColor;
@@ -181,13 +283,18 @@ public partial class SettingsWindow : Window
         updated.SpotlightOpacity = SpotlightOpacitySlider.Value / 100.0;
         updated.MagnifierRadius = MagnifierRadiusSlider.Value;
         updated.MagnifierZoom = MagnifierZoomSlider.Value;
+        updated.PinnedLensZoom = PinnedLensZoomSlider.Value;
+        updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
+        updated.RegionMaskColor = _regionMaskColor;
+        updated.RegionMaskOpacity = RegionMaskOpacitySlider.Value / 100.0;
+        updated.FadingAnnotationsEnabled = FadingAnnotationsCheckBox.IsChecked == true;
+        updated.FadingAnnotationVisibleMs = (int)Math.Round(FadingAnnotationVisibleSlider.Value * 1000);
+        updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
         updated.AnnotationColor = _annotationColor;
-        while (updated.AnnotationColorPresets.Count < 5)
-        {
-            updated.AnnotationColorPresets.Add("#FFFFFFFF");
-        }
+        WritePresetValues(updated.LaserColorPresets, _laserPresets);
+        WritePresetValues(updated.AnnotationColorPresets, _annotationPresets);
+        WritePresetValues(updated.RegionMaskColorPresets, _regionMaskPresets);
 
-        updated.AnnotationColorPresets[4] = AnnotationPreset5Box.Text.Trim();
         updated.AnnotationThickness = AnnotationThicknessSlider.Value;
         updated.AnnotationFontSize = AnnotationFontSizeSlider.Value;
 
@@ -211,6 +318,10 @@ public partial class SettingsWindow : Window
         ToggleLaserActivationBox.Text = settings.Shortcuts.ToggleLaserActivation;
         ToggleSpotlightBox.Text = settings.Shortcuts.ToggleSpotlight;
         ToggleMagnifierBox.Text = settings.Shortcuts.ToggleMagnifier;
+        TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
+        ToggleRegionMaskBox.Text = settings.Shortcuts.ToggleRegionMask;
+        ClearRegionMasksBox.Text = settings.Shortcuts.ClearRegionMasks;
+        ToggleFadingAnnotationsBox.Text = settings.Shortcuts.ToggleFadingAnnotations;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
@@ -249,6 +360,10 @@ public partial class SettingsWindow : Window
         shortcuts.ToggleLaserActivation = ReadShortcutText(ToggleLaserActivationBox);
         shortcuts.ToggleSpotlight = ReadShortcutText(ToggleSpotlightBox);
         shortcuts.ToggleMagnifier = ReadShortcutText(ToggleMagnifierBox);
+        shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
+        shortcuts.ToggleRegionMask = ReadShortcutText(ToggleRegionMaskBox);
+        shortcuts.ClearRegionMasks = ReadShortcutText(ClearRegionMasksBox);
+        shortcuts.ToggleFadingAnnotations = ReadShortcutText(ToggleFadingAnnotationsBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
@@ -282,6 +397,10 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Toggle laser mode", shortcuts.ToggleLaserActivation)
             || !ValidateShortcut("Toggle spotlight", shortcuts.ToggleSpotlight)
             || !ValidateShortcut("Toggle magnifier", shortcuts.ToggleMagnifier)
+            || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
+            || !ValidateShortcut("Region mask", shortcuts.ToggleRegionMask)
+            || !ValidateShortcut("Clear region masks", shortcuts.ClearRegionMasks)
+            || !ValidateShortcut("Fading annotations", shortcuts.ToggleFadingAnnotations)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
@@ -358,6 +477,10 @@ public partial class SettingsWindow : Window
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
+            ("Pinned lens", shortcuts.TogglePinnedLens),
+            ("Region mask", shortcuts.ToggleRegionMask),
+            ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -396,6 +519,10 @@ public partial class SettingsWindow : Window
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
+            ("Pinned lens", shortcuts.TogglePinnedLens),
+            ("Region mask", shortcuts.ToggleRegionMask),
+            ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -478,6 +605,11 @@ public partial class SettingsWindow : Window
             || SpotlightOpacityValue is null
             || MagnifierRadiusValue is null
             || MagnifierZoomValue is null
+            || PinnedLensZoomValue is null
+            || PinnedLensRefreshFpsValue is null
+            || RegionMaskOpacityValue is null
+            || FadingAnnotationVisibleValue is null
+            || FadingAnnotationFadeValue is null
             || AnnotationThicknessValue is null
             || AnnotationFontSizeValue is null)
         {
@@ -491,26 +623,59 @@ public partial class SettingsWindow : Window
         SpotlightOpacityValue.Text = $"{SpotlightOpacitySlider.Value:0}%";
         MagnifierRadiusValue.Text = $"{MagnifierRadiusSlider.Value:0}px";
         MagnifierZoomValue.Text = $"{MagnifierZoomSlider.Value:0.##}x";
+        PinnedLensZoomValue.Text = $"{PinnedLensZoomSlider.Value:0.##}x";
+        PinnedLensRefreshFpsValue.Text = $"{PinnedLensRefreshFpsSlider.Value:0} fps";
+        RegionMaskOpacityValue.Text = $"{RegionMaskOpacitySlider.Value:0}%";
+        FadingAnnotationVisibleValue.Text = $"{FadingAnnotationVisibleSlider.Value:0.#}s";
+        FadingAnnotationFadeValue.Text = $"{FadingAnnotationFadeSlider.Value:0.#}s";
         AnnotationThicknessValue.Text = $"{AnnotationThicknessSlider.Value:0}px";
         AnnotationFontSizeValue.Text = $"{AnnotationFontSizeSlider.Value:0}px";
     }
 
-    private void UpdateAnnotationPreset5Preview()
+    private void UpdateSelectedLaserSwatch()
     {
-        if (AnnotationPreset5Box is null || AnnotationPreset4Button is null)
+        UpdateSelectedSwatch(LaserColorBox, LaserColorPreview, GetLaserPresetButtons(), _selectedLaserPresetIndex);
+    }
+
+    private void UpdateSelectedAnnotationSwatch()
+    {
+        UpdateSelectedSwatch(AnnotationPreset5Box, preview: null, GetAnnotationPresetButtons(), _selectedAnnotationPresetIndex);
+    }
+
+    private void UpdateSelectedRegionMaskSwatch()
+    {
+        UpdateSelectedSwatch(RegionMaskColorBox, RegionMaskColorPreview, GetRegionMaskPresetButtons(), _selectedRegionMaskPresetIndex);
+    }
+
+    private static void UpdateSelectedSwatch(
+        WpfTextBox textBox,
+        Border? preview,
+        IReadOnlyList<System.Windows.Controls.Button> buttons,
+        int selectedIndex)
+    {
+        if (textBox is null || selectedIndex < 0 || selectedIndex >= buttons.Count)
         {
             return;
         }
 
-        if (AppSettings.TryParseColor(AnnotationPreset5Box.Text.Trim(), out var color))
+        if (AppSettings.TryParseColor(textBox.Text.Trim(), out var color))
         {
-            AnnotationPreset4Button.Background = new SolidColorBrush(color);
-            AnnotationPreset5Box.ClearValue(BorderBrushProperty);
+            buttons[selectedIndex].Background = new SolidColorBrush(color);
+            if (preview is not null)
+            {
+                preview.Background = new SolidColorBrush(color);
+            }
+
+            textBox.ClearValue(BorderBrushProperty);
         }
         else
         {
-            AnnotationPreset4Button.Background = System.Windows.Media.Brushes.Transparent;
-            AnnotationPreset5Box.BorderBrush = System.Windows.Media.Brushes.Firebrick;
+            if (preview is not null)
+            {
+                preview.Background = System.Windows.Media.Brushes.Transparent;
+            }
+
+            textBox.BorderBrush = System.Windows.Media.Brushes.Firebrick;
         }
     }
 
@@ -522,6 +687,11 @@ public partial class SettingsWindow : Window
     private void UpdateAnnotationPresetSelection()
     {
         UpdateSwatchSelection(GetAnnotationPresetButtons(), _selectedAnnotationPresetIndex);
+    }
+
+    private void UpdateRegionMaskPresetSelection()
+    {
+        UpdateSwatchSelection(GetRegionMaskPresetButtons(), _selectedRegionMaskPresetIndex);
     }
 
     private static void UpdateSwatchSelection(IReadOnlyList<System.Windows.Controls.Button> buttons, int selectedIndex)
@@ -542,9 +712,7 @@ public partial class SettingsWindow : Window
         LaserPreset1Button,
         LaserPreset2Button,
         LaserPreset3Button,
-        LaserPreset4Button,
-        LaserPreset5Button,
-        LaserPreset6Button
+        LaserPreset4Button
     ];
 
     private System.Windows.Controls.Button[] GetAnnotationPresetButtons() =>
@@ -556,22 +724,14 @@ public partial class SettingsWindow : Window
         AnnotationPreset4Button
     ];
 
-    private static string GetPresetOrDefault(string color, IReadOnlyList<string> presets, out int index)
-    {
-        if (TryFindPreset(color, presets, out index))
-        {
-            return presets[index];
-        }
-
-        if (AppSettings.TryParseColor(color, out _))
-        {
-            index = -1;
-            return color;
-        }
-
-        index = 0;
-        return presets[0];
-    }
+    private System.Windows.Controls.Button[] GetRegionMaskPresetButtons() =>
+    [
+        RegionMaskPreset0Button,
+        RegionMaskPreset1Button,
+        RegionMaskPreset2Button,
+        RegionMaskPreset3Button,
+        RegionMaskPreset4Button
+    ];
 
     private static bool TryFindPreset(string color, IReadOnlyList<string> presets, out int index)
     {
@@ -588,26 +748,44 @@ public partial class SettingsWindow : Window
         return false;
     }
 
-    private static string[] GetAnnotationPresetValues(AppSettings settings)
+    private static void SelectColorSlot(string color, string[] presets, ref int selectedIndex, int fallbackIndex)
     {
-        var values = new[]
+        if (!TryFindPreset(color, presets, out selectedIndex))
         {
-            "#FFFF2020",
-            "#FF00D26A",
-            "#FF2080FF",
-            "#FFFFD400",
-            "#FFFFFFFF"
-        };
-
-        for (var i = 0; i < values.Length && i < settings.AnnotationColorPresets.Count; i++)
-        {
-            if (AppSettings.TryParseColor(settings.AnnotationColorPresets[i], out _))
+            selectedIndex = Math.Clamp(fallbackIndex, 0, presets.Length - 1);
+            if (AppSettings.TryParseColor(color, out _))
             {
-                values[i] = settings.AnnotationColorPresets[i];
+                presets[selectedIndex] = color;
+            }
+        }
+    }
+
+    private static string[] GetPresetValues(IReadOnlyList<string> settingsPresets, string[] defaults)
+    {
+        var values = (string[])defaults.Clone();
+
+        for (var i = 0; i < values.Length && i < settingsPresets.Count; i++)
+        {
+            if (AppSettings.TryParseColor(settingsPresets[i], out _))
+            {
+                values[i] = settingsPresets[i];
             }
         }
 
         return values;
+    }
+
+    private static void WritePresetValues(List<string> target, IReadOnlyList<string> source)
+    {
+        while (target.Count < source.Count)
+        {
+            target.Add("#FFFFFFFF");
+        }
+
+        for (var i = 0; i < source.Count; i++)
+        {
+            target[i] = source[i];
+        }
     }
 
     private void SelectLaserActivationMode(LaserActivationMode mode)
@@ -646,18 +824,9 @@ public partial class SettingsWindow : Window
         LaserHoldBox.Opacity = holdMode ? 1 : 0.78;
     }
 
-    private void ApplyAnnotationPresetBrushes(IReadOnlyList<string> colors)
+    private static void ApplyPresetBrushes(IReadOnlyList<System.Windows.Controls.Button> buttons, IReadOnlyList<string> colors)
     {
-        var buttons = new[]
-        {
-            AnnotationPreset0Button,
-            AnnotationPreset1Button,
-            AnnotationPreset2Button,
-            AnnotationPreset3Button,
-            AnnotationPreset4Button
-        };
-
-        for (var i = 0; i < buttons.Length; i++)
+        for (var i = 0; i < buttons.Count; i++)
         {
             if (i < colors.Count && AppSettings.TryParseColor(colors[i], out var color))
             {

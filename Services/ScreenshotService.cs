@@ -14,33 +14,43 @@ namespace FocusTool.Win.Services;
 
 internal sealed class ScreenshotService
 {
-    public void CaptureCurrentMonitor(bool copyToClipboard)
+    public async Task CaptureCurrentMonitorAsync(bool copyToClipboard)
+    {
+        var capture = await Task.Run(CaptureCurrentMonitorCore);
+        if (copyToClipboard)
+        {
+            await TrySetClipboardImageAsync(capture.Image);
+        }
+    }
+
+    public async Task<ScreenBoardFrame> CaptureCurrentMonitorFrameAsync()
+    {
+        return await Task.Run(() =>
+        {
+            var screen = GetCursorScreen();
+            using var bitmap = CaptureScreenBitmap(screen);
+            var image = ToBitmapSource(bitmap);
+            return CreateFrame(screen.Bounds, image);
+        });
+    }
+
+    public async Task SaveImageAsync(BitmapSource image, bool copyToClipboard, string fileNamePrefix)
+    {
+        var frozenImage = FreezeForBackground(image);
+        await Task.Run(() => SavePng(frozenImage, fileNamePrefix));
+        if (copyToClipboard)
+        {
+            await TrySetClipboardImageAsync(frozenImage);
+        }
+    }
+
+    private static ScreenshotCapture CaptureCurrentMonitorCore()
     {
         var screen = GetCursorScreen();
         using var bitmap = CaptureScreenBitmap(screen);
         var image = ToBitmapSource(bitmap);
-        SavePng(bitmap);
-        if (copyToClipboard)
-        {
-            TrySetClipboardImage(image);
-        }
-    }
-
-    public ScreenBoardFrame CaptureCurrentMonitorFrame()
-    {
-        var screen = GetCursorScreen();
-        using var bitmap = CaptureScreenBitmap(screen);
-        var image = ToBitmapSource(bitmap);
-        return CreateFrame(screen.Bounds, image);
-    }
-
-    public void SaveImage(BitmapSource image, bool copyToClipboard, string fileNamePrefix)
-    {
-        SavePng(image, fileNamePrefix);
-        if (copyToClipboard)
-        {
-            TrySetClipboardImage(image);
-        }
+        SavePng(bitmap, "FocusTool");
+        return new ScreenshotCapture(image);
     }
 
     private static Forms.Screen GetCursorScreen()
@@ -77,24 +87,23 @@ internal sealed class ScreenshotService
             image);
     }
 
-    private static string SavePng(Bitmap bitmap)
+    private static string SavePng(Bitmap bitmap, string fileNamePrefix)
     {
-        var path = CreateScreenshotPath("FocusTool");
-        bitmap.Save(path, ImageFormat.Png);
+        using var stream = CreateScreenshotFile(fileNamePrefix, out var path);
+        bitmap.Save(stream, ImageFormat.Png);
         return path;
     }
 
     private static string SavePng(BitmapSource image, string fileNamePrefix)
     {
-        var path = CreateScreenshotPath(fileNamePrefix);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(image));
-        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+        using var stream = CreateScreenshotFile(fileNamePrefix, out var path);
         encoder.Save(stream);
         return path;
     }
 
-    private static string CreateScreenshotPath(string fileNamePrefix)
+    private static FileStream CreateScreenshotFile(string fileNamePrefix, out string path)
     {
         var pictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
         if (string.IsNullOrWhiteSpace(pictures))
@@ -112,7 +121,20 @@ internal sealed class ScreenshotService
         }
 
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff");
-        return Path.Combine(directory, $"{safePrefix}_{timestamp}.png");
+        for (var attempt = 0; attempt < 1000; attempt++)
+        {
+            var suffix = attempt == 0 ? string.Empty : $"_{attempt}";
+            path = Path.Combine(directory, $"{safePrefix}_{timestamp}{suffix}.png");
+            try
+            {
+                return new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+            }
+        }
+
+        throw new IOException("Could not create a unique screenshot file name.");
     }
 
     private static BitmapSource ToBitmapSource(Bitmap bitmap)
@@ -134,7 +156,19 @@ internal sealed class ScreenshotService
         }
     }
 
-    private static bool TrySetClipboardImage(BitmapSource image)
+    private static async Task<bool> TrySetClipboardImageAsync(BitmapSource image)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            var operation = await dispatcher.InvokeAsync(() => TrySetClipboardImageOnCurrentThreadAsync(image));
+            return await operation;
+        }
+
+        return await TrySetClipboardImageOnCurrentThreadAsync(image);
+    }
+
+    private static async Task<bool> TrySetClipboardImageOnCurrentThreadAsync(BitmapSource image)
     {
         for (var attempt = 0; attempt < 3; attempt++)
         {
@@ -145,10 +179,29 @@ internal sealed class ScreenshotService
             }
             catch (ExternalException)
             {
-                Thread.Sleep(35);
+                if (attempt == 2)
+                {
+                    break;
+                }
+
+                await Task.Delay(35);
             }
         }
 
         return false;
     }
+
+    private static BitmapSource FreezeForBackground(BitmapSource image)
+    {
+        if (image.IsFrozen)
+        {
+            return image;
+        }
+
+        var clone = image.Clone();
+        clone.Freeze();
+        return clone;
+    }
+
+    private sealed record ScreenshotCapture(BitmapSource Image);
 }

@@ -31,6 +31,8 @@ internal sealed class OverlayWindow : Window
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
+        Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<IReadOnlyList<RegionMask>> regionMaskProvider,
         IOverlayInputHandler inputHandler)
     {
         _screen = screen;
@@ -44,6 +46,8 @@ internal sealed class OverlayWindow : Window
             clockProvider,
             spotlightProvider,
             screenBoardProvider,
+            pinnedLensSelectionProvider,
+            regionMaskProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
 
         Title = "FocusTool";
@@ -190,7 +194,7 @@ internal sealed class OverlayWindow : Window
 
     public void SetInteractionMode(InteractionMode mode)
     {
-        _annotateInputEnabled = IsAnnotationMode(mode);
+        _annotateInputEnabled = IsOverlayInputMode(mode);
         if (!_annotateInputEnabled && _nativeMouseCaptured)
         {
             _nativeMouseCaptured = false;
@@ -274,9 +278,14 @@ internal sealed class OverlayWindow : Window
             NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoZOrder | NativeMethods.SwpFrameChanged | NativeMethods.SwpNoActivate);
     }
 
-    private static bool IsAnnotationMode(InteractionMode mode)
+    private static bool IsOverlayInputMode(InteractionMode mode)
     {
-        return mode is InteractionMode.Annotate or InteractionMode.ScreenBoard or InteractionMode.BlackScreen or InteractionMode.WhiteScreen;
+        return mode is InteractionMode.Annotate
+            or InteractionMode.PinnedLensSelect
+            or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenBoard
+            or InteractionMode.BlackScreen
+            or InteractionMode.WhiteScreen;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -360,6 +369,14 @@ internal sealed class OverlayWindow : Window
                     handled = true;
                 }
 
+                break;
+            case NativeMethods.WmRButtonDown:
+                _inputHandler.HandleOverlayMouseDown(ToScreenPoint(hwnd, lParam), MouseButton.Right, Keyboard.Modifiers);
+                handled = true;
+                break;
+            case NativeMethods.WmRButtonUp:
+                _inputHandler.HandleOverlayMouseUp(ToScreenPoint(hwnd, lParam), MouseButton.Right, Keyboard.Modifiers);
+                handled = true;
                 break;
             case NativeMethods.WmCancelMode:
             case NativeMethods.WmCaptureChanged:

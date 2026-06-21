@@ -33,6 +33,7 @@ internal sealed class OverlaySurface : FrameworkElement
     private const double LaserSlowThicknessFactor = 1.12;
     private const double LaserFastThicknessFactor = 0.8;
     private const double LaserSpeedEasing = 0.2;
+    private const double RegionMaskHandleSize = 8;
     private readonly TrailModel _trailModel;
     private readonly AnnotationDocument _annotations;
     private readonly Func<AppSettings> _settingsProvider;
@@ -40,6 +41,9 @@ internal sealed class OverlaySurface : FrameworkElement
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
+    // Shared rubber-band rect for both the pinned-lens and region-mask select modes.
+    private readonly Func<ScreenRect?> _pinnedLensSelectionProvider;
+    private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
     private readonly ScreenRect _screenBounds;
     // Cached frozen polyline geometry per pencil/highlighter shape, so we don't
     // re-tessellate committed strokes on every laser frame. Cleared whenever the
@@ -64,6 +68,7 @@ internal sealed class OverlaySurface : FrameworkElement
     // (the head index is the live count, not the buffer length).
     private WpfPoint[] _laserLocalScratch = [];
     private double[] _laserLifeScratch = [];
+    private bool _regionMasksWereVisibleOnSurface;
 
     public OverlaySurface(
         TrailModel trailModel,
@@ -73,6 +78,8 @@ internal sealed class OverlaySurface : FrameworkElement
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
+        Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<IReadOnlyList<RegionMask>> regionMaskProvider,
         ScreenRect screenBounds)
     {
         _trailModel = trailModel;
@@ -82,6 +89,8 @@ internal sealed class OverlaySurface : FrameworkElement
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
         _screenBoardProvider = screenBoardProvider;
+        _pinnedLensSelectionProvider = pinnedLensSelectionProvider;
+        _regionMaskProvider = regionMaskProvider;
         _screenBounds = screenBounds;
         _annotations.Changed += OnAnnotationsChanged;
         SnapsToDevicePixels = false;
@@ -162,9 +171,14 @@ internal sealed class OverlaySurface : FrameworkElement
             DrawBlankScreen(drawingContext, mode);
         }
 
-        if (mode == InteractionMode.Annotate)
+        if (mode is InteractionMode.Annotate or InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect)
         {
             DrawInputCatcher(drawingContext);
+        }
+
+        if (!blankScreen)
+        {
+            DrawRegionMasks(drawingContext);
         }
 
         DrawAnnotations(drawingContext);
@@ -172,6 +186,11 @@ internal sealed class OverlaySurface : FrameworkElement
         if (!blankScreen || magnifierActive)
         {
             DrawSpotlight(drawingContext, lensPoint, magnifierActive);
+        }
+
+        if (mode is InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect)
+        {
+            DrawPinnedLensSelection(drawingContext);
         }
 
         if (IsAnnotationMode(mode))
@@ -216,14 +235,19 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawAnnotations(DrawingContext drawingContext)
     {
+        var nowMs = _clockProvider();
         foreach (var shape in _annotations.Shapes)
         {
-            DrawShape(drawingContext, shape, isDraft: false);
+            var opacityScale = shape.GetOpacityScale(nowMs);
+            if (opacityScale > 0.001)
+            {
+                DrawShape(drawingContext, shape, isDraft: false, opacityScale);
+            }
         }
 
         if (_annotations.Draft is { Tool: not AnnotationTool.Move } draft)
         {
-            DrawShape(drawingContext, draft, isDraft: true);
+            DrawShape(drawingContext, draft, isDraft: true, opacityScale: 1);
         }
 
         if (_annotations.SelectionBounds is { } selectionBounds)
@@ -237,13 +261,18 @@ internal sealed class OverlaySurface : FrameworkElement
         }
     }
 
-    private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft)
+    private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft, double opacityScale)
     {
-        var opacity = isDraft ? 0.72 : 0.95;
+        var opacity = (isDraft ? 0.72 : 0.95) * opacityScale;
+        if (opacity <= 0.001)
+        {
+            return;
+        }
+
         var color = AppSettings.TryParseColor(shape.Color, out var parsedColor)
             ? parsedColor
             : Colors.Red;
-        var haloOpacity = isDraft ? 0.16 : 0.24;
+        var haloOpacity = (isDraft ? 0.16 : 0.24) * opacityScale;
         var haloPen = CreatePen(Colors.Black, haloOpacity, shape.Thickness + 2.2);
         var pen = CreatePen(color, opacity, shape.Thickness);
 
@@ -273,10 +302,10 @@ internal sealed class OverlaySurface : FrameworkElement
                 DrawPencil(drawingContext, shape, pen);
                 break;
             case AnnotationTool.Highlighter:
-                DrawHighlighter(drawingContext, shape, color, isDraft);
+                DrawHighlighter(drawingContext, shape, color, isDraft, opacityScale);
                 break;
             case AnnotationTool.Text:
-                DrawText(drawingContext, shape, Colors.Black, haloOpacity + 0.12, new Vector(1.2, 1.2));
+                DrawText(drawingContext, shape, Colors.Black, haloOpacity + 0.12 * opacityScale, new Vector(1.2, 1.2));
                 DrawText(drawingContext, shape, color, opacity, default);
                 break;
             case AnnotationTool.Move:
@@ -311,14 +340,85 @@ internal sealed class OverlaySurface : FrameworkElement
         drawingContext.DrawRectangle(null, pen, rect);
     }
 
-    private void DrawHighlighter(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, bool isDraft)
+    private void DrawPinnedLensSelection(DrawingContext drawingContext)
+    {
+        if (_pinnedLensSelectionProvider() is not { } selection || !selection.Intersects(_screenBounds))
+        {
+            return;
+        }
+
+        DrawSelectionRectangle(drawingContext, selection, isDraft: true);
+    }
+
+    private void DrawRegionMasks(DrawingContext drawingContext)
+    {
+        var masks = _regionMaskProvider();
+        var showHandles = _modeProvider() == InteractionMode.RegionMaskSelect;
+        var drewMask = false;
+
+        foreach (var mask in masks)
+        {
+            if (!mask.Rect.Intersects(_screenBounds))
+            {
+                continue;
+            }
+
+            var color = AppSettings.TryParseColor(mask.Color, out var parsed) ? parsed : Colors.Black;
+            var rect = ToRect(mask.Rect);
+            drawingContext.DrawRectangle(GetBrush(color, mask.Opacity), null, rect);
+            if (showHandles)
+            {
+                DrawRegionMaskHandles(drawingContext, rect);
+            }
+
+            drewMask = true;
+        }
+
+        if (drewMask)
+        {
+            _regionMasksWereVisibleOnSurface = true;
+            return;
+        }
+
+        if (_regionMasksWereVisibleOnSurface)
+        {
+            // Transparent layered windows can retain the previous non-empty frame
+            // when the next scene is completely empty. Submit one imperceptible
+            // full-surface frame so deleted masks do not linger visually.
+            drawingContext.DrawRectangle(GetBrush(MediaColor.FromArgb(1, 0, 0, 0), 1), null, new Rect(0, 0, ActualWidth, ActualHeight));
+            _regionMasksWereVisibleOnSurface = false;
+        }
+    }
+
+    private static void DrawRegionMaskHandles(DrawingContext drawingContext, Rect rect)
+    {
+        if (rect.Width < 1 || rect.Height < 1)
+        {
+            return;
+        }
+
+        var fill = GetBrush(Colors.White, 0.92);
+        var pen = CreatePen(Colors.Black, 0.68, 1.2);
+        drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Left, rect.Top), RegionMaskHandleSize));
+        drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Right, rect.Top), RegionMaskHandleSize));
+        drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Left, rect.Bottom), RegionMaskHandleSize));
+        drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Right, rect.Bottom), RegionMaskHandleSize));
+    }
+
+    private static Rect CenteredRect(WpfPoint center, double size)
+    {
+        var half = size / 2;
+        return new Rect(center.X - half, center.Y - half, size, size);
+    }
+
+    private void DrawHighlighter(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, bool isDraft, double opacityScale)
     {
         if (shape.Points.Count < 2)
         {
             return;
         }
 
-        var brush = new SolidColorBrush(color) { Opacity = isDraft ? 0.28 : 0.36 };
+        var brush = new SolidColorBrush(color) { Opacity = (isDraft ? 0.28 : 0.36) * opacityScale };
         brush.Freeze();
         var pen = new WpfPen(brush, Math.Max(12, shape.Thickness * 4.2))
         {

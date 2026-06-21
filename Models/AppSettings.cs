@@ -6,7 +6,26 @@ namespace FocusTool.Win.Models;
 
 public sealed class AppSettings
 {
+    private static readonly string[] DefaultColorSlots =
+    [
+        "#FFFF2020",
+        "#FF00D26A",
+        "#FF2080FF",
+        "#FFFFD400",
+        "#FFFFFFFF"
+    ];
+
+    private static readonly string[] DefaultRegionMaskColorSlots =
+    [
+        "#FF000000",
+        "#FF404040",
+        "#FFFFFFFF",
+        "#FFB00020",
+        "#FF2080FF"
+    ];
+
     public string Color { get; set; } = "#FFFF2020";
+    public List<string> LaserColorPresets { get; set; } = [.. DefaultColorSlots];
     public double PointSize { get; set; } = 12;
     public int TrailLengthMs { get; set; } = 400;
     public int FadeDurationMs { get; set; } = 500;
@@ -21,23 +40,25 @@ public sealed class AppSettings
     public bool MagnifierEnabled { get; set; }
     public double MagnifierRadius { get; set; } = 150;
     public double MagnifierZoom { get; set; } = 2.0;
+    public double PinnedLensZoom { get; set; } = 2.0;
+    public int PinnedLensRefreshFps { get; set; } = 30;
+    public string RegionMaskColor { get; set; } = "#FF000000";
+    public List<string> RegionMaskColorPresets { get; set; } = [.. DefaultRegionMaskColorSlots];
+    public double RegionMaskOpacity { get; set; } = 1.0;
     public string AnnotationColor { get; set; } = "#FFFF2020";
-    public List<string> AnnotationColorPresets { get; set; } =
-    [
-        "#FFFF2020",
-        "#FF00D26A",
-        "#FF2080FF",
-        "#FFFFD400",
-        "#FFFFFFFF"
-    ];
+    public List<string> AnnotationColorPresets { get; set; } = [.. DefaultColorSlots];
     public double AnnotationThickness { get; set; } = 4;
     public double AnnotationFontSize { get; set; } = 28;
     public string AnnotationTool { get; set; } = "Pencil";
+    public bool FadingAnnotationsEnabled { get; set; }
+    public int FadingAnnotationVisibleMs { get; set; } = 6000;
+    public int FadingAnnotationFadeMs { get; set; } = 1200;
     public ShortcutSettings Shortcuts { get; set; } = new();
 
     public AppSettings Clone() => new()
     {
         Color = Color,
+        LaserColorPresets = [.. LaserColorPresets],
         PointSize = PointSize,
         TrailLengthMs = TrailLengthMs,
         FadeDurationMs = FadeDurationMs,
@@ -50,17 +71,26 @@ public sealed class AppSettings
         MagnifierEnabled = MagnifierEnabled,
         MagnifierRadius = MagnifierRadius,
         MagnifierZoom = MagnifierZoom,
+        PinnedLensZoom = PinnedLensZoom,
+        PinnedLensRefreshFps = PinnedLensRefreshFps,
+        RegionMaskColor = RegionMaskColor,
+        RegionMaskColorPresets = [.. RegionMaskColorPresets],
+        RegionMaskOpacity = RegionMaskOpacity,
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
         AnnotationThickness = AnnotationThickness,
         AnnotationFontSize = AnnotationFontSize,
         AnnotationTool = AnnotationTool,
+        FadingAnnotationsEnabled = FadingAnnotationsEnabled,
+        FadingAnnotationVisibleMs = FadingAnnotationVisibleMs,
+        FadingAnnotationFadeMs = FadingAnnotationFadeMs,
         Shortcuts = Shortcuts.Clone()
     };
 
     public void CopyFrom(AppSettings other)
     {
         Color = other.Color;
+        LaserColorPresets = [.. other.LaserColorPresets];
         PointSize = other.PointSize;
         TrailLengthMs = other.TrailLengthMs;
         FadeDurationMs = other.FadeDurationMs;
@@ -73,11 +103,19 @@ public sealed class AppSettings
         MagnifierEnabled = other.MagnifierEnabled;
         MagnifierRadius = other.MagnifierRadius;
         MagnifierZoom = other.MagnifierZoom;
+        PinnedLensZoom = other.PinnedLensZoom;
+        PinnedLensRefreshFps = other.PinnedLensRefreshFps;
+        RegionMaskColor = other.RegionMaskColor;
+        RegionMaskColorPresets = [.. other.RegionMaskColorPresets];
+        RegionMaskOpacity = other.RegionMaskOpacity;
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
         AnnotationThickness = other.AnnotationThickness;
         AnnotationFontSize = other.AnnotationFontSize;
         AnnotationTool = other.AnnotationTool;
+        FadingAnnotationsEnabled = other.FadingAnnotationsEnabled;
+        FadingAnnotationVisibleMs = other.FadingAnnotationVisibleMs;
+        FadingAnnotationFadeMs = other.FadingAnnotationFadeMs;
         Shortcuts = other.Shortcuts.Clone();
         Normalize();
     }
@@ -89,35 +127,16 @@ public sealed class AppSettings
             Color = "#FFFF2020";
         }
 
+        LaserColorPresets = NormalizeColorPresets(LaserColorPresets, DefaultColorSlots);
+        AnnotationColorPresets = NormalizeColorPresets(AnnotationColorPresets, DefaultColorSlots);
+        RegionMaskColorPresets = NormalizeColorPresets(RegionMaskColorPresets, DefaultRegionMaskColorSlots);
+        EnsureColorInPresets(Color, LaserColorPresets, fallbackIndex: 4);
+
         if (!TryParseColor(AnnotationColor, out _))
         {
             AnnotationColor = Color;
         }
-
-        if (AnnotationColorPresets is null || AnnotationColorPresets.Count == 0)
-        {
-            AnnotationColorPresets =
-            [
-                "#FFFF2020",
-                "#FF00D26A",
-                "#FF2080FF",
-                "#FFFFD400",
-                "#FFFFFFFF"
-            ];
-        }
-
-        for (var i = 0; i < AnnotationColorPresets.Count; i++)
-        {
-            if (!TryParseColor(AnnotationColorPresets[i], out _))
-            {
-                AnnotationColorPresets[i] = "#FFFF2020";
-            }
-        }
-
-        while (AnnotationColorPresets.Count < 5)
-        {
-            AnnotationColorPresets.Add(AnnotationColorPresets.Count == 4 ? "#FFFFFFFF" : "#FFFF2020");
-        }
+        EnsureColorInPresets(AnnotationColor, AnnotationColorPresets, fallbackIndex: 4);
 
         if (!Enum.TryParse<AnnotationTool>(AnnotationTool, true, out _))
         {
@@ -145,10 +164,73 @@ public sealed class AppSettings
         SpotlightOpacity = Math.Clamp(SpotlightOpacity, 0.2, 0.88);
         MagnifierRadius = Math.Clamp(MagnifierRadius, 80, 360);
         MagnifierZoom = Math.Clamp(MagnifierZoom, 1.25, 4.0);
+        PinnedLensZoom = Math.Clamp(PinnedLensZoom, 1.0, 4.0);
+        PinnedLensRefreshFps = Math.Clamp(PinnedLensRefreshFps, 10, 60);
+        if (!TryParseColor(RegionMaskColor, out _))
+        {
+            RegionMaskColor = "#FF000000";
+        }
+        EnsureColorInPresets(RegionMaskColor, RegionMaskColorPresets, fallbackIndex: 4);
+
+        RegionMaskOpacity = Math.Clamp(RegionMaskOpacity, 0.1, 1.0);
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
+        FadingAnnotationVisibleMs = Math.Clamp(FadingAnnotationVisibleMs, 500, 60000);
+        FadingAnnotationFadeMs = Math.Clamp(FadingAnnotationFadeMs, 100, 10000);
         Shortcuts ??= new ShortcutSettings();
         Shortcuts.Normalize();
+    }
+
+    public static string[] DefaultLaserColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultAnnotationColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultRegionMaskColorPresets() => [.. DefaultRegionMaskColorSlots];
+
+    private static List<string> NormalizeColorPresets(List<string>? presets, IReadOnlyList<string> defaults)
+    {
+        if (presets is null || presets.Count == 0)
+        {
+            presets = [.. defaults];
+        }
+
+        for (var i = 0; i < presets.Count; i++)
+        {
+            if (!TryParseColor(presets[i], out _))
+            {
+                presets[i] = defaults[Math.Min(i, defaults.Count - 1)];
+            }
+        }
+
+        while (presets.Count < defaults.Count)
+        {
+            presets.Add(defaults[presets.Count]);
+        }
+
+        return presets;
+    }
+
+    private static void EnsureColorInPresets(string color, List<string> presets, int fallbackIndex)
+    {
+        if (!TryParseColor(color, out _) || ContainsColor(presets, color))
+        {
+            return;
+        }
+
+        presets[Math.Clamp(fallbackIndex, 0, presets.Count - 1)] = color;
+    }
+
+    private static bool ContainsColor(IEnumerable<string> presets, string color)
+    {
+        foreach (var preset in presets)
+        {
+            if (string.Equals(preset, color, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public MediaColor ToMediaColor()
@@ -237,6 +319,10 @@ public sealed class ShortcutSettings
     public string ToggleAnnotate { get; set; } = "Ctrl+Alt+D";
     public string ToggleSpotlight { get; set; } = "Ctrl+Alt+S";
     public string ToggleMagnifier { get; set; } = "Ctrl+Alt+M";
+    public string TogglePinnedLens { get; set; } = "Ctrl+Alt+P";
+    public string ToggleRegionMask { get; set; } = "Ctrl+Alt+H";
+    public string ClearRegionMasks { get; set; } = "Ctrl+Alt+Shift+H";
+    public string ToggleFadingAnnotations { get; set; } = "Ctrl+Alt+F";
     public string ToggleToolbar { get; set; } = "Ctrl+Alt+T";
     public string TakeScreenshot { get; set; } = "Ctrl+Alt+C";
     public string ToggleScreenBoard { get; set; } = "Ctrl+Alt+G";
@@ -271,6 +357,10 @@ public sealed class ShortcutSettings
         ToggleAnnotate = ToggleAnnotate,
         ToggleSpotlight = ToggleSpotlight,
         ToggleMagnifier = ToggleMagnifier,
+        TogglePinnedLens = TogglePinnedLens,
+        ToggleRegionMask = ToggleRegionMask,
+        ClearRegionMasks = ClearRegionMasks,
+        ToggleFadingAnnotations = ToggleFadingAnnotations,
         ToggleToolbar = ToggleToolbar,
         TakeScreenshot = TakeScreenshot,
         ToggleScreenBoard = ToggleScreenBoard,
@@ -306,6 +396,10 @@ public sealed class ShortcutSettings
         ToggleAnnotate = NormalizeShortcut(ToggleAnnotate, "Ctrl+Alt+D");
         ToggleSpotlight = NormalizeShortcut(ToggleSpotlight, "Ctrl+Alt+S");
         ToggleMagnifier = NormalizeShortcut(ToggleMagnifier, "Ctrl+Alt+M");
+        TogglePinnedLens = NormalizeShortcut(TogglePinnedLens, "Ctrl+Alt+P");
+        ToggleRegionMask = NormalizeShortcut(ToggleRegionMask, "Ctrl+Alt+H");
+        ClearRegionMasks = NormalizeShortcut(ClearRegionMasks, "Ctrl+Alt+Shift+H");
+        ToggleFadingAnnotations = NormalizeShortcut(ToggleFadingAnnotations, "Ctrl+Alt+F");
         ToggleToolbar = NormalizeShortcut(ToggleToolbar, "Ctrl+Alt+T");
         TakeScreenshot = NormalizeShortcut(TakeScreenshot, "Ctrl+Alt+C");
         ToggleScreenBoard = NormalizeShortcut(ToggleScreenBoard, "Ctrl+Alt+G");

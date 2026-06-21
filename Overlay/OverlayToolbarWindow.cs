@@ -21,32 +21,66 @@ namespace FocusTool.Win.Overlay;
 internal sealed class OverlayToolbarWindow : Window
 {
     private static readonly WpfBrush PanelBrush = new SolidColorBrush(MediaColor.FromArgb(238, 30, 30, 30));
+    private static readonly WpfBrush ContextBrush = new SolidColorBrush(MediaColor.FromArgb(238, 38, 38, 38));
     private static readonly WpfBrush ButtonBrush = new SolidColorBrush(MediaColor.FromRgb(48, 48, 48));
     private static readonly WpfBrush ActiveBrush = new SolidColorBrush(MediaColor.FromRgb(32, 128, 255));
     private static readonly WpfBrush ToolbarBorderBrush = new SolidColorBrush(MediaColor.FromArgb(120, 255, 255, 255));
     private static readonly WpfBrush ActiveBorderBrush = new SolidColorBrush(Colors.White);
     private static readonly WpfBrush DisabledBrush = new SolidColorBrush(MediaColor.FromRgb(39, 39, 39));
     private static readonly WpfBrush LabelBrush = new SolidColorBrush(MediaColor.FromArgb(170, 255, 255, 255));
+    private static readonly WpfBrush CaretBrush = new SolidColorBrush(MediaColor.FromArgb(130, 255, 255, 255));
+    private static readonly WpfBrush CaretActiveBrush = WpfBrushes.White;
 
     private readonly FocusToolController _controller;
     private readonly Dictionary<AnnotationTool, WpfButton> _toolButtons = [];
     private readonly List<WpfButton> _colorButtons = [];
+    private readonly List<WpfButton> _laserColorButtons = [];
+    private readonly List<WpfButton> _maskColorButtons = [];
+    private readonly Dictionary<string, UIElement> _rows = [];
+    private readonly Dictionary<string, WpfButton> _carets = [];
+
     private WpfButton _laserButton = null!;
-    private WpfButton _screenshotButton = null!;
-    private WpfButton _annotateButton = null!;
-    private WpfButton _screenBoardButton = null!;
-    private WpfButton _blackButton = null!;
-    private WpfButton _whiteButton = null!;
-    private WpfButton _spotlightButton = null!;
-    private WpfButton _magnifierButton = null!;
+    private WpfButton _drawButton = null!;
+    private WpfButton _spotButton = null!;
+    private WpfButton _zoomButton = null!;
+    private WpfButton _pinButton = null!;
+    private WpfButton _maskButton = null!;
+    private WpfButton _boardButton = null!;
+
+    private WpfButton _laserAlwaysButton = null!;
+    private WpfButton _laserHoldButton = null!;
+    private WpfButton _glowButton = null!;
+    private TextBlock _trailText = null!;
+    private TextBlock _thicknessText = null!;
+    private TextBlock _fontText = null!;
+    private WpfButton _fadeButton = null!;
+    private WpfButton _fadeOptionsButton = null!;
+    private UIElement _fadeOptionsRow = null!;
+    private TextBlock _fadeVisibleText = null!;
+    private TextBlock _fadeDurationText = null!;
     private WpfButton _undoButton = null!;
     private WpfButton _redoButton = null!;
     private WpfButton _clearButton = null!;
-    private WpfButton _hideButton = null!;
-    private WpfButton _closeButton = null!;
+    private TextBlock _spotRadiusText = null!;
+    private TextBlock _spotDimText = null!;
+    private TextBlock _zoomZoomText = null!;
+    private TextBlock _zoomRadiusText = null!;
+    private TextBlock _pinZoomText = null!;
+    private TextBlock _pinFpsText = null!;
+    private WpfButton _closePinsButton = null!;
+    private TextBlock _maskOpacityText = null!;
+    private WpfButton _clearMaskButton = null!;
+    private WpfButton _boardScreenButton = null!;
+    private WpfButton _boardBlackButton = null!;
+    private WpfButton _boardWhiteButton = null!;
+
+    private Border _contextualHost = null!;
+    private string? _openRowKey;
+    private bool _fadeOptionsVisible;
+
     private UIElement _expandedRoot = null!;
     private UIElement _collapsedRoot = null!;
-    private TextBlock _thicknessText = null!;
+    private Border _activeDot = null!;
     private bool _updating;
     private bool _collapsed;
     private bool _hasSavedPosition;
@@ -66,8 +100,8 @@ internal sealed class OverlayToolbarWindow : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         ShowInTaskbar = false;
         Topmost = true;
-        MinWidth = 320;
-        MaxWidth = 980;
+        MinWidth = 280;
+        MaxWidth = 1200;
         Focusable = true;
 
         Content = BuildContent();
@@ -148,64 +182,184 @@ internal sealed class OverlayToolbarWindow : Window
             }
         };
 
-        var rows = new StackPanel
+        var stack = new StackPanel { Orientation = WpfOrientation.Vertical };
+
+        BuildContextualRows();
+
+        var primary = CreateRow();
+        primary.Children.Add(CreateHandle());
+        primary.Children.Add(CreateSeparator());
+
+        _laserButton = AddSplitButton(primary, "Laser", "Toggle laser always/hold", 45, (_, _) => _controller.ToggleLaserActivationMode(), "laser");
+        _drawButton = AddSplitButton(primary, "Draw", "Toggle annotation mode", 42, (_, _) => ToggleMode(InteractionMode.Annotate), "draw");
+        primary.Children.Add(CreateSeparator());
+        _spotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
+        _zoomButton = AddSplitButton(primary, "Zoom", "Toggle magnifier", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
+        _pinButton = AddSplitButton(primary, "Pin", "Select a live pinned lens area", 34, (_, _) => _controller.TogglePinnedLens(), "pin");
+        _maskButton = AddSplitButton(primary, "Mask", "Select a region to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
+        primary.Children.Add(CreateSeparator());
+        _boardButton = AddSplitButton(primary, "Board", "Screen board, black or white", 48, (_, _) => ShowContextualRow("board"), "board");
+        AddSplitButton(primary, "Shot", "Screenshot current monitor", 40, (_, _) => _controller.TakeScreenshot(), null);
+        primary.Children.Add(CreateSeparator());
+        AddSplitButton(primary, "⋯", "More toolbar actions", 30, (_, _) => ShowContextualRow("more"), "more");
+
+        _contextualHost = new Border
         {
-            Orientation = WpfOrientation.Vertical
+            Background = ContextBrush,
+            BorderBrush = ToolbarBorderBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(6, 4, 6, 4),
+            Margin = new Thickness(0, 5, 0, 0),
+            HorizontalAlignment = WpfHorizontalAlignment.Left,
+            Visibility = Visibility.Collapsed
         };
 
-        _laserButton = CreateButton("Laser", "Toggle laser always/hold", (_, _) => _controller.ToggleLaserActivationMode(), width: 45);
-        _screenshotButton = CreateButton("Shot", "Screenshot current monitor", (_, _) => _controller.TakeScreenshot(), width: 40);
-        _annotateButton = CreateButton("Draw", "Toggle annotation mode", (_, _) => ToggleMode(InteractionMode.Annotate), width: 42);
-        _screenBoardButton = CreateButton("Screen", "Capture screen board", (_, _) => _controller.ToggleScreenBoard(), width: 52);
-        _blackButton = CreateButton("Black", "Black board", (_, _) => ToggleMode(InteractionMode.BlackScreen), width: 44);
-        _whiteButton = CreateButton("White", "White board", (_, _) => ToggleMode(InteractionMode.WhiteScreen), width: 45);
-        _spotlightButton = CreateButton("Spot", "Toggle spotlight", (_, _) => _controller.ToggleSpotlight(), width: 39);
-        _magnifierButton = CreateButton("Zoom", "Toggle magnifier", (_, _) => _controller.ToggleMagnifierMode(), width: 43);
+        stack.Children.Add(primary);
+        stack.Children.Add(_contextualHost);
+        panel.Child = stack;
+        return panel;
+    }
 
-        var row1 = CreateRow();
-        row1.Children.Add(CreateHandle());
-        row1.Children.Add(CreateSeparator());
-        row1.Children.Add(CreateLabeledGroup("Modes", _laserButton, _screenshotButton, _annotateButton, _spotlightButton, _magnifierButton));
-        row1.Children.Add(CreateSeparator());
-        row1.Children.Add(CreateLabeledGroup("Board", _screenBoardButton, _blackButton, _whiteButton));
-        row1.Children.Add(CreateSeparator());
-        row1.Children.Add(CreateLabeledGroup("Color", CreateColorGroup()));
+    private void BuildContextualRows()
+    {
+        _rows["laser"] = BuildLaserRow();
+        _rows["draw"] = BuildDrawRow();
+        _rows["spot"] = BuildSpotRow();
+        _rows["zoom"] = BuildZoomRow();
+        _rows["pin"] = BuildPinRow();
+        _rows["mask"] = BuildMaskRow();
+        _rows["board"] = BuildBoardRow();
+        _rows["more"] = BuildMoreRow();
+    }
 
-        var row2 = CreateRow();
-        row2.Margin = new Thickness(0, 4, 0, 0);
-        row2.Children.Add(CreateLabeledGroup("Size", CreateThicknessGroup()));
-        row2.Children.Add(CreateSeparator());
-        row2.Children.Add(CreateLabeledGroup(
-            "Tools",
-            CreateToolButton(AnnotationTool.Pencil, "Pen", "Pencil", width: 34),
-            CreateToolButton(AnnotationTool.Highlighter, "Mark", "Highlighter", width: 40),
-            CreateToolButton(AnnotationTool.Arrow, "Arrow", "Arrow", width: 43),
-            CreateToolButton(AnnotationTool.Line, "Line", "Line", width: 37),
-            CreateToolButton(AnnotationTool.Rectangle, "Rect", "Rectangle", width: 37),
-            CreateToolButton(AnnotationTool.Ellipse, "Oval", "Ellipse / Circle", width: 37),
-            CreateToolButton(AnnotationTool.Text, "Text", "Text", width: 37),
-            CreateToolButton(AnnotationTool.Move, "Move", "Move selection", width: 41)));
-        row2.Children.Add(CreateSeparator());
+    private UIElement BuildLaserRow()
+    {
+        var row = CreateRow();
+        _laserAlwaysButton = CreateButton("Always", "Laser stays on", (_, _) => _controller.SetLaserActivationMode(LaserActivationMode.Always), width: 52);
+        _laserHoldButton = CreateButton("Hold", "Laser only while the hold key is pressed", (_, _) => _controller.SetLaserActivationMode(LaserActivationMode.Hold), width: 44);
+        row.Children.Add(_laserAlwaysButton);
+        row.Children.Add(_laserHoldButton);
+        row.Children.Add(CreateSeparator());
+        AddColorSwatches(row, _laserColorButtons, "Laser color", _controller.SetLaserPresetColor);
+        row.Children.Add(CreateSeparator());
+        _glowButton = CreateButton("Glow", "Toggle laser glow", (_, _) => _controller.SetGlowEnabled(!_controller.Settings.GlowEnabled), width: 44);
+        row.Children.Add(_glowButton);
+        row.Children.Add(CreateSeparator());
+        _trailText = CreateStepper(row, "Trail", () => _controller.AdjustLaserTrailLength(-40), () => _controller.AdjustLaserTrailLength(40));
+        return row;
+    }
 
+    private UIElement BuildDrawRow()
+    {
+        var stack = new StackPanel { Orientation = WpfOrientation.Vertical };
+        var row = CreateRow();
+        row.Children.Add(CreateToolButton(AnnotationTool.Pencil, "Pen", "Pencil", 34));
+        row.Children.Add(CreateToolButton(AnnotationTool.Highlighter, "Mark", "Highlighter", 40));
+        row.Children.Add(CreateToolButton(AnnotationTool.Arrow, "Arrow", "Arrow", 43));
+        row.Children.Add(CreateToolButton(AnnotationTool.Line, "Line", "Line", 37));
+        row.Children.Add(CreateToolButton(AnnotationTool.Rectangle, "Rect", "Rectangle", 37));
+        row.Children.Add(CreateToolButton(AnnotationTool.Ellipse, "Oval", "Ellipse / Circle", 37));
+        row.Children.Add(CreateToolButton(AnnotationTool.Text, "Text", "Text", 37));
+        row.Children.Add(CreateToolButton(AnnotationTool.Move, "Move", "Move selection", 41));
+        row.Children.Add(CreateSeparator());
+        AddColorSwatches(row, _colorButtons, "Annotation color", _controller.SetAnnotationPresetColor);
+        row.Children.Add(CreateSeparator());
+        _thicknessText = CreateStepper(row, "Size", () => _controller.AdjustAnnotationThickness(-1), () => _controller.AdjustAnnotationThickness(1));
+        _fontText = CreateStepper(row, "Text", () => _controller.AdjustAnnotationFontSize(-2), () => _controller.AdjustAnnotationFontSize(2));
+        row.Children.Add(CreateSeparator());
+        _fadeButton = CreateButton("Fade", "Toggle fading annotations", (_, _) => _controller.ToggleFadingAnnotations(), width: 42);
+        row.Children.Add(_fadeButton);
+        _fadeOptionsButton = CreateInlineOptionsButton("Fade settings", ToggleFadeOptions);
+        row.Children.Add(_fadeOptionsButton);
+        row.Children.Add(CreateSeparator());
         _undoButton = CreateButton("Undo", "Undo", (_, _) => _controller.UndoAnnotation(), width: 44);
         _redoButton = CreateButton("Redo", "Redo", (_, _) => _controller.RedoAnnotation(), width: 44);
         _clearButton = CreateButton("Clear", "Clear annotations", (_, _) => _controller.ClearAnnotations(), width: 44);
-        row2.Children.Add(CreateLabeledGroup("Edit", _undoButton, _redoButton, _clearButton));
-        row2.Children.Add(CreateSeparator());
+        row.Children.Add(_undoButton);
+        row.Children.Add(_redoButton);
+        row.Children.Add(_clearButton);
 
-        _hideButton = CreateButton("Hide", "Collapse toolbar to a small grip", (_, _) => CollapseToHandle(), width: 40);
-        _closeButton = CreateButton("Close", "Close the toolbar (reopen from the tray menu or the toolbar hotkey)", (_, _) => _controller.HideToolbar(), width: 44);
-        row2.Children.Add(CreateLabeledGroup("Toolbar", _hideButton, _closeButton));
+        _fadeOptionsRow = BuildFadeOptionsRow();
+        _fadeOptionsRow.Visibility = Visibility.Collapsed;
 
-        rows.Children.Add(row1);
-        rows.Children.Add(row2);
-        panel.Child = rows;
-        return panel;
+        stack.Children.Add(row);
+        stack.Children.Add(_fadeOptionsRow);
+        return stack;
+    }
+
+    private UIElement BuildFadeOptionsRow()
+    {
+        var row = CreateRow();
+        row.Margin = new Thickness(0, 5, 0, 0);
+        _fadeVisibleText = CreateStepper(row, "Visible", () => _controller.AdjustFadingAnnotationVisibleMs(-500), () => _controller.AdjustFadingAnnotationVisibleMs(500));
+        _fadeDurationText = CreateStepper(row, "Fade", () => _controller.AdjustFadingAnnotationFadeMs(-100), () => _controller.AdjustFadingAnnotationFadeMs(100));
+        return row;
+    }
+
+    private UIElement BuildSpotRow()
+    {
+        var row = CreateRow();
+        _spotRadiusText = CreateStepper(row, "Radius", () => _controller.AdjustSpotlightRadius(-16), () => _controller.AdjustSpotlightRadius(16));
+        _spotDimText = CreateStepper(row, "Dim", () => _controller.AdjustSpotlightOpacity(-0.06), () => _controller.AdjustSpotlightOpacity(0.06));
+        return row;
+    }
+
+    private UIElement BuildZoomRow()
+    {
+        var row = CreateRow();
+        _zoomZoomText = CreateStepper(row, "Zoom", () => _controller.AdjustMagnifierZoom(-0.25), () => _controller.AdjustMagnifierZoom(0.25));
+        _zoomRadiusText = CreateStepper(row, "Radius", () => _controller.AdjustMagnifierRadius(-16), () => _controller.AdjustMagnifierRadius(16));
+        return row;
+    }
+
+    private UIElement BuildPinRow()
+    {
+        var row = CreateRow();
+        _pinZoomText = CreateStepper(row, "Zoom", () => _controller.AdjustPinnedLensZoom(-0.25), () => _controller.AdjustPinnedLensZoom(0.25));
+        _pinFpsText = CreateStepper(row, "Fps", () => _controller.AdjustPinnedLensRefreshFps(-5), () => _controller.AdjustPinnedLensRefreshFps(5));
+        row.Children.Add(CreateSeparator());
+        _closePinsButton = CreateButton("Close all", "Close all pinned lenses", (_, _) => _controller.ClosePinnedLenses(), width: 64);
+        row.Children.Add(_closePinsButton);
+        return row;
+    }
+
+    private UIElement BuildMaskRow()
+    {
+        var row = CreateRow();
+        AddColorSwatches(row, _maskColorButtons, "Mask color", _controller.SetRegionMaskPresetColor);
+        row.Children.Add(CreateSeparator());
+        _maskOpacityText = CreateStepper(row, "Opacity", () => _controller.AdjustRegionMaskOpacity(-0.1), () => _controller.AdjustRegionMaskOpacity(0.1));
+        row.Children.Add(CreateSeparator());
+        _clearMaskButton = CreateButton("Clear", "Clear region masks", (_, _) => _controller.ClearRegionMasks(), width: 48);
+        row.Children.Add(_clearMaskButton);
+        return row;
+    }
+
+    private UIElement BuildBoardRow()
+    {
+        var row = CreateRow();
+        _boardScreenButton = CreateButton("Screen", "Capture screen board", (_, _) => _controller.ToggleScreenBoard(), width: 52);
+        _boardBlackButton = CreateButton("Black", "Black board", (_, _) => ToggleMode(InteractionMode.BlackScreen), width: 44);
+        _boardWhiteButton = CreateButton("White", "White board", (_, _) => ToggleMode(InteractionMode.WhiteScreen), width: 45);
+        row.Children.Add(_boardScreenButton);
+        row.Children.Add(_boardBlackButton);
+        row.Children.Add(_boardWhiteButton);
+        return row;
+    }
+
+    private UIElement BuildMoreRow()
+    {
+        var row = CreateRow();
+        row.Children.Add(CreateButton("Hide", "Collapse toolbar to a small grip", (_, _) => CollapseToHandle(), width: 44));
+        row.Children.Add(CreateButton("Close", "Close the toolbar (reopen from the tray menu or the toolbar hotkey)", (_, _) => _controller.HideToolbar(), width: 46));
+        row.Children.Add(CreateSeparator());
+        row.Children.Add(CreateButton("Settings", "Open settings", (_, _) => _controller.ShowSettingsWindow(), width: 60));
+        return row;
     }
 
     private UIElement BuildCollapsedContent()
     {
-        // Compact 28px grip: drag to move, click (without dragging) to expand.
         var grip = new Border
         {
             Background = PanelBrush,
@@ -215,18 +369,35 @@ internal sealed class OverlayToolbarWindow : Window
             Width = 28,
             Height = 28,
             Cursor = WpfCursors.SizeAll,
-            ToolTip = "Drag to move, click to expand",
-            Child = new TextBlock
-            {
-                Text = "FT",
-                Foreground = WpfBrushes.White,
-                FontSize = 11,
-                FontWeight = FontWeights.Bold,
-                HorizontalAlignment = WpfHorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                IsHitTestVisible = false
-            }
+            ToolTip = "Drag to move, click to expand"
         };
+
+        var content = new Grid();
+        content.Children.Add(new TextBlock
+        {
+            Text = "FT",
+            Foreground = WpfBrushes.White,
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            HorizontalAlignment = WpfHorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false
+        });
+
+        _activeDot = new Border
+        {
+            Width = 8,
+            Height = 8,
+            CornerRadius = new CornerRadius(4),
+            Background = ActiveBrush,
+            HorizontalAlignment = WpfHorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 2, 0),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed
+        };
+        content.Children.Add(_activeDot);
+        grip.Child = content;
 
         grip.MouseLeftButtonDown += OnCollapsedMouseDown;
         return grip;
@@ -241,8 +412,6 @@ internal sealed class OverlayToolbarWindow : Window
 
         e.Handled = true;
 
-        // DragMove blocks until the button is released. Compare the window position
-        // before/after to tell a real drag from a plain click (which should expand).
         var handle = new WindowInteropHelper(this).Handle;
         var moved = false;
         if (handle != IntPtr.Zero && NativeMethods.GetWindowRect(handle, out var before))
@@ -304,6 +473,7 @@ internal sealed class OverlayToolbarWindow : Window
             return;
         }
 
+        CloseContextualRow();
         _collapsed = true;
         _expandedRoot.Visibility = Visibility.Collapsed;
         _collapsedRoot.Visibility = Visibility.Visible;
@@ -327,88 +497,116 @@ internal sealed class OverlayToolbarWindow : Window
         ReassertTopmost();
     }
 
-    private static UIElement CreateLabeledGroup(string label, params UIElement[] children)
+    // Adds a split-button (label = action, "v" caret = open/close its contextual row)
+    // to the primary row and returns the main button so its active state can be updated.
+    private WpfButton AddSplitButton(StackPanel parent, string label, string tooltip, double width, RoutedEventHandler onBody, string? rowKey)
     {
         var container = new StackPanel
         {
             Orientation = WpfOrientation.Vertical,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(1, 0, 1, 0)
         };
 
-        container.Children.Add(new TextBlock
+        var main = CreateButton(label, tooltip, onBody, width);
+        main.Margin = new Thickness(0);
+        main.Height = 24;
+        container.Children.Add(main);
+
+        if (rowKey is not null)
+        {
+            var caret = new WpfButton
+            {
+                Content = "˅",
+                ToolTip = "Show options",
+                Width = width,
+                Height = 12,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0, 1, 0, 0),
+                Background = WpfBrushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Foreground = CaretBrush,
+                Cursor = WpfCursors.Hand,
+                FontSize = 9,
+                HorizontalContentAlignment = WpfHorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            caret.Click += (_, _) => ShowContextualRow(rowKey);
+            container.Children.Add(caret);
+            _carets[rowKey] = caret;
+        }
+        else
+        {
+            container.Children.Add(new Border { Height = 12, Margin = new Thickness(0, 1, 0, 0) });
+        }
+
+        parent.Children.Add(container);
+        return main;
+    }
+
+    private TextBlock CreateStepper(StackPanel parent, string label, Action onMinus, Action onPlus)
+    {
+        var group = new StackPanel
+        {
+            Orientation = WpfOrientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 1, 0)
+        };
+
+        group.Children.Add(new TextBlock
         {
             Text = label,
             Foreground = LabelBrush,
-            FontSize = 8,
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(2, 0, 0, 2)
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 3, 0)
         });
-        container.Children.Add(CreateGroup(children));
-        return container;
-    }
-
-    private static UIElement CreateGroup(params UIElement[] children)
-    {
-        var group = new StackPanel
-        {
-            Orientation = WpfOrientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0)
-        };
-
-        foreach (var child in children)
-        {
-            group.Children.Add(child);
-        }
-
-        return group;
-    }
-
-    private UIElement CreateColorGroup()
-    {
-        var group = new StackPanel
-        {
-            Orientation = WpfOrientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0)
-        };
-
-        for (var i = 0; i < 5; i++)
-        {
-            var index = i;
-            var button = CreateButton(string.Empty, $"Annotation color {i + 1}", (_, _) => _controller.SetAnnotationPresetColor(index), width: 25);
-            button.Height = 26;
-            button.Padding = new Thickness(0);
-            button.Margin = new Thickness(1, 0, 1, 0);
-            _colorButtons.Add(button);
-            group.Children.Add(button);
-        }
-
-        return group;
-    }
-
-    private UIElement CreateThicknessGroup()
-    {
-        var group = new StackPanel
-        {
-            Orientation = WpfOrientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0)
-        };
-
-        group.Children.Add(CreateButton("-", "Decrease line thickness", (_, _) => _controller.AdjustAnnotationThickness(-1), width: 29));
-        _thicknessText = new TextBlock
+        group.Children.Add(CreateStepperButton("-", $"Decrease {label}", (_, _) => onMinus()));
+        var value = new TextBlock
         {
             Foreground = WpfBrushes.White,
-            MinWidth = 28,
+            MinWidth = 30,
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             FontWeight = FontWeights.SemiBold,
+            FontSize = 11,
             Margin = new Thickness(1, 0, 1, 0)
         };
-        group.Children.Add(_thicknessText);
-        group.Children.Add(CreateButton("+", "Increase line thickness", (_, _) => _controller.AdjustAnnotationThickness(1), width: 29));
-        return group;
+        group.Children.Add(value);
+        group.Children.Add(CreateStepperButton("+", $"Increase {label}", (_, _) => onPlus()));
+        parent.Children.Add(group);
+        return value;
+    }
+
+    private static WpfButton CreateStepperButton(string text, string tooltip, RoutedEventHandler onClick)
+    {
+        var button = CreateButton(text, tooltip, onClick, width: 22);
+        button.Height = 24;
+        button.Padding = new Thickness(0);
+        button.Margin = new Thickness(0);
+        return button;
+    }
+
+    private static WpfButton CreateInlineOptionsButton(string tooltip, Action onClick)
+    {
+        var button = CreateButton("v", tooltip, (_, _) => onClick(), width: 18);
+        button.Padding = new Thickness(0);
+        button.Margin = new Thickness(0, 0, 1, 0);
+        return button;
+    }
+
+    private void AddColorSwatches(StackPanel parent, List<WpfButton> store, string tooltipPrefix, Action<int> onPick)
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            var index = i;
+            var button = CreateButton(string.Empty, $"{tooltipPrefix} {i + 1}", (_, _) => onPick(index), width: 25);
+            button.Height = 24;
+            button.Padding = new Thickness(0);
+            button.Margin = new Thickness(1, 0, 1, 0);
+            store.Add(button);
+            parent.Children.Add(button);
+        }
     }
 
     private WpfButton CreateToolButton(AnnotationTool tool, string text, string tooltip, double width)
@@ -455,10 +653,78 @@ internal sealed class OverlayToolbarWindow : Window
         return new Border
         {
             Width = 1,
-            Height = 38,
+            Height = 24,
             Background = new SolidColorBrush(MediaColor.FromArgb(80, 255, 255, 255)),
             Margin = new Thickness(5, 0, 5, 0)
         };
+    }
+
+    private void ShowContextualRow(string key)
+    {
+        if (_openRowKey == key)
+        {
+            CloseContextualRow();
+            return;
+        }
+
+        if (!_rows.TryGetValue(key, out var row))
+        {
+            return;
+        }
+
+        if (key != "draw")
+        {
+            HideFadeOptions();
+        }
+
+        _openRowKey = key;
+        _contextualHost.Child = row;
+        _contextualHost.Visibility = Visibility.Visible;
+        UpdateState();
+        UpdateLayout();
+        ClampOntoMonitor();
+        ReassertTopmost();
+    }
+
+    private void CloseContextualRow()
+    {
+        if (_openRowKey is null)
+        {
+            return;
+        }
+
+        _openRowKey = null;
+        HideFadeOptions();
+        _contextualHost.Child = null;
+        _contextualHost.Visibility = Visibility.Collapsed;
+        foreach (var caret in _carets.Values)
+        {
+            caret.Foreground = CaretBrush;
+        }
+
+        UpdateLayout();
+        ReassertTopmost();
+    }
+
+    private void ToggleFadeOptions()
+    {
+        _fadeOptionsVisible = !_fadeOptionsVisible;
+        _fadeOptionsRow.Visibility = _fadeOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
+        UpdateState();
+        UpdateLayout();
+        ClampOntoMonitor();
+        ReassertTopmost();
+    }
+
+    private void HideFadeOptions()
+    {
+        if (_fadeOptionsRow is null)
+        {
+            return;
+        }
+
+        _fadeOptionsVisible = false;
+        _fadeOptionsRow.Visibility = Visibility.Collapsed;
     }
 
     private void ToggleMode(InteractionMode mode)
@@ -485,28 +751,65 @@ internal sealed class OverlayToolbarWindow : Window
         _updating = true;
         try
         {
+            var settings = _controller.Settings;
+
             SetButtonActive(_laserButton, _controller.ActivationMode == LaserActivationMode.Always);
-            SetButtonActive(_annotateButton, _controller.Mode == InteractionMode.Annotate);
-            SetButtonActive(_screenBoardButton, _controller.Mode == InteractionMode.ScreenBoard);
-            SetButtonActive(_blackButton, _controller.Mode == InteractionMode.BlackScreen);
-            SetButtonActive(_whiteButton, _controller.Mode == InteractionMode.WhiteScreen);
-            SetButtonActive(_spotlightButton, _controller.SpotlightEnabled);
-            SetButtonActive(_magnifierButton, _controller.MagnifierEnabled);
+            SetButtonActive(_drawButton, _controller.Mode == InteractionMode.Annotate);
+            SetButtonActive(_spotButton, _controller.SpotlightEnabled);
+            SetButtonActive(_zoomButton, _controller.MagnifierEnabled);
+            SetButtonActive(_pinButton, _controller.PinnedLensSelectionActive || _controller.PinnedLensActive);
+            SetButtonActive(_maskButton, _controller.RegionMaskSelectionActive || _controller.RegionMaskActive);
+            SetButtonActive(_boardButton, _controller.Mode is InteractionMode.ScreenBoard or InteractionMode.BlackScreen or InteractionMode.WhiteScreen);
+
+            foreach (var (key, caret) in _carets)
+            {
+                caret.Foreground = key == _openRowKey ? CaretActiveBrush : CaretBrush;
+            }
+
+            SetButtonActive(_laserAlwaysButton, _controller.ActivationMode == LaserActivationMode.Always);
+            SetButtonActive(_laserHoldButton, _controller.ActivationMode == LaserActivationMode.Hold);
+            SetButtonActive(_glowButton, settings.GlowEnabled);
+            _trailText.Text = $"{settings.TrailLengthMs:0}";
+            UpdateColorSwatches(_laserColorButtons, settings.LaserColorPresets, settings.Color);
 
             foreach (var (tool, button) in _toolButtons)
             {
                 SetButtonActive(button, _controller.CurrentTool == tool);
             }
 
-            UpdateColors();
-            _thicknessText.Text = $"{_controller.Settings.AnnotationThickness:0}";
-
+            UpdateColorSwatches(_colorButtons, settings.AnnotationColorPresets, settings.AnnotationColor);
+            _thicknessText.Text = $"{settings.AnnotationThickness:0}";
+            _fontText.Text = $"{settings.AnnotationFontSize:0}";
+            SetButtonActive(_fadeButton, _controller.FadingAnnotationsEnabled);
+            SetButtonActive(_fadeOptionsButton, _fadeOptionsVisible);
+            _fadeVisibleText.Text = FormatDurationMs(settings.FadingAnnotationVisibleMs);
+            _fadeDurationText.Text = FormatDurationMs(settings.FadingAnnotationFadeMs);
             _undoButton.IsEnabled = _controller.Annotations.CanUndo;
             _redoButton.IsEnabled = _controller.Annotations.CanRedo;
             _clearButton.IsEnabled = _controller.Annotations.Shapes.Count > 0 || _controller.Annotations.Draft is not null;
             SetButtonEnabled(_undoButton, _undoButton.IsEnabled);
             SetButtonEnabled(_redoButton, _redoButton.IsEnabled);
             SetButtonEnabled(_clearButton, _clearButton.IsEnabled);
+
+            _spotRadiusText.Text = $"{settings.SpotlightRadius:0}";
+            _spotDimText.Text = $"{settings.SpotlightOpacity * 100:0}%";
+            _zoomZoomText.Text = $"{settings.MagnifierZoom:0.##}x";
+            _zoomRadiusText.Text = $"{settings.MagnifierRadius:0}";
+            _pinZoomText.Text = $"{settings.PinnedLensZoom:0.##}x";
+            _pinFpsText.Text = $"{settings.PinnedLensRefreshFps:0}";
+            _closePinsButton.IsEnabled = _controller.PinnedLensActive;
+            SetButtonEnabled(_closePinsButton, _closePinsButton.IsEnabled);
+
+            UpdateColorSwatches(_maskColorButtons, settings.RegionMaskColorPresets, settings.RegionMaskColor);
+            _maskOpacityText.Text = $"{settings.RegionMaskOpacity * 100:0}%";
+            _clearMaskButton.IsEnabled = _controller.RegionMaskActive;
+            SetButtonEnabled(_clearMaskButton, _clearMaskButton.IsEnabled);
+
+            SetButtonActive(_boardScreenButton, _controller.Mode == InteractionMode.ScreenBoard);
+            SetButtonActive(_boardBlackButton, _controller.Mode == InteractionMode.BlackScreen);
+            SetButtonActive(_boardWhiteButton, _controller.Mode == InteractionMode.WhiteScreen);
+
+            _activeDot.Visibility = AnyToolActive() ? Visibility.Visible : Visibility.Collapsed;
         }
         finally
         {
@@ -514,20 +817,39 @@ internal sealed class OverlayToolbarWindow : Window
         }
     }
 
-    private void UpdateColors()
+    private bool AnyToolActive()
     {
-        var presets = _controller.Settings.AnnotationColorPresets;
-        for (var i = 0; i < _colorButtons.Count; i++)
+        return _controller.ActivationMode == LaserActivationMode.Always
+            || _controller.SpotlightEnabled
+            || _controller.MagnifierEnabled
+            || _controller.PinnedLensActive
+            || _controller.PinnedLensSelectionActive
+            || _controller.RegionMaskActive
+            || _controller.RegionMaskSelectionActive
+            || _controller.Mode is InteractionMode.Annotate or InteractionMode.ScreenBoard
+                or InteractionMode.BlackScreen or InteractionMode.WhiteScreen
+            || _controller.Annotations.Shapes.Count > 0;
+    }
+
+    private static string FormatDurationMs(int ms)
+    {
+        var seconds = ms / 1000.0;
+        return $"{seconds:0.#}s";
+    }
+
+    private static void UpdateColorSwatches(List<WpfButton> buttons, IReadOnlyList<string> presets, string currentColor)
+    {
+        for (var i = 0; i < buttons.Count; i++)
         {
             var colorText = i < presets.Count ? presets[i] : "#FFFFFFFF";
-            var selected = string.Equals(_controller.Settings.AnnotationColor, colorText, StringComparison.OrdinalIgnoreCase);
             if (AppSettings.TryParseColor(colorText, out var color))
             {
-                _colorButtons[i].Background = new SolidColorBrush(color);
+                buttons[i].Background = new SolidColorBrush(color);
             }
 
-            _colorButtons[i].BorderBrush = selected ? ActiveBorderBrush : ToolbarBorderBrush;
-            _colorButtons[i].BorderThickness = selected ? new Thickness(2) : new Thickness(1);
+            var selected = string.Equals(colorText, currentColor, StringComparison.OrdinalIgnoreCase);
+            buttons[i].BorderBrush = selected ? ActiveBorderBrush : ToolbarBorderBrush;
+            buttons[i].BorderThickness = selected ? new Thickness(2) : new Thickness(1);
         }
     }
 
@@ -549,8 +871,6 @@ internal sealed class OverlayToolbarWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == IntPtr.Zero)
         {
-            // Native handle not realized yet (hit at most once before the first
-            // Show); fall back to WPF placement, correct at 100% scale.
             var fallback = GetCursorScreen().WorkingArea;
             Left = fallback.Left + 8;
             Top = fallback.Top + 18;
@@ -560,15 +880,10 @@ internal sealed class OverlayToolbarWindow : Window
         int left, top;
         if (_hasSavedPosition)
         {
-            // Restore where the user last dropped it instead of re-centering on every
-            // re-show; clamp onto a monitor that still exists.
             (left, top) = ClampToWorkingArea(_savedLeft, _savedTop);
         }
         else
         {
-            // First show: centre near the top of the cursor's monitor. Window.Left/Top
-            // live in WPF DIPs but Forms.Screen.WorkingArea is physical pixels, so place
-            // natively in physical pixels, like the overlay/magnifier do.
             var area = GetCursorScreen().WorkingArea;
             var scale = GetCursorMonitorScale();
             var width = (int)Math.Round((ActualWidth > 1 ? ActualWidth : Width) * scale);
@@ -580,8 +895,6 @@ internal sealed class OverlayToolbarWindow : Window
         MoveWindowPhysical(left, top);
     }
 
-    // Records the toolbar's current physical position so a later re-show restores it
-    // rather than snapping back to the centre.
     private void SaveCurrentPosition()
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -593,8 +906,6 @@ internal sealed class OverlayToolbarWindow : Window
         }
     }
 
-    // Re-clamp onto the current monitor (used after expanding, which can grow a grip
-    // parked near an edge off-screen).
     private void ClampOntoMonitor()
     {
         var handle = new WindowInteropHelper(this).Handle;

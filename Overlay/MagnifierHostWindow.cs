@@ -16,14 +16,11 @@ namespace FocusTool.Win.Overlay;
 /// </summary>
 internal sealed class MagnifierHostWindow : IDisposable
 {
-    private static readonly object RuntimeLock = new();
-    private static int _runtimeReferences;
-
     private HostForm? _host;
     private ClickThroughNativeWindow? _magnifierSubclass;
+    private MagnificationRuntime? _runtime;
     private IntPtr _hostHwnd;
     private IntPtr _magnifierHwnd;
-    private bool _runtimeAcquired;
     private bool _disposed;
     private bool _shown;
     private int _diameter;
@@ -34,12 +31,10 @@ internal sealed class MagnifierHostWindow : IDisposable
 
     public MagnifierHostWindow()
     {
-        IsAvailable = AcquireRuntime();
-        if (!IsAvailable)
+        _runtime = MagnificationRuntime.Acquire("magnifier");
+        IsAvailable = _runtime is not null;
+        if (_runtime is null)
         {
-            AppLog.Error(
-                "Could not initialize Windows Magnification API.",
-                new Win32Exception(Marshal.GetLastWin32Error()));
             return;
         }
 
@@ -149,7 +144,8 @@ internal sealed class MagnifierHostWindow : IDisposable
         _host = null;
         _hostHwnd = IntPtr.Zero;
         _filterHandles = [];
-        ReleaseRuntime();
+        _runtime?.Dispose();
+        _runtime = null;
     }
 
     private void ApplyHostWindowStyles()
@@ -278,43 +274,6 @@ internal sealed class MagnifierHostWindow : IDisposable
         {
             _filterHandles = nextHandles;
         }
-    }
-
-    private bool AcquireRuntime()
-    {
-        lock (RuntimeLock)
-        {
-            if (_runtimeReferences == 0 && !NativeMethods.MagInitialize())
-            {
-                return false;
-            }
-
-            _runtimeReferences++;
-            _runtimeAcquired = true;
-            return true;
-        }
-    }
-
-    private void ReleaseRuntime()
-    {
-        if (!_runtimeAcquired)
-        {
-            return;
-        }
-
-        lock (RuntimeLock)
-        {
-            if (_runtimeReferences > 0)
-            {
-                _runtimeReferences--;
-                if (_runtimeReferences == 0)
-                {
-                    NativeMethods.MagUninitialize();
-                }
-            }
-        }
-
-        _runtimeAcquired = false;
     }
 
     /// <summary>
