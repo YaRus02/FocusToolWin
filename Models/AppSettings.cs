@@ -54,6 +54,7 @@ public sealed class AppSettings
     public int FadingAnnotationVisibleMs { get; set; } = 6000;
     public int FadingAnnotationFadeMs { get; set; } = 1200;
     public ShortcutSettings Shortcuts { get; set; } = new();
+    public TimerSettings Timer { get; set; } = new();
 
     public AppSettings Clone() => new()
     {
@@ -84,7 +85,8 @@ public sealed class AppSettings
         FadingAnnotationsEnabled = FadingAnnotationsEnabled,
         FadingAnnotationVisibleMs = FadingAnnotationVisibleMs,
         FadingAnnotationFadeMs = FadingAnnotationFadeMs,
-        Shortcuts = Shortcuts.Clone()
+        Shortcuts = Shortcuts.Clone(),
+        Timer = Timer.Clone()
     };
 
     public void CopyFrom(AppSettings other)
@@ -117,6 +119,7 @@ public sealed class AppSettings
         FadingAnnotationVisibleMs = other.FadingAnnotationVisibleMs;
         FadingAnnotationFadeMs = other.FadingAnnotationFadeMs;
         Shortcuts = other.Shortcuts.Clone();
+        Timer = other.Timer.Clone();
         Normalize();
     }
 
@@ -179,6 +182,8 @@ public sealed class AppSettings
         FadingAnnotationFadeMs = Math.Clamp(FadingAnnotationFadeMs, 100, 10000);
         Shortcuts ??= new ShortcutSettings();
         Shortcuts.Normalize();
+        Timer ??= new TimerSettings();
+        Timer.Normalize();
     }
 
     public static string[] DefaultLaserColorPresets() => [.. DefaultColorSlots];
@@ -323,6 +328,7 @@ public sealed class ShortcutSettings
     public string ToggleRegionMask { get; set; } = "Ctrl+Alt+H";
     public string ClearRegionMasks { get; set; } = "Ctrl+Alt+Shift+H";
     public string ToggleFadingAnnotations { get; set; } = "Ctrl+Alt+F";
+    public string ToggleTimer { get; set; } = "Ctrl+Alt+N";
     public string ToggleToolbar { get; set; } = "Ctrl+Alt+T";
     public string TakeScreenshot { get; set; } = "Ctrl+Alt+C";
     public string ToggleScreenBoard { get; set; } = "Ctrl+Alt+G";
@@ -361,6 +367,7 @@ public sealed class ShortcutSettings
         ToggleRegionMask = ToggleRegionMask,
         ClearRegionMasks = ClearRegionMasks,
         ToggleFadingAnnotations = ToggleFadingAnnotations,
+        ToggleTimer = ToggleTimer,
         ToggleToolbar = ToggleToolbar,
         TakeScreenshot = TakeScreenshot,
         ToggleScreenBoard = ToggleScreenBoard,
@@ -400,6 +407,7 @@ public sealed class ShortcutSettings
         ToggleRegionMask = NormalizeShortcut(ToggleRegionMask, "Ctrl+Alt+H");
         ClearRegionMasks = NormalizeShortcut(ClearRegionMasks, "Ctrl+Alt+Shift+H");
         ToggleFadingAnnotations = NormalizeShortcut(ToggleFadingAnnotations, "Ctrl+Alt+F");
+        ToggleTimer = NormalizeShortcut(ToggleTimer, "Ctrl+Alt+N");
         ToggleToolbar = NormalizeShortcut(ToggleToolbar, "Ctrl+Alt+T");
         TakeScreenshot = NormalizeShortcut(TakeScreenshot, "Ctrl+Alt+C");
         ToggleScreenBoard = NormalizeShortcut(ToggleScreenBoard, "Ctrl+Alt+G");

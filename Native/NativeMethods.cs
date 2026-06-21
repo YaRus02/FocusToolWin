@@ -30,6 +30,7 @@ internal static class NativeMethods
     public const uint ModNoRepeat = 0x4000;
 
     public const int WmHotkey = 0x0312;
+    public const int WmActivate = 0x0006;
     public const int WmMouseMove = 0x0200;
     public const int WmLButtonDown = 0x0201;
     public const int WmLButtonUp = 0x0202;

@@ -25,6 +25,8 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _fadingAnnotationsItem;
     private readonly ToolStripMenuItem _toolbarItem;
     private readonly ToolStripMenuItem _screenshotItem;
+    private readonly ToolStripMenuItem _newTimerItem;
+    private readonly ToolStripMenuItem _closeTimersItem;
     private readonly ToolStripMenuItem _screenBoardItem;
     private readonly ToolStripMenuItem _blackScreenItem;
     private readonly ToolStripMenuItem _whiteScreenItem;
@@ -134,6 +136,17 @@ internal sealed class TrayIconController : IDisposable
         };
 
         _screenshotItem = new ToolStripMenuItem("Screenshot", null, (_, _) => _controller.TakeScreenshot());
+
+        _newTimerItem = new ToolStripMenuItem("New timer");
+        _newTimerItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.NewTimer();
+            }
+        };
+
+        _closeTimersItem = new ToolStripMenuItem("Close all timers", null, (_, _) => _controller.CloseAllTimers());
 
         _screenBoardItem = new ToolStripMenuItem("Screen board") { CheckOnClick = true };
         _screenBoardItem.Click += (_, _) =>
@@ -250,6 +263,11 @@ internal sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(regionMaskMenu);
         _contextMenu.Items.Add(boardMenu);
         _contextMenu.Items.Add(_screenshotItem);
+
+        var timerMenu = new ToolStripMenuItem("Timer");
+        timerMenu.DropDownItems.Add(_newTimerItem);
+        timerMenu.DropDownItems.Add(_closeTimersItem);
+        _contextMenu.Items.Add(timerMenu);
         _contextMenu.Items.Add(new ToolStripSeparator());
         _contextMenu.Items.Add(_toolbarItem);
         _contextMenu.Items.Add("Settings...", null, (_, _) => _controller.ShowSettingsWindow());
@@ -348,6 +366,9 @@ internal sealed class TrayIconController : IDisposable
         _toolbarItem.ShortcutKeyDisplayString = _controller.ToolbarShortcut;
 
         _screenshotItem.ShortcutKeyDisplayString = _controller.ScreenshotShortcut;
+        _newTimerItem.Text = _controller.TimerCount > 0 ? $"New timer ({_controller.TimerCount} active)" : "New timer";
+        _newTimerItem.ShortcutKeyDisplayString = _controller.TimerShortcut;
+        _closeTimersItem.Enabled = _controller.TimerActive;
         _screenBoardItem.Checked = _controller.ScreenBoardEnabled;
         _screenBoardItem.ShortcutKeyDisplayString = _controller.ScreenBoardShortcut;
 
