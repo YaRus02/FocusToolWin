@@ -844,6 +844,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         ApplySettings(updated);
     }
 
+    public void SetLaserPresetColor(int index)
+    {
+        if (index < 0 || index >= Settings.LaserColorPresets.Count)
+        {
+            return;
+        }
+
+        SetPresetColor(Settings.LaserColorPresets[index]);
+    }
+
     public void SetAnnotationColor(string color)
     {
         var updated = Settings.Clone();
@@ -880,6 +890,86 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         ApplySettings(updated);
     }
 
+    public void AdjustAnnotationFontSize(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.AnnotationFontSize += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustLaserTrailLength(int delta)
+    {
+        var updated = Settings.Clone();
+        updated.TrailLengthMs += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustSpotlightRadius(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.SpotlightRadius += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustSpotlightOpacity(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.SpotlightOpacity += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustMagnifierZoom(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.MagnifierZoom += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustMagnifierRadius(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.MagnifierRadius += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustPinnedLensZoom(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.PinnedLensZoom += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustPinnedLensRefreshFps(int delta)
+    {
+        var updated = Settings.Clone();
+        updated.PinnedLensRefreshFps += delta;
+        ApplySettings(updated);
+    }
+
+    public void AdjustRegionMaskOpacity(double delta)
+    {
+        var updated = Settings.Clone();
+        updated.RegionMaskOpacity += delta;
+        ApplySettings(updated);
+    }
+
+    public void SetRegionMaskColor(string color)
+    {
+        var updated = Settings.Clone();
+        updated.RegionMaskColor = color;
+        ApplySettings(updated);
+    }
+
+    public void SetRegionMaskPresetColor(int index)
+    {
+        if (index < 0 || index >= Settings.RegionMaskColorPresets.Count)
+        {
+            return;
+        }
+
+        SetRegionMaskColor(Settings.RegionMaskColorPresets[index]);
+    }
+
     public void SetGlowEnabled(bool enabled)
     {
         var updated = Settings.Clone();
@@ -901,6 +991,20 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         var updated = Settings.Clone();
         updated.FadingAnnotationsEnabled = enabled;
+        ApplySettings(updated);
+    }
+
+    public void AdjustFadingAnnotationVisibleMs(int deltaMs)
+    {
+        var updated = Settings.Clone();
+        updated.FadingAnnotationVisibleMs += deltaMs;
+        ApplySettings(updated);
+    }
+
+    public void AdjustFadingAnnotationFadeMs(int deltaMs)
+    {
+        var updated = Settings.Clone();
+        updated.FadingAnnotationFadeMs += deltaMs;
         ApplySettings(updated);
     }
 

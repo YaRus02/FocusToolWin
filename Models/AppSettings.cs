@@ -6,7 +6,26 @@ namespace FocusTool.Win.Models;
 
 public sealed class AppSettings
 {
+    private static readonly string[] DefaultColorSlots =
+    [
+        "#FFFF2020",
+        "#FF00D26A",
+        "#FF2080FF",
+        "#FFFFD400",
+        "#FFFFFFFF"
+    ];
+
+    private static readonly string[] DefaultRegionMaskColorSlots =
+    [
+        "#FF000000",
+        "#FF404040",
+        "#FFFFFFFF",
+        "#FFB00020",
+        "#FF2080FF"
+    ];
+
     public string Color { get; set; } = "#FFFF2020";
+    public List<string> LaserColorPresets { get; set; } = [.. DefaultColorSlots];
     public double PointSize { get; set; } = 12;
     public int TrailLengthMs { get; set; } = 400;
     public int FadeDurationMs { get; set; } = 500;
@@ -24,16 +43,10 @@ public sealed class AppSettings
     public double PinnedLensZoom { get; set; } = 2.0;
     public int PinnedLensRefreshFps { get; set; } = 30;
     public string RegionMaskColor { get; set; } = "#FF000000";
+    public List<string> RegionMaskColorPresets { get; set; } = [.. DefaultRegionMaskColorSlots];
     public double RegionMaskOpacity { get; set; } = 1.0;
     public string AnnotationColor { get; set; } = "#FFFF2020";
-    public List<string> AnnotationColorPresets { get; set; } =
-    [
-        "#FFFF2020",
-        "#FF00D26A",
-        "#FF2080FF",
-        "#FFFFD400",
-        "#FFFFFFFF"
-    ];
+    public List<string> AnnotationColorPresets { get; set; } = [.. DefaultColorSlots];
     public double AnnotationThickness { get; set; } = 4;
     public double AnnotationFontSize { get; set; } = 28;
     public string AnnotationTool { get; set; } = "Pencil";
@@ -45,6 +58,7 @@ public sealed class AppSettings
     public AppSettings Clone() => new()
     {
         Color = Color,
+        LaserColorPresets = [.. LaserColorPresets],
         PointSize = PointSize,
         TrailLengthMs = TrailLengthMs,
         FadeDurationMs = FadeDurationMs,
@@ -60,6 +74,7 @@ public sealed class AppSettings
         PinnedLensZoom = PinnedLensZoom,
         PinnedLensRefreshFps = PinnedLensRefreshFps,
         RegionMaskColor = RegionMaskColor,
+        RegionMaskColorPresets = [.. RegionMaskColorPresets],
         RegionMaskOpacity = RegionMaskOpacity,
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
@@ -75,6 +90,7 @@ public sealed class AppSettings
     public void CopyFrom(AppSettings other)
     {
         Color = other.Color;
+        LaserColorPresets = [.. other.LaserColorPresets];
         PointSize = other.PointSize;
         TrailLengthMs = other.TrailLengthMs;
         FadeDurationMs = other.FadeDurationMs;
@@ -90,6 +106,7 @@ public sealed class AppSettings
         PinnedLensZoom = other.PinnedLensZoom;
         PinnedLensRefreshFps = other.PinnedLensRefreshFps;
         RegionMaskColor = other.RegionMaskColor;
+        RegionMaskColorPresets = [.. other.RegionMaskColorPresets];
         RegionMaskOpacity = other.RegionMaskOpacity;
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
@@ -110,35 +127,16 @@ public sealed class AppSettings
             Color = "#FFFF2020";
         }
 
+        LaserColorPresets = NormalizeColorPresets(LaserColorPresets, DefaultColorSlots);
+        AnnotationColorPresets = NormalizeColorPresets(AnnotationColorPresets, DefaultColorSlots);
+        RegionMaskColorPresets = NormalizeColorPresets(RegionMaskColorPresets, DefaultRegionMaskColorSlots);
+        EnsureColorInPresets(Color, LaserColorPresets, fallbackIndex: 4);
+
         if (!TryParseColor(AnnotationColor, out _))
         {
             AnnotationColor = Color;
         }
-
-        if (AnnotationColorPresets is null || AnnotationColorPresets.Count == 0)
-        {
-            AnnotationColorPresets =
-            [
-                "#FFFF2020",
-                "#FF00D26A",
-                "#FF2080FF",
-                "#FFFFD400",
-                "#FFFFFFFF"
-            ];
-        }
-
-        for (var i = 0; i < AnnotationColorPresets.Count; i++)
-        {
-            if (!TryParseColor(AnnotationColorPresets[i], out _))
-            {
-                AnnotationColorPresets[i] = "#FFFF2020";
-            }
-        }
-
-        while (AnnotationColorPresets.Count < 5)
-        {
-            AnnotationColorPresets.Add(AnnotationColorPresets.Count == 4 ? "#FFFFFFFF" : "#FFFF2020");
-        }
+        EnsureColorInPresets(AnnotationColor, AnnotationColorPresets, fallbackIndex: 4);
 
         if (!Enum.TryParse<AnnotationTool>(AnnotationTool, true, out _))
         {
@@ -172,6 +170,7 @@ public sealed class AppSettings
         {
             RegionMaskColor = "#FF000000";
         }
+        EnsureColorInPresets(RegionMaskColor, RegionMaskColorPresets, fallbackIndex: 4);
 
         RegionMaskOpacity = Math.Clamp(RegionMaskOpacity, 0.1, 1.0);
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
@@ -180,6 +179,58 @@ public sealed class AppSettings
         FadingAnnotationFadeMs = Math.Clamp(FadingAnnotationFadeMs, 100, 10000);
         Shortcuts ??= new ShortcutSettings();
         Shortcuts.Normalize();
+    }
+
+    public static string[] DefaultLaserColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultAnnotationColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultRegionMaskColorPresets() => [.. DefaultRegionMaskColorSlots];
+
+    private static List<string> NormalizeColorPresets(List<string>? presets, IReadOnlyList<string> defaults)
+    {
+        if (presets is null || presets.Count == 0)
+        {
+            presets = [.. defaults];
+        }
+
+        for (var i = 0; i < presets.Count; i++)
+        {
+            if (!TryParseColor(presets[i], out _))
+            {
+                presets[i] = defaults[Math.Min(i, defaults.Count - 1)];
+            }
+        }
+
+        while (presets.Count < defaults.Count)
+        {
+            presets.Add(defaults[presets.Count]);
+        }
+
+        return presets;
+    }
+
+    private static void EnsureColorInPresets(string color, List<string> presets, int fallbackIndex)
+    {
+        if (!TryParseColor(color, out _) || ContainsColor(presets, color))
+        {
+            return;
+        }
+
+        presets[Math.Clamp(fallbackIndex, 0, presets.Count - 1)] = color;
+    }
+
+    private static bool ContainsColor(IEnumerable<string> presets, string color)
+    {
+        foreach (var preset in presets)
+        {
+            if (string.Equals(preset, color, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public MediaColor ToMediaColor()
