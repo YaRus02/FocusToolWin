@@ -23,6 +23,8 @@ public sealed class AppSettings
     public double MagnifierZoom { get; set; } = 2.0;
     public double PinnedLensZoom { get; set; } = 2.0;
     public int PinnedLensRefreshFps { get; set; } = 30;
+    public string RegionMaskColor { get; set; } = "#FF000000";
+    public double RegionMaskOpacity { get; set; } = 1.0;
     public string AnnotationColor { get; set; } = "#FFFF2020";
     public List<string> AnnotationColorPresets { get; set; } =
     [
@@ -54,6 +56,8 @@ public sealed class AppSettings
         MagnifierZoom = MagnifierZoom,
         PinnedLensZoom = PinnedLensZoom,
         PinnedLensRefreshFps = PinnedLensRefreshFps,
+        RegionMaskColor = RegionMaskColor,
+        RegionMaskOpacity = RegionMaskOpacity,
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
         AnnotationThickness = AnnotationThickness,
@@ -79,6 +83,8 @@ public sealed class AppSettings
         MagnifierZoom = other.MagnifierZoom;
         PinnedLensZoom = other.PinnedLensZoom;
         PinnedLensRefreshFps = other.PinnedLensRefreshFps;
+        RegionMaskColor = other.RegionMaskColor;
+        RegionMaskOpacity = other.RegionMaskOpacity;
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
         AnnotationThickness = other.AnnotationThickness;
@@ -153,6 +159,12 @@ public sealed class AppSettings
         MagnifierZoom = Math.Clamp(MagnifierZoom, 1.25, 4.0);
         PinnedLensZoom = Math.Clamp(PinnedLensZoom, 1.0, 4.0);
         PinnedLensRefreshFps = Math.Clamp(PinnedLensRefreshFps, 10, 60);
+        if (!TryParseColor(RegionMaskColor, out _))
+        {
+            RegionMaskColor = "#FF000000";
+        }
+
+        RegionMaskOpacity = Math.Clamp(RegionMaskOpacity, 0.1, 1.0);
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
         Shortcuts ??= new ShortcutSettings();
@@ -246,6 +258,8 @@ public sealed class ShortcutSettings
     public string ToggleSpotlight { get; set; } = "Ctrl+Alt+S";
     public string ToggleMagnifier { get; set; } = "Ctrl+Alt+M";
     public string TogglePinnedLens { get; set; } = "Ctrl+Alt+P";
+    public string ToggleRegionMask { get; set; } = "Ctrl+Alt+H";
+    public string ClearRegionMasks { get; set; } = "Ctrl+Alt+Shift+H";
     public string ToggleToolbar { get; set; } = "Ctrl+Alt+T";
     public string TakeScreenshot { get; set; } = "Ctrl+Alt+C";
     public string ToggleScreenBoard { get; set; } = "Ctrl+Alt+G";
@@ -281,6 +295,8 @@ public sealed class ShortcutSettings
         ToggleSpotlight = ToggleSpotlight,
         ToggleMagnifier = ToggleMagnifier,
         TogglePinnedLens = TogglePinnedLens,
+        ToggleRegionMask = ToggleRegionMask,
+        ClearRegionMasks = ClearRegionMasks,
         ToggleToolbar = ToggleToolbar,
         TakeScreenshot = TakeScreenshot,
         ToggleScreenBoard = ToggleScreenBoard,
@@ -317,6 +333,8 @@ public sealed class ShortcutSettings
         ToggleSpotlight = NormalizeShortcut(ToggleSpotlight, "Ctrl+Alt+S");
         ToggleMagnifier = NormalizeShortcut(ToggleMagnifier, "Ctrl+Alt+M");
         TogglePinnedLens = NormalizeShortcut(TogglePinnedLens, "Ctrl+Alt+P");
+        ToggleRegionMask = NormalizeShortcut(ToggleRegionMask, "Ctrl+Alt+H");
+        ClearRegionMasks = NormalizeShortcut(ClearRegionMasks, "Ctrl+Alt+Shift+H");
         ToggleToolbar = NormalizeShortcut(ToggleToolbar, "Ctrl+Alt+T");
         TakeScreenshot = NormalizeShortcut(TakeScreenshot, "Ctrl+Alt+C");
         ToggleScreenBoard = NormalizeShortcut(ToggleScreenBoard, "Ctrl+Alt+G");

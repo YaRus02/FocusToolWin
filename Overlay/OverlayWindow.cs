@@ -32,6 +32,7 @@ internal sealed class OverlayWindow : Window
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
         Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<IReadOnlyList<RegionMask>> regionMaskProvider,
         IOverlayInputHandler inputHandler)
     {
         _screen = screen;
@@ -46,6 +47,7 @@ internal sealed class OverlayWindow : Window
             spotlightProvider,
             screenBoardProvider,
             pinnedLensSelectionProvider,
+            regionMaskProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
 
         Title = "FocusTool";
@@ -280,6 +282,7 @@ internal sealed class OverlayWindow : Window
     {
         return mode is InteractionMode.Annotate
             or InteractionMode.PinnedLensSelect
+            or InteractionMode.RegionMaskSelect
             or InteractionMode.ScreenBoard
             or InteractionMode.BlackScreen
             or InteractionMode.WhiteScreen;
@@ -366,6 +369,14 @@ internal sealed class OverlayWindow : Window
                     handled = true;
                 }
 
+                break;
+            case NativeMethods.WmRButtonDown:
+                _inputHandler.HandleOverlayMouseDown(ToScreenPoint(hwnd, lParam), MouseButton.Right, Keyboard.Modifiers);
+                handled = true;
+                break;
+            case NativeMethods.WmRButtonUp:
+                _inputHandler.HandleOverlayMouseUp(ToScreenPoint(hwnd, lParam), MouseButton.Right, Keyboard.Modifiers);
+                handled = true;
                 break;
             case NativeMethods.WmCancelMode:
             case NativeMethods.WmCaptureChanged:

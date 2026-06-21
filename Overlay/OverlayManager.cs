@@ -16,6 +16,7 @@ internal sealed class OverlayManager : IDisposable
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
     private readonly Func<ScreenRect?> _pinnedLensSelectionProvider;
+    private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
     private readonly IOverlayInputHandler _inputHandler;
     private readonly Action? _beforeTopmostReassert;
     private readonly Action? _afterTopmostReassert;
@@ -33,6 +34,7 @@ internal sealed class OverlayManager : IDisposable
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
         Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<IReadOnlyList<RegionMask>> regionMaskProvider,
         IOverlayInputHandler inputHandler,
         Action? beforeTopmostReassert = null,
         Action? afterTopmostReassert = null)
@@ -45,6 +47,7 @@ internal sealed class OverlayManager : IDisposable
         _spotlightProvider = spotlightProvider;
         _screenBoardProvider = screenBoardProvider;
         _pinnedLensSelectionProvider = pinnedLensSelectionProvider;
+        _regionMaskProvider = regionMaskProvider;
         _inputHandler = inputHandler;
         _beforeTopmostReassert = beforeTopmostReassert;
         _afterTopmostReassert = afterTopmostReassert;
@@ -231,7 +234,7 @@ internal sealed class OverlayManager : IDisposable
 
         foreach (var screen in Screen.AllScreens)
         {
-            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _screenBoardProvider, _pinnedLensSelectionProvider, _inputHandler));
+            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _screenBoardProvider, _pinnedLensSelectionProvider, _regionMaskProvider, _inputHandler));
         }
     }
 

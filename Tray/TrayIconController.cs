@@ -20,6 +20,8 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _magnifierItem;
     private readonly ToolStripMenuItem _pinnedLensItem;
     private readonly ToolStripMenuItem _closePinnedLensesItem;
+    private readonly ToolStripMenuItem _regionMaskItem;
+    private readonly ToolStripMenuItem _clearRegionMasksItem;
     private readonly ToolStripMenuItem _toolbarItem;
     private readonly ToolStripMenuItem _screenshotItem;
     private readonly ToolStripMenuItem _screenBoardItem;
@@ -96,6 +98,17 @@ internal sealed class TrayIconController : IDisposable
         };
 
         _closePinnedLensesItem = new ToolStripMenuItem("Close pinned lenses", null, (_, _) => _controller.ClosePinnedLenses());
+
+        _regionMaskItem = new ToolStripMenuItem("New region mask");
+        _regionMaskItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.ToggleRegionMask();
+            }
+        };
+
+        _clearRegionMasksItem = new ToolStripMenuItem("Clear region masks", null, (_, _) => _controller.ClearRegionMasks());
 
         _toolbarItem = new ToolStripMenuItem("Toolbar") { CheckOnClick = true };
         _toolbarItem.Click += (_, _) =>
@@ -184,6 +197,8 @@ internal sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(_magnifierItem);
         _contextMenu.Items.Add(_pinnedLensItem);
         _contextMenu.Items.Add(_closePinnedLensesItem);
+        _contextMenu.Items.Add(_regionMaskItem);
+        _contextMenu.Items.Add(_clearRegionMasksItem);
         _contextMenu.Items.Add(_toolbarItem);
         _contextMenu.Items.Add(_screenshotItem);
         _contextMenu.Items.Add(_screenBoardItem);
@@ -249,6 +264,7 @@ internal sealed class TrayIconController : IDisposable
         {
             InteractionMode.Annotate => "Mode: Annotate",
             InteractionMode.PinnedLensSelect => "Mode: Select lens area",
+            InteractionMode.RegionMaskSelect => "Mode: Select mask area",
             InteractionMode.ScreenBoard => "Mode: Screen board",
             InteractionMode.BlackScreen => "Mode: Black board",
             InteractionMode.WhiteScreen => "Mode: White board",
@@ -278,6 +294,16 @@ internal sealed class TrayIconController : IDisposable
                 : "New pinned lens";
         _pinnedLensItem.ShortcutKeyDisplayString = _controller.PinnedLensShortcut;
         _closePinnedLensesItem.Enabled = _controller.PinnedLensActive;
+
+        _regionMaskItem.Checked = _controller.RegionMaskActive || _controller.RegionMaskSelectionActive;
+        _regionMaskItem.Text = _controller.RegionMaskSelectionActive
+            ? "Region mask: select area"
+            : _controller.RegionMaskCount > 0
+                ? $"New region mask ({_controller.RegionMaskCount} active)"
+                : "New region mask";
+        _regionMaskItem.ShortcutKeyDisplayString = _controller.RegionMaskShortcut;
+        _clearRegionMasksItem.Enabled = _controller.RegionMaskActive;
+        _clearRegionMasksItem.ShortcutKeyDisplayString = _controller.ClearRegionMasksShortcut;
 
         _toolbarItem.Checked = _controller.ToolbarVisible;
         _toolbarItem.ShortcutKeyDisplayString = _controller.ToolbarShortcut;
@@ -326,6 +352,10 @@ internal sealed class TrayIconController : IDisposable
                 ? "FocusTool: Select lens area"
             : _controller.PinnedLensActive
                 ? $"FocusTool: {_controller.PinnedLensCount} pinned lens"
+            : _controller.RegionMaskSelectionActive
+                ? "FocusTool: Select mask area"
+            : _controller.RegionMaskActive
+                ? $"FocusTool: {_controller.RegionMaskCount} region masks"
             : _controller.BlackScreenEnabled
                 ? "FocusTool: Black board"
             : _controller.WhiteScreenEnabled

@@ -53,6 +53,8 @@ public partial class SettingsWindow : Window
         MagnifierZoomSlider.Value = settings.MagnifierZoom;
         PinnedLensZoomSlider.Value = settings.PinnedLensZoom;
         PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
+        RegionMaskColorBox.Text = settings.RegionMaskColor;
+        RegionMaskOpacitySlider.Value = settings.RegionMaskOpacity * 100;
 
         var annotationPresets = GetAnnotationPresetValues(settings);
         if (!TryFindPreset(settings.AnnotationColor, annotationPresets, out _selectedAnnotationPresetIndex)
@@ -75,6 +77,7 @@ public partial class SettingsWindow : Window
         UpdateLabels();
         UpdateLaserPresetSelection();
         UpdateAnnotationPreset5Preview();
+        UpdateRegionMaskColorPreview();
         UpdateAnnotationPresetSelection();
         UpdateLaserHoldFieldState();
     }
@@ -151,6 +154,14 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void RegionMaskColorBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            UpdateRegionMaskColorPreview();
+        }
+    }
+
     private void LaserActivationMode_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_loading)
@@ -164,6 +175,12 @@ public partial class SettingsWindow : Window
         if (!AppSettings.TryParseColor(AnnotationPreset5Box.Text.Trim(), out _))
         {
             System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the color 5 preset.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        if (!AppSettings.TryParseColor(RegionMaskColorBox.Text.Trim(), out _))
+        {
+            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the region mask color.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
 
@@ -185,6 +202,8 @@ public partial class SettingsWindow : Window
         updated.MagnifierZoom = MagnifierZoomSlider.Value;
         updated.PinnedLensZoom = PinnedLensZoomSlider.Value;
         updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
+        updated.RegionMaskColor = RegionMaskColorBox.Text.Trim();
+        updated.RegionMaskOpacity = RegionMaskOpacitySlider.Value / 100.0;
         updated.AnnotationColor = _annotationColor;
         while (updated.AnnotationColorPresets.Count < 5)
         {
@@ -216,6 +235,8 @@ public partial class SettingsWindow : Window
         ToggleSpotlightBox.Text = settings.Shortcuts.ToggleSpotlight;
         ToggleMagnifierBox.Text = settings.Shortcuts.ToggleMagnifier;
         TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
+        ToggleRegionMaskBox.Text = settings.Shortcuts.ToggleRegionMask;
+        ClearRegionMasksBox.Text = settings.Shortcuts.ClearRegionMasks;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
@@ -255,6 +276,8 @@ public partial class SettingsWindow : Window
         shortcuts.ToggleSpotlight = ReadShortcutText(ToggleSpotlightBox);
         shortcuts.ToggleMagnifier = ReadShortcutText(ToggleMagnifierBox);
         shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
+        shortcuts.ToggleRegionMask = ReadShortcutText(ToggleRegionMaskBox);
+        shortcuts.ClearRegionMasks = ReadShortcutText(ClearRegionMasksBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
@@ -289,6 +312,8 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Toggle spotlight", shortcuts.ToggleSpotlight)
             || !ValidateShortcut("Toggle magnifier", shortcuts.ToggleMagnifier)
             || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
+            || !ValidateShortcut("Region mask", shortcuts.ToggleRegionMask)
+            || !ValidateShortcut("Clear region masks", shortcuts.ClearRegionMasks)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
@@ -366,6 +391,8 @@ public partial class SettingsWindow : Window
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
             ("Pinned lens", shortcuts.TogglePinnedLens),
+            ("Region mask", shortcuts.ToggleRegionMask),
+            ("Clear region masks", shortcuts.ClearRegionMasks),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -405,6 +432,8 @@ public partial class SettingsWindow : Window
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
             ("Pinned lens", shortcuts.TogglePinnedLens),
+            ("Region mask", shortcuts.ToggleRegionMask),
+            ("Clear region masks", shortcuts.ClearRegionMasks),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -489,6 +518,7 @@ public partial class SettingsWindow : Window
             || MagnifierZoomValue is null
             || PinnedLensZoomValue is null
             || PinnedLensRefreshFpsValue is null
+            || RegionMaskOpacityValue is null
             || AnnotationThicknessValue is null
             || AnnotationFontSizeValue is null)
         {
@@ -504,6 +534,7 @@ public partial class SettingsWindow : Window
         MagnifierZoomValue.Text = $"{MagnifierZoomSlider.Value:0.##}x";
         PinnedLensZoomValue.Text = $"{PinnedLensZoomSlider.Value:0.##}x";
         PinnedLensRefreshFpsValue.Text = $"{PinnedLensRefreshFpsSlider.Value:0} fps";
+        RegionMaskOpacityValue.Text = $"{RegionMaskOpacitySlider.Value:0}%";
         AnnotationThicknessValue.Text = $"{AnnotationThicknessSlider.Value:0}px";
         AnnotationFontSizeValue.Text = $"{AnnotationFontSizeSlider.Value:0}px";
     }
@@ -524,6 +555,25 @@ public partial class SettingsWindow : Window
         {
             AnnotationPreset4Button.Background = System.Windows.Media.Brushes.Transparent;
             AnnotationPreset5Box.BorderBrush = System.Windows.Media.Brushes.Firebrick;
+        }
+    }
+
+    private void UpdateRegionMaskColorPreview()
+    {
+        if (RegionMaskColorBox is null || RegionMaskColorPreview is null)
+        {
+            return;
+        }
+
+        if (AppSettings.TryParseColor(RegionMaskColorBox.Text.Trim(), out var color))
+        {
+            RegionMaskColorPreview.Background = new SolidColorBrush(color);
+            RegionMaskColorBox.ClearValue(BorderBrushProperty);
+        }
+        else
+        {
+            RegionMaskColorPreview.Background = System.Windows.Media.Brushes.Transparent;
+            RegionMaskColorBox.BorderBrush = System.Windows.Media.Brushes.Firebrick;
         }
     }
 
