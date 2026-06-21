@@ -548,7 +548,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         try
         {
-            _screenshotService.CaptureCurrentMonitor(copyToClipboard: true);
+            await _screenshotService.CaptureCurrentMonitorAsync(copyToClipboard: true);
         }
         catch (Exception ex)
         {
@@ -588,7 +588,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         try
         {
-            _screenBoardFrame = _screenshotService.CaptureCurrentMonitorFrame();
+            _screenBoardFrame = await _screenshotService.CaptureCurrentMonitorFrameAsync();
             SetInteractionMode(InteractionMode.ScreenBoard);
         }
         catch (Exception ex)
@@ -622,6 +622,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void SaveScreenBoardSnapshot()
     {
+        _ = SaveScreenBoardSnapshotAsync();
+    }
+
+    private async Task SaveScreenBoardSnapshotAsync()
+    {
         if (_screenBoardFrame is not { } frame || _overlayManager is null)
         {
             return;
@@ -635,7 +640,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 return;
             }
 
-            _screenshotService.SaveImage(image, copyToClipboard: true, fileNamePrefix: "FocusTool_Board");
+            await _screenshotService.SaveImageAsync(image, copyToClipboard: true, fileNamePrefix: "FocusTool_Board");
         }
         catch (Exception ex)
         {
