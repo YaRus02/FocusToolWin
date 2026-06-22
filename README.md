@@ -12,7 +12,7 @@
 
 ## Демонстрация
 
-[![Смотреть демо](Assets/FocusToolDemo.png)](https://rutube.ru/video/2027e9a6c5b3fcd4ebc6626bfbfe5196/?r=wd)
+[![Смотреть демо](Assets/FocusToolDemo.png)](https://rutube.ru/video/8dc2caf9a49b8064aaf31a569f59aba8/)
 
 ---
 
