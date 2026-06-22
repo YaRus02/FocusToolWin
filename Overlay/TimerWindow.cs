@@ -223,6 +223,7 @@ internal sealed class TimerWindow : Window
             0,
             0,
             NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+        ReassertContextMenuTopmost();
     }
 
     public void Refresh()
@@ -1022,6 +1023,7 @@ internal sealed class TimerWindow : Window
     private WpfContextMenu BuildContextMenu()
     {
         var menu = new WpfContextMenu();
+        menu.Opened += (_, _) => ReassertContextMenuTopmostSoon();
         menu.Items.Add(NewItem("Start / Pause", (_, _) => { _model.ToggleStartPause(_clock()); DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); }));
         menu.Items.Add(NewItem("Reset", (_, _) => { _model.Reset(_clock()); Refresh(); }));
         menu.Items.Add(new Separator());
@@ -1040,7 +1042,77 @@ internal sealed class TimerWindow : Window
         menu.Items.Add(BuildStyleMenu());
         menu.Items.Add(new Separator());
         menu.Items.Add(NewItem("Close", (_, _) => Close()));
+        AttachSubmenuTopmostHandlers(menu.Items);
         return menu;
+    }
+
+    private void ReassertContextMenuTopmostSoon()
+    {
+        ReassertContextMenuTopmost();
+        _ = Dispatcher.BeginInvoke(
+            new Action(ReassertContextMenuTopmost),
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private void ReassertContextMenuTopmost()
+    {
+        if (_block.ContextMenu is not { IsOpen: true } menu)
+        {
+            return;
+        }
+
+        var handles = new HashSet<IntPtr>();
+        AddMenuVisualHandle(menu, handles);
+        AddMenuItemHandles(menu.Items, handles);
+
+        foreach (var handle in handles)
+        {
+            NativeMethods.SetWindowPos(
+                handle,
+                NativeMethods.HwndTopmost,
+                0,
+                0,
+                0,
+                0,
+                NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+        }
+    }
+
+    private void AttachSubmenuTopmostHandlers(ItemCollection items)
+    {
+        foreach (var item in items)
+        {
+            if (item is not WpfMenuItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.SubmenuOpened += (_, _) => ReassertContextMenuTopmostSoon();
+            AttachSubmenuTopmostHandlers(menuItem.Items);
+        }
+    }
+
+    private static void AddMenuItemHandles(ItemCollection items, ISet<IntPtr> handles)
+    {
+        foreach (var item in items)
+        {
+            if (item is not WpfMenuItem menuItem)
+            {
+                continue;
+            }
+
+            AddMenuVisualHandle(menuItem, handles);
+            AddMenuItemHandles(menuItem.Items, handles);
+        }
+    }
+
+    private static void AddMenuVisualHandle(Visual visual, ISet<IntPtr> handles)
+    {
+        var handle = (PresentationSource.FromVisual(visual) as HwndSource)?.Handle ?? IntPtr.Zero;
+        if (handle != IntPtr.Zero)
+        {
+            handles.Add(handle);
+        }
     }
 
     private WpfMenuItem BuildStyleMenu()
