@@ -14,7 +14,7 @@ It is built for **presentations, webinars, online lessons, screen recordings, st
 
 ## Demo
 
-[![Watch demo](Assets/FocusToolDemo.png)]([https://youtu.be/vUoYLz4jiDc?si=sl7DXmUyEfBrLMHW](https://youtu.be/gpfk7p2Xd6s))
+[![Watch demo](Assets/FocusToolDemo.png)]([https://youtu.be/gpfk7p2Xd6s])
 
 ---
 
