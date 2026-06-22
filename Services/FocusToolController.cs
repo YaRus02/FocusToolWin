@@ -36,6 +36,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private MagnifierHostWindow? _magnifierHost;
     private readonly List<PinnedLensHostWindow> _pinnedLensHosts = [];
     private readonly List<RegionMask> _regionMasks = [];
+    private TimerController? _timerController;
     private TrayIconController? _trayIcon;
     private HotKeyManager? _hotKeyManager;
     private SettingsWindow? _settingsWindow;
@@ -103,6 +104,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public string RegionMaskShortcut => Settings.Shortcuts.ToggleRegionMask;
     public string ClearRegionMasksShortcut => Settings.Shortcuts.ClearRegionMasks;
     public string FadingAnnotationsShortcut => Settings.Shortcuts.ToggleFadingAnnotations;
+    public bool TimerActive => _timerController is { ActiveCount: > 0 };
+    public int TimerCount => _timerController?.ActiveCount ?? 0;
+    public string TimerShortcut => Settings.Shortcuts.ToggleTimer;
     public string ToolbarShortcut => Settings.Shortcuts.ToggleToolbar;
     public string ScreenshotShortcut => Settings.Shortcuts.TakeScreenshot;
     public string ScreenBoardShortcut => Settings.Shortcuts.ToggleScreenBoard;
@@ -139,6 +143,59 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _annotations.DraftProgressed += OnAnnotationDraftProgressed;
     }
 
+    public void NewTimer()
+    {
+        _timerController?.NewTimer();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void CloseAllTimers()
+    {
+        _timerController?.CloseAll();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnTimerActiveCountChanged()
+    {
+        if (!_disposed)
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // A timer's mode/duration/style become the default for the next new timer, while the
+    // accumulated label history is preserved.
+    private void ApplyTimerDefaults(TimerSettings defaults)
+    {
+        defaults.LabelHistory = [.. Settings.Timer.LabelHistory];
+        defaults.Normalize();
+        Settings.Timer = defaults;
+        if (!_disposed)
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        SaveSettingsDebounced();
+    }
+
+    private void AddTimerLabelToHistory(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return;
+        }
+
+        var history = Settings.Timer.LabelHistory;
+        history.RemoveAll(item => string.Equals(item, label, StringComparison.OrdinalIgnoreCase));
+        history.Insert(0, label);
+        if (history.Count > 10)
+        {
+            history.RemoveRange(10, history.Count - 10);
+        }
+
+        SaveSettingsDebounced();
+    }
+
     private void SaveSettingsDebounced()
     {
         _settingsSaveTimer.Stop();
@@ -160,6 +217,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, () => _screenBoardFrame, () => _pinnedLensSelectionDraft, () => _regionMasks, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
+        _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         RegisterHotKeys();
 
         _overlayManager.Show();
@@ -1511,6 +1569,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _hotKeyManager?.Dispose();
         CloseMagnifierHost();
         ClosePinnedLenses();
+        _timerController?.Dispose();
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
         _toolbarWindow?.Close();
@@ -2034,6 +2093,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleRegionMask, ToggleRegionMask);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ClearRegionMasks, ClearRegionMasks);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleFadingAnnotations, ToggleFadingAnnotations);
+        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleTimer, NewTimer);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleToolbar, ToggleToolbar);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TakeScreenshot, TakeScreenshot);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleScreenBoard, ToggleScreenBoard);
@@ -2075,6 +2135,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             && string.Equals(left.ToggleRegionMask, right.ToggleRegionMask, StringComparison.Ordinal)
             && string.Equals(left.ClearRegionMasks, right.ClearRegionMasks, StringComparison.Ordinal)
             && string.Equals(left.ToggleFadingAnnotations, right.ToggleFadingAnnotations, StringComparison.Ordinal)
+            && string.Equals(left.ToggleTimer, right.ToggleTimer, StringComparison.Ordinal)
             && string.Equals(left.ToggleToolbar, right.ToggleToolbar, StringComparison.Ordinal)
             && string.Equals(left.TakeScreenshot, right.TakeScreenshot, StringComparison.Ordinal)
             && string.Equals(left.ToggleScreenBoard, right.ToggleScreenBoard, StringComparison.Ordinal)
@@ -2089,6 +2150,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _toolbarWindow.ReassertTopmost();
         }
+
+        _timerController?.ReassertTopmost();
 
         foreach (var host in _pinnedLensHosts)
         {

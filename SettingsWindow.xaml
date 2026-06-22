@@ -305,6 +305,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Toggle annotate" VerticalAlignment="Center" Margin="0,4" />
@@ -323,20 +324,22 @@
                                 <TextBox Grid.Row="6" Grid.Column="1" x:Name="ClearRegionMasksBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="7" Text="Fading annotations" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToggleFadingAnnotationsBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="8" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="9" Text="Screenshot" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="9" Grid.Column="1" x:Name="TakeScreenshotBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="10" Text="Screen board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="10" Grid.Column="1" x:Name="ToggleScreenBoardBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="11" Text="Black board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="11" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="12" Text="White board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="12" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="13" Text="Hold laser" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="13" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="14" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="14" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="8" Text="Timer" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToggleTimerBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="9" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="9" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="10" Text="Screenshot" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="10" Grid.Column="1" x:Name="TakeScreenshotBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="11" Text="Screen board" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="11" Grid.Column="1" x:Name="ToggleScreenBoardBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="12" Text="Black board" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="12" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="13" Text="White board" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="13" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="14" Text="Hold laser" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="14" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="15" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="15" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
                             </Grid>
                         </GroupBox>
 

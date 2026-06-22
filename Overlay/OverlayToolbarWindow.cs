@@ -46,6 +46,7 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _pinButton = null!;
     private WpfButton _maskButton = null!;
     private WpfButton _boardButton = null!;
+    private WpfButton _timerButton = null!;
 
     private WpfButton _laserAlwaysButton = null!;
     private WpfButton _laserHoldButton = null!;
@@ -73,6 +74,7 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _boardScreenButton = null!;
     private WpfButton _boardBlackButton = null!;
     private WpfButton _boardWhiteButton = null!;
+    private WpfButton _closeTimersButton = null!;
 
     private Border _contextualHost = null!;
     private string? _openRowKey;
@@ -201,6 +203,8 @@ internal sealed class OverlayToolbarWindow : Window
         _boardButton = AddSplitButton(primary, "Board", "Screen board, black or white", 48, (_, _) => ShowContextualRow("board"), "board");
         AddSplitButton(primary, "Shot", "Screenshot current monitor", 40, (_, _) => _controller.TakeScreenshot(), null);
         primary.Children.Add(CreateSeparator());
+        _timerButton = AddSplitButton(primary, "Timer", "New timer (multiple allowed)", 44, (_, _) => _controller.NewTimer(), "timer");
+        primary.Children.Add(CreateSeparator());
         AddSplitButton(primary, "⋯", "More toolbar actions", 30, (_, _) => ShowContextualRow("more"), "more");
 
         _contextualHost = new Border
@@ -230,6 +234,7 @@ internal sealed class OverlayToolbarWindow : Window
         _rows["pin"] = BuildPinRow();
         _rows["mask"] = BuildMaskRow();
         _rows["board"] = BuildBoardRow();
+        _rows["timer"] = BuildTimerRow();
         _rows["more"] = BuildMoreRow();
     }
 
@@ -345,6 +350,16 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(_boardScreenButton);
         row.Children.Add(_boardBlackButton);
         row.Children.Add(_boardWhiteButton);
+        return row;
+    }
+
+    private UIElement BuildTimerRow()
+    {
+        var row = CreateRow();
+        row.Children.Add(CreateButton("New timer", "Create a new timer", (_, _) => _controller.NewTimer(), width: 76));
+        row.Children.Add(CreateSeparator());
+        _closeTimersButton = CreateButton("Close all", "Close all timers", (_, _) => _controller.CloseAllTimers(), width: 64);
+        row.Children.Add(_closeTimersButton);
         return row;
     }
 
@@ -809,6 +824,10 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_boardBlackButton, _controller.Mode == InteractionMode.BlackScreen);
             SetButtonActive(_boardWhiteButton, _controller.Mode == InteractionMode.WhiteScreen);
 
+            SetButtonActive(_timerButton, _controller.TimerActive);
+            _closeTimersButton.IsEnabled = _controller.TimerActive;
+            SetButtonEnabled(_closeTimersButton, _closeTimersButton.IsEnabled);
+
             _activeDot.Visibility = AnyToolActive() ? Visibility.Visible : Visibility.Collapsed;
         }
         finally
@@ -828,7 +847,8 @@ internal sealed class OverlayToolbarWindow : Window
             || _controller.RegionMaskSelectionActive
             || _controller.Mode is InteractionMode.Annotate or InteractionMode.ScreenBoard
                 or InteractionMode.BlackScreen or InteractionMode.WhiteScreen
-            || _controller.Annotations.Shapes.Count > 0;
+            || _controller.Annotations.Shapes.Count > 0
+            || _controller.TimerActive;
     }
 
     private static string FormatDurationMs(int ms)

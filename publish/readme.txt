@@ -1,552 +1,600 @@
 FocusTool
 =========
 
-FocusTool is a minimal Windows utility for presentations, lessons, reviews,
-meetings, screen recordings, remote support, and quick visual explanations. It
-adds a quiet overlay above the desktop with a laser pointer, spotlight,
-magnifier, live pinned lens, region masks, drawing tools, fading annotations,
-screen boards, and quick screenshots.
+FocusTool - минималистичная Windows-утилита для демонстраций, занятий, разборов,
+созвонов, записи видео и работы с экраном. Приложение добавляет поверх рабочего
+стола лазерный указатель, spotlight, лупу, live pinned lens, region masks,
+инструменты рисования, исчезающие аннотации, плавающий overlay timer, экранные
+доски и быстрые скриншоты.
 
-The main idea is low visual noise and fast control through hotkeys. FocusTool
-runs from the system tray and does not show a main window. Most actions are
-available through global shortcuts or a compact overlay toolbar.
+Основная идея: минимум визуального шума, максимум управления через хоткеи.
+Приложение работает в трее и не показывает главное окно. Большинство действий
+выполняется глобальными сочетаниями клавиш или через компактную overlay-панель.
 
 
-1. Which file to run
---------------------
+1. Какой файл запускать
+-----------------------
 
-There are two release packages:
+Есть две сборки:
 
 - self-contained\FocusTool.exe
-  Full portable version. It does not require .NET Runtime to be installed on the
-  computer. This is the recommended option for most users.
+  Полная автономная версия. Не требует установленного .NET Runtime на компьютере.
+  Это основной вариант для распространения обычным пользователям.
 
 - framework-dependent\FocusTool.exe
-  Smaller version. It requires the matching .NET Desktop Runtime to be installed.
-  Useful for developers or computers that already have the runtime.
+  Облегченная версия. Требует установленный .NET Desktop Runtime подходящей версии.
+  Удобна для разработчиков или компьютеров, где runtime уже установлен.
 
-For normal use, run:
+Для обычного использования запускайте:
 
   \self-contained\FocusTool.exe
 
-After launch, FocusTool appears in the system tray. If the icon is not visible,
-check the hidden tray icons in Windows.
+После запуска FocusTool появляется в системном трее. Если значок не виден,
+проверьте скрытые значки трея Windows.
 
 
-2. Settings and files
----------------------
+2. Где хранятся настройки и файлы
+---------------------------------
 
-Settings:
+Настройки:
 
   %APPDATA%\FocusTool\settings.json
 
-Error log:
+Лог ошибок:
 
   %APPDATA%\FocusTool\log.txt
 
-Screenshots and saved Screen Board images:
+Скриншоты и сохраненные screen board:
 
   Pictures\FocusTool
 
-If Pictures is unavailable, FocusTool uses Documents.
+Если папка Pictures недоступна, приложение использует Documents.
 
 
-3. How it works
----------------
+3. Общая логика работы
+----------------------
 
-FocusTool creates transparent overlay windows above your monitors. In the normal
-state, they pass clicks through and do not block other applications. When
-annotation mode, area selection, mask editing, or a board mode is active, the
-overlay accepts mouse and keyboard input.
+FocusTool создает прозрачные overlay-окна поверх мониторов. В обычном состоянии
+они пропускают клики и не мешают работе с другими приложениями. Когда включается
+режим аннотаций, выбор области, редактирование масок или экранная доска, overlay
+начинает принимать ввод мыши и клавиатуры.
 
-Supported mode groups:
+Приложение поддерживает несколько типов режимов:
 
-- laser pointer;
+- лазерный указатель;
 - spotlight;
-- magnifier;
+- лупа;
 - live pinned lens;
 - region mask;
-- screen annotations;
-- fading annotations;
+- аннотации поверх экрана;
+- исчезающие аннотации;
+- overlay timer;
 - screen board;
-- black board;
-- white board;
-- screenshots;
+- черная доска;
+- белая доска;
+- скриншоты;
 - overlay toolbar.
 
 
-4. Default global hotkeys
--------------------------
+4. Глобальные хоткеи по умолчанию
+---------------------------------
 
-Main modes:
+Основные режимы:
 
-  Ctrl+Alt+L        Toggle laser activation mode Always / Hold
-  Ctrl+Alt+D        Toggle drawing over the screen
-  Ctrl+Alt+S        Toggle spotlight
-  Ctrl+Alt+M        Toggle magnifier
-  Ctrl+Alt+P        Select area for live pinned lens
-  Ctrl+Alt+H        Select area for region mask
-  Ctrl+Alt+Shift+H  Clear all region masks
-  Ctrl+Alt+F        Toggle fading annotations
-  Ctrl+Alt+T        Show / hide overlay toolbar
-  Ctrl+Alt+C        Screenshot current monitor
-  Ctrl+Alt+G        Toggle Screen Board
-  Ctrl+Alt+B        Toggle Black Board
-  Ctrl+Alt+W        Toggle White Board
-  Ctrl+Alt+Q        Exit FocusTool
+  Ctrl+Alt+L        - переключить режим активации лазера Always / Hold
+  Ctrl+Alt+D        - включить или выключить режим рисования поверх экрана
+  Ctrl+Alt+S        - включить или выключить spotlight
+  Ctrl+Alt+M        - включить или выключить лупу
+  Ctrl+Alt+P        - выбрать область для live pinned lens
+  Ctrl+Alt+H        - выбрать область для region mask
+  Ctrl+Alt+Shift+H  - очистить все region masks
+  Ctrl+Alt+F        - включить или выключить исчезающие аннотации
+  Ctrl+Alt+N        - создать новый overlay timer
+  Ctrl+Alt+T        - показать или скрыть overlay toolbar
+  Ctrl+Alt+C        - сделать скриншот текущего монитора
+  Ctrl+Alt+G        - включить или выключить screen board
+  Ctrl+Alt+B        - включить или выключить черную доску
+  Ctrl+Alt+W        - включить или выключить белую доску
+  Ctrl+Alt+Q        - выйти из FocusTool
 
-Annotations:
+Аннотации:
 
-  A                 Arrow
-  R                 Rectangle
-  C                 Ellipse / Circle
-  L                 Line
-  P                 Pencil
-  H                 Highlighter
-  T                 Text
-  M                 Move selection
+  A                 - Arrow
+  R                 - Rectangle
+  C                 - Ellipse / Circle
+  L                 - Line
+  P                 - Pencil
+  H                 - Highlighter
+  T                 - Text
+  M                 - Move selection
 
-Colors:
+Цвета:
 
-  1                 Color slot 1
-  2                 Color slot 2
-  3                 Color slot 3
-  4                 Color slot 4
-  5                 Color slot 5
+  1                 - цветовой слот 1
+  2                 - цветовой слот 2
+  3                 - цветовой слот 3
+  4                 - цветовой слот 4
+  5                 - цветовой слот 5
 
-Line thickness:
+Толщина линии:
 
-  [                 Decrease thickness
-  ]                 Increase thickness
+  [                 - уменьшить толщину
+  ]                 - увеличить толщину
 
-Annotation commands:
+Команды аннотаций:
 
-  Ctrl+Z            Undo
-  Ctrl+Y            Redo
-  Backspace         Delete selected objects
-  Delete            Clear annotations
-  E                 Alternative clear annotations
-  Esc               Exit annotation / visual mode
+  Ctrl+Z            - Undo
+  Ctrl+Y            - Redo
+  Backspace         - удалить выбранные объекты
+  Delete            - очистить аннотации
+  E                 - альтернативная очистка аннотаций
+  Esc               - выйти из режима аннотаций / визуального режима
 
-Laser in Hold mode:
+Лазер в режиме Hold:
 
-  XButton2          Hold laser by default
+  XButton2          - удержание лазера по умолчанию
 
-XButton2 is usually a side mouse button. It can be changed in Settings.
+XButton2 - это обычно боковая кнопка мыши. В настройках ее можно заменить.
 
-Important: plain Esc is reserved for exiting visual modes. FocusTool does not
-allow assigning Esc to global actions such as Screenshot or Toolbar.
+Важно: чистый Esc зарезервирован для выхода из визуальных режимов. Приложение не
+позволяет назначить Esc на глобальные действия вроде Screenshot или Toolbar.
 
 
-5. Laser pointer
-----------------
+5. Лазерный указатель
+---------------------
 
-The laser draws a colored point with a smooth trail above the screen. It is meant
-for presentations, recordings, demos, and explaining actions on the screen.
+Лазер рисует цветную точку и плавный след поверх экрана. Он предназначен для
+презентаций, записи видео, демонстраций и объяснения действий на экране.
 
-Activation modes:
+Есть два режима активации:
 
 - Always on
-  The laser is always active.
+  Лазер всегда активен.
 
 - Hold key / mouse button
-  The laser appears only while the configured key or mouse button is held.
-  XButton2 is used by default.
+  Лазер появляется только пока удерживается назначенная клавиша или кнопка мыши.
+  По умолчанию используется XButton2.
 
-Ctrl+Alt+L switches between Always and Hold.
+Горячая клавиша Ctrl+Alt+L переключает режим Always / Hold.
 
-Configurable settings:
+В настройках можно изменить:
 
-- laser color slots;
-- current laser color;
-- point size;
-- trail length;
-- fade after release;
-- glow effect;
-- activation mode;
-- hold key / mouse button.
+- цветовые слоты лазера;
+- текущий цвет лазера;
+- размер точки;
+- длину следа;
+- скорость затухания после отпускания;
+- glow-эффект;
+- режим активации;
+- клавишу удержания.
 
 
 6. Spotlight
 ------------
 
-Spotlight dims the screen around the cursor and keeps a circular area visible.
-This is useful when the audience should focus on one part of the screen.
+Spotlight затемняет экран вокруг курсора и оставляет видимой область вокруг
+указателя. Это удобно, когда нужно сфокусировать внимание аудитории на конкретной
+части экрана.
 
-Toggle:
+Включение:
 
   Ctrl+Alt+S
 
-Configurable settings:
+В настройках можно изменить:
 
-- spotlight radius;
-- dim amount.
+- радиус spotlight;
+- силу затемнения.
 
-Spotlight can be used alone or together with the laser. Esc exits active visual
-modes quickly.
+Spotlight можно использовать отдельно или вместе с лазером. При включенных
+визуальных режимах Esc используется как быстрый выход.
 
 
-7. Magnifier
-------------
+7. Лупа
+-------
 
-The magnifier enlarges the area around the cursor. It uses the Windows
-Magnification API and works above the desktop.
+Лупа увеличивает область вокруг курсора. Она использует Windows Magnification API
+и работает поверх рабочего стола.
 
-Toggle:
+Включение:
 
   Ctrl+Alt+M
 
-Configurable settings:
+В настройках можно изменить:
 
-- magnifier radius;
-- zoom factor.
+- радиус лупы;
+- коэффициент увеличения.
 
-The magnifier normally avoids showing FocusTool's own overlay windows and toolbar
-in its source. If a Region Mask exists, the mask stays visible in the magnified
-area so hidden content cannot be revealed through zoom.
+Лупа старается исключать собственные overlay-окна и toolbar из увеличиваемой
+области, чтобы показывать реальный экран под ними. Если на экране есть region
+mask, маска остается видимой в увеличенной области, чтобы скрытый участок нельзя
+было раскрыть через zoom.
 
 
 8. Live Pinned Lens
 -------------------
 
-Live Pinned Lens is a live enlarged floating copy of a selected screen rectangle.
-Select an area and FocusTool shows an enlarged copy in a separate floating
-window. The source area keeps updating in real time.
+Live Pinned Lens - это живой увеличенный выносной фрагмент экрана. Пользователь
+выделяет прямоугольную область, а FocusTool показывает ее увеличенную копию в
+отдельном плавающем окне. Исходная область продолжает обновляться в реальном
+времени.
 
-Start:
+Запуск:
 
   Ctrl+Alt+P
 
-Then drag a rectangle on the screen.
+Затем выделите прямоугольник на экране.
 
-Supported behavior:
+Поддерживается:
 
-- multiple lens windows at the same time;
-- mouse dragging;
-- thin border without the standard system frame;
-- right-click context menu;
+- несколько окон одновременно;
+- перетаскивание окна мышью;
+- тонкая обводка без стандартной системной рамки;
+- контекстное меню по правой кнопке мыши;
 - Freeze / Resume;
 - Zoom in / Zoom out;
-- Ctrl + mouse wheel to zoom a specific lens;
+- Ctrl + колесо мыши для zoom конкретной линзы;
 - Close / Close all.
 
-Laser and annotations are drawn above pinned lenses. Region masks remain visible
-inside the enlarged image, so masked content cannot be revealed by zooming.
+Лазер и аннотации отображаются поверх pinned lens. Region masks остаются видимыми
+в увеличенном изображении, чтобы замаскированную область нельзя было раскрыть
+через увеличение.
 
 
 9. Region Mask
 --------------
 
-Region Mask hides selected rectangular areas of the screen. It is useful for
-private data, keys, personal information, chat fragments, or anything that should
-not appear during a demo or recording.
+Region Mask скрывает выбранные прямоугольные области экрана. Это удобно для
+работы с конфиденциальными данными, ключами, личной информацией, кусками чата или
+любыми фрагментами, которые не должны попасть в демонстрацию.
 
-Start:
+Запуск:
 
   Ctrl+Alt+H
 
-Behavior:
+Поведение:
 
-- one selection creates one mask and returns FocusTool to normal passthrough mode;
-- in Mask mode, existing masks can be moved by dragging their body;
-- masks can be resized from corner handles;
-- right-click a mask to open the delete menu;
-- deleting one mask does not exit Mask mode;
-- all masks can be cleared through Ctrl+Alt+Shift+H or the tray menu;
-- new masks use the current mask color slot and opacity from Settings.
+- одно выделение создает одну маску и возвращает приложение к обычному режиму;
+- в режиме Mask существующие маски можно двигать за тело;
+- размер маски меняется за угловые маркеры;
+- правый клик по маске открывает контекстное меню удаления;
+- удаление одной маски не выходит из режима Mask;
+- все маски очищаются через Ctrl+Alt+Shift+H или tray;
+- новые маски используют текущий цветовой слот и opacity из настроек.
 
-Masks are visible in the magnifier, pinned lens, screenshots, and Screen Board so
-zoom or screenshots cannot reveal hidden content.
+Маски видны в лупе, pinned lens, скриншотах и screen board, чтобы zoom или
+снимок экрана не раскрывали скрытую область.
 
 
-10. Annotation mode
+10. Режим аннотаций
 -------------------
 
-Annotation mode lets you draw above the current screen.
+Режим аннотаций позволяет рисовать поверх текущего экрана.
 
-Toggle:
+Включение:
 
   Ctrl+Alt+D
 
-Exit:
+Выход:
 
   Esc
 
-In annotation mode, the overlay accepts mouse input. Normal clicks on underlying
-applications are temporarily blocked because the mouse is used for drawing.
+В режиме аннотаций overlay принимает ввод мыши. Обычные клики по приложениям под
+overlay временно недоступны, потому что мышь используется для рисования.
 
-Tools:
+Инструменты:
 
 - Pen
-  Freehand drawing.
+  Свободное рисование линией.
 
 - Mark
-  Highlighter. Draws a wider semi-transparent line.
+  Маркер / highlighter. Рисует более широкую полупрозрачную линию.
 
 - Arrow
-  Arrow from press point to release point.
+  Стрелка от точки начала к точке отпускания мыши.
 
 - Line
-  Straight line.
+  Прямая линия.
 
 - Rect
-  Rectangle.
+  Прямоугольник.
 
 - Oval
-  Oval or circle.
+  Овал или круг.
 
 - Text
-  Text note. Click where you want the text and type from the keyboard. Enter
-  commits the text. Backspace deletes characters. Esc exits the mode.
+  Текстовая заметка. Нажмите в нужное место и вводите текст с клавиатуры.
+  Enter завершает ввод текста. Backspace удаляет символы. Esc выходит из режима.
 
 - Move
-  Select and move objects. Drag a selection rectangle first, then drag the
-  selected area.
+  Выделение и перемещение объектов. Сначала протяните рамку выделения, затем
+  потяните выделенную область.
 
-Additional behavior:
+Дополнительное поведение:
 
-- Holding Shift while drawing Line / Rect / Oval constrains the shape: line angle
-  snapping, square rectangle, or circle.
+- Для Line / Rect / Oval удержание Shift во время рисования включает ограничение:
+  линия фиксируется по углам, прямоугольник становится квадратом, овал становится
+  кругом.
 
-- Undo / Redo work for adding, deleting, clearing, and moving objects.
+- Undo / Redo работают для добавления, удаления, очистки и перемещения объектов.
 
-- Delete removes selected objects.
+- Delete удаляет выбранные объекты.
 
-- Clear removes annotations.
+- Clear очищает аннотации.
 
 
-11. Fading annotations
-----------------------
+11. Исчезающие аннотации
+------------------------
 
-Fading annotations are a global mode for newly created annotations. When enabled,
-new objects stay fully visible for a configured time and then fade out smoothly.
+Исчезающие аннотации - это глобальный режим для новых аннотаций. Когда он
+включен, новые объекты сначала отображаются полностью, а затем плавно исчезают.
 
-Toggle:
+Переключение:
 
   Ctrl+Alt+F
 
-Toolbar:
+В toolbar:
 
   Draw -> Fade
 
-The small button next to Fade opens quick settings:
+Маленькая кнопка рядом с Fade открывает быстрые настройки:
 
-- full visible time;
-- fade duration.
+- время полной видимости;
+- длительность исчезновения.
 
-Existing annotations do not change behavior when the mode is toggled. Automatic
-removal does not leave empty Undo / Redo steps.
+Уже созданные аннотации не меняют свое поведение при переключении режима.
+Автоматическое исчезновение не оставляет пустых шагов в Undo / Redo.
 
 
-12. Screen Board
+12. Overlay Timer
+-----------------
+
+Overlay Timer - это живой плавающий таймер поверх экрана. Он не открывает
+отдельный полноэкранный режим и не выбивает пользователя из текущего приложения.
+
+Создать новый таймер:
+
+  Ctrl+Alt+N
+
+Поддерживается:
+
+- несколько таймеров одновременно;
+- режимы Countdown, Stopwatch, Clock и Until time;
+- перетаскивание таймера мышью;
+- подпись таймера с редактированием по двойному клику;
+- редактирование времени по двойному клику в режимах Countdown и Until time;
+- изменение размера и прозрачности кнопками, которые появляются только в фокусе;
+- контекстное меню с выбором режима, стиля, 12/24-часового формата,
+  отображения прогресса, подписи и мигания по истечении времени;
+- светлая, темная и автоматическая тема по системной теме Windows.
+
+Управление, когда таймер в фокусе:
+
+  Space             - старт / пауза
+  R                 - сброс в режимах Countdown и Stopwatch
+  Tab               - переключить режим таймера
+  Left / Right      - изменить время на 1 секунду
+  Up / Down         - изменить время на 1 минуту
+  Shift+Up/Down     - изменить время на 5 минут
+  Esc               - вернуть фокус предыдущему окну
+
+Настройки активного таймера сохраняются как значения по умолчанию для новых
+таймеров. Открытые таймеры не восстанавливаются после перезапуска приложения.
+
+
+13. Screen board
 ----------------
 
-Screen Board captures the current monitor and turns it into a background board
-for annotations. This is useful when you need to freeze the current screen and
-draw over it without interacting with the original application.
+Screen board делает снимок текущего монитора и превращает его в доску для
+аннотаций. Это полезно, когда нужно остановить состояние экрана и рисовать поверх
+него, не взаимодействуя с исходным приложением.
 
-Toggle:
+Включение:
 
   Ctrl+Alt+G
 
-When entering Screen Board:
+При входе в screen board:
 
-- the current monitor is captured as an image;
-- the overlay switches to board mode;
-- annotation tools can be used;
-- the original application under the board no longer visually changes inside the board.
+- текущий монитор снимается в изображение;
+- overlay переходит в режим доски;
+- можно использовать инструменты аннотаций;
+- исходное приложение под доской больше не изменяется визуально внутри board.
 
-When exiting Screen Board:
+При выходе из screen board:
 
-- the final board image is automatically saved to Pictures\FocusTool;
-- the final image is also copied to the clipboard;
-- no notification is shown to keep the workflow quiet.
+- итоговое изображение доски автоматически сохраняется в Pictures\FocusTool;
+- итог также помещается в буфер обмена;
+- уведомление специально не показывается, чтобы не создавать лишний шум.
 
-Exit:
+Выход:
 
-  Ctrl+Alt+G again
+  Ctrl+Alt+G повторно
   Esc
-  select another mode
+  выбор другого режима
 
 
-13. Black Board and White Board
--------------------------------
+14. Черная и белая доска
+------------------------
 
-Black Board:
+Черная доска:
 
   Ctrl+Alt+B
 
-White Board:
+Белая доска:
 
   Ctrl+Alt+W
 
-These modes show a clean black or white full-screen background and allow drawing
-annotations. They are useful for quick explanations that do not depend on the
-current desktop content.
+Эти режимы показывают чистый черный или белый фон поверх экрана и позволяют
+рисовать аннотации. Они удобны для быстрых объяснений без привязки к текущему
+содержимому рабочего стола.
 
-Unlike Screen Board, Black Board and White Board do not automatically capture the
-screen when entered. They are just blank drawing backgrounds.
+В отличие от screen board, черная и белая доска не создают автоматический снимок
+экрана при входе. Это просто пустой фон для рисования.
 
 
-14. Screenshots
----------------
+15. Скриншоты
+-------------
 
-Screenshot current monitor:
+Скриншот текущего монитора:
 
   Ctrl+Alt+C
 
-When taking a screenshot:
+При скриншоте:
 
-- the monitor under the cursor is captured;
-- the image is saved to Pictures\FocusTool;
-- the image is copied to the clipboard;
-- the toolbar is temporarily hidden so it does not appear in the image.
+- снимается монитор, на котором находится курсор;
+- изображение сохраняется в Pictures\FocusTool;
+- изображение копируется в буфер обмена;
+- toolbar временно скрывается, чтобы не попасть в снимок.
 
-Screenshot file names use this format:
+Имена файлов имеют формат:
 
   FocusTool_yyyy-MM-dd_HH-mm-ss-fff.png
 
-Screen Board exits use a similar format with this prefix:
+Screen board при выходе сохраняется похожим образом, но с префиксом:
 
   FocusTool_Board_yyyy-MM-dd_HH-mm-ss-fff.png
 
 
-15. Overlay toolbar
+16. Overlay toolbar
 -------------------
 
-Overlay toolbar is a compact control panel above the screen.
+Overlay toolbar - компактная панель управления поверх экрана.
 
-Show / hide:
+Показать / скрыть:
 
   Ctrl+Alt+T
 
-Main row:
+Основной ряд:
 
-  Laser  Draw  Spot  Zoom  Pin  Mask  Board  Shot  ...
+  Laser  Draw  Spot  Zoom  Pin  Mask  Board  Shot  Timer  ...
 
-Main groups have a small settings button that opens a contextual row:
+У основных групп есть маленькая кнопка настроек. Она открывает контекстный ряд:
 
 - Laser
-  Activation mode, color slots, glow, trail length.
+  Режим активации, цветовые слоты, glow, trail length.
 
 - Draw
-  Pen, Mark, Arrow, Line, Rect, Oval, Text, Move, color slots, line thickness,
-  text size, Fade, Undo, Redo, Clear.
+  Pen, Mark, Arrow, Line, Rect, Oval, Text, Move, цветовые слоты, толщина линии,
+  размер текста, Fade, Undo, Redo, Clear.
 
 - Spot
-  Radius and dim amount.
+  Radius и dim amount.
 
 - Zoom
-  Magnifier zoom and radius.
+  Zoom и radius лупы.
 
 - Pin
-  Default zoom/FPS for new pinned lenses and close all.
+  Базовый zoom/FPS новых pinned lens и close all.
 
 - Mask
-  Mask color slots, opacity, clear.
+  Цветовые слоты маски, opacity, clear.
 
 - Board
   Screen, Black, White.
 
+- Timer
+  New timer, Close all.
+
 - ...
   Hide, Settings, Close.
 
-Hide collapses the toolbar into a small FT grip. The grip can be dragged. A
-normal click opens the toolbar again.
+Кнопка Hide сворачивает панель в маленький grip с надписью FT. Маленький grip
+можно перетаскивать. Обычный клик по нему раскрывает панель обратно.
 
-The toolbar position is remembered during the app session. When shown again, it
-tries to appear where the user moved it and clamps itself to the monitor work
-area when needed.
+Положение панели запоминается на время работы приложения. При повторном показе
+она старается появиться там, куда ее перемещал пользователь, и при необходимости
+прижимается к рабочей области монитора.
 
 
-16. Color slots
----------------
+17. Цветовые слоты
+------------------
 
-FocusTool uses configurable color slots instead of fixed color names.
+FocusTool использует настраиваемые цветовые слоты вместо фиксированных названий
+цветов.
 
-Separate slot groups exist for:
+Отдельные наборы слотов есть для:
 
 - Laser;
 - Annotation;
 - Region Mask.
 
-Each group contains Color 1..5. Colors are edited in Settings through HEX values:
+Каждый набор содержит Color 1..5. Цвета редактируются в Settings через HEX:
 
   #FFFF2020
   #FF2080FF
   #FFFFFFFF
 
-After Apply / OK, the same slots are used in the toolbar and tray menu. If an
-older settings file contains a custom current color that is not present in the
-slots, FocusTool keeps it by placing it into Color 5.
+После Apply / OK эти же слоты используются в toolbar и tray. Если старый файл
+настроек содержит пользовательский текущий цвет, которого нет в слотах, FocusTool
+сохраняет его в Color 5.
 
 
-17. Tray menu
+18. Tray menu
 -------------
 
-FocusTool runs from the system tray. The tray context menu includes:
+FocusTool работает из системного трея. В контекстном меню трея доступны:
 
-- current annotation mode;
-- laser activation mode;
+- текущий режим аннотаций;
+- режим активации лазера;
 - spotlight;
 - magnifier;
 - pinned lens;
 - region mask;
 - fading annotations;
+- timer;
 - toolbar;
 - screenshot;
 - screen board;
 - black board;
 - white board;
 - glow;
-- tool selection;
-- color slot selection;
+- выбор инструментов;
+- выбор цветовых слотов;
 - undo / redo / clear;
 - settings;
 - exit.
 
-The tray menu also shows assigned shortcuts next to relevant items.
+Меню трея также показывает назначенные хоткеи справа от пунктов.
 
 
-18. Settings
-------------
+19. Настройки
+-------------
 
-Open Settings from the tray menu:
+Открыть настройки можно из tray menu:
 
   Settings...
 
-The Settings window has two tabs:
+Окно настроек содержит две вкладки:
 
 - General
 - Shortcuts
 
 General:
 
-- laser color slots;
-- laser activation mode;
-- point size;
-- trail length;
-- fade after release;
+- цветовые слоты лазера;
+- режим активации лазера;
+- размер точки;
+- длина следа;
+- затухание после отпускания;
 - glow;
-- spotlight radius and dim amount;
-- magnifier radius and zoom;
-- default pinned lens settings;
-- region mask color slots;
-- region mask opacity;
-- annotation color slots;
-- line thickness;
-- text font size;
-- fading annotation settings.
+- радиус и затемнение spotlight;
+- радиус и увеличение лупы;
+- параметры pinned lens по умолчанию;
+- цветовые слоты region mask;
+- opacity region mask;
+- цветовые слоты аннотаций;
+- толщина линии;
+- размер шрифта текста;
+- параметры исчезающих аннотаций.
 
 Shortcuts:
 
-- all global hotkeys;
-- tool hotkeys;
-- color hotkeys;
+- все глобальные хоткеи;
+- хоткеи инструментов;
+- хоткеи цветов;
 - undo / redo / delete / clear;
-- exit visual mode.
+- выход из режима аннотаций.
 
-Shortcut format examples:
+Формат хоткеев:
 
   A
   Ctrl+Alt+D
@@ -557,72 +605,73 @@ Shortcut format examples:
   ]
   XButton2
 
-To disable a shortcut, leave the field empty or enter:
+Чтобы отключить хоткей, оставьте поле пустым или укажите:
 
   None
 
-Mouse buttons cannot be used for global hotkeys. They are allowed for Hold laser.
+Для глобальных хоткеев нельзя использовать кнопки мыши. Кнопки мыши разрешены
+для Hold laser.
 
 
-19. Recording and streaming
----------------------------
+20. Запись и стриминг
+---------------------
 
-FocusTool draws as a desktop overlay. For OBS and similar tools, use Display
-Capture / Monitor Capture if you need to record laser, annotations, spotlight,
-magnifier, pinned lenses, region masks, and toolbar.
+FocusTool рисует как desktop overlay. Для OBS и похожих программ используйте
+Display Capture / Monitor Capture, если нужно записать лазер, аннотации,
+spotlight, лупу, pinned lens, region masks, timer и toolbar.
 
-Window Capture usually captures only the target application window and may not
-include overlay windows. This is how Windows window composition works; it is not
-a FocusTool error.
-
-
-20. Notes and limitations
--------------------------
-
-- FocusTool is built for Windows.
-
-- For public distribution, self-contained is the recommended package.
-
-- The executable is currently unsigned. Windows SmartScreen may show a warning
-  for a new unsigned app. This is expected, but code signing can be considered
-  for wider distribution.
-
-- If a global hotkey is already used by another application, FocusTool shows a
-  notification that the hotkey could not be registered.
-
-- In annotation mode, the overlay captures mouse input. Exit with Esc or the
-  corresponding hotkey to click normal applications again.
-
-- Screen Board saves the final image when exiting. Black Board and White Board do
-  not auto-save on exit.
+Window Capture обычно захватывает только окно приложения и может не включать
+overlay-окна. Это особенность композиции окон Windows, а не ошибка FocusTool.
 
 
-21. Quick start
----------------
+21. Ограничения и примечания
+----------------------------
 
-1. Run self-contained\FocusTool.exe.
-2. Press Ctrl+Alt+T to open the overlay toolbar.
-3. Press Ctrl+Alt+D to draw over the screen.
-4. Select Pen / Arrow / Rect / Text through the toolbar or hotkeys.
-5. Press Esc to exit drawing mode.
-6. Press Ctrl+Alt+C to take a screenshot.
-7. Press Ctrl+Alt+P, select an area, and try Live Pinned Lens.
-8. Press Ctrl+Alt+H to hide an area with Region Mask.
-9. Press Ctrl+Alt+G to create a Screen Board, draw over the captured screen, and
-   exit with Esc. The final board image is saved automatically.
+- Приложение рассчитано на Windows.
+
+- Для публичного распространения лучше использовать self-contained сборку.
+
+- Неподписанный exe может вызывать предупреждение Windows SmartScreen. Это
+  нормально для новых неподписанных приложений, но для широкой публикации можно
+  рассмотреть code signing.
+
+- Если глобальный хоткей уже занят другой программой, FocusTool покажет
+  уведомление о том, что хоткей не зарегистрирован.
+
+- В режиме аннотаций overlay перехватывает мышь. Чтобы снова кликать по обычным
+  приложениям, выйдите из режима через Esc или соответствующий хоткей.
+
+- Screen board сохраняет итог при выходе из режима. Черная и белая доска
+  автоматического сохранения не делают.
 
 
-22. Uninstall
--------------
+22. Быстрый старт
+-----------------
 
-FocusTool does not require installation. To remove it:
+1. Запустите self-contained\FocusTool.exe.
+2. Нажмите Ctrl+Alt+T, чтобы открыть overlay toolbar.
+3. Нажмите Ctrl+Alt+D, чтобы включить рисование поверх экрана.
+4. Выберите инструмент Pen / Arrow / Rect / Text через toolbar или хоткеи.
+5. Нажмите Esc, чтобы выйти из режима рисования.
+6. Нажмите Ctrl+Alt+N, чтобы создать плавающий таймер.
+7. Нажмите Ctrl+Alt+C, чтобы сделать скриншот.
+8. Нажмите Ctrl+Alt+P, выделите область и попробуйте live pinned lens.
+9. Нажмите Ctrl+Alt+H, чтобы закрыть область через region mask.
+10. Нажмите Ctrl+Alt+G, чтобы создать screen board, нарисуйте поверх снимка и
+   выйдите через Esc - итог сохранится автоматически.
 
-1. Close FocusTool from the tray menu or press Ctrl+Alt+Q.
-2. Delete the folder with the executable.
-3. Optionally delete settings:
+
+23. Удаление
+------------
+
+FocusTool не требует установки. Чтобы удалить приложение:
+
+1. Закройте FocusTool через tray menu или Ctrl+Alt+Q.
+2. Удалите папку с exe.
+3. При необходимости удалите настройки:
 
    %APPDATA%\FocusTool
 
-4. Optionally delete saved screenshots:
+4. При необходимости удалите сохраненные скриншоты:
 
    Pictures\FocusTool

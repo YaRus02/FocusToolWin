@@ -322,6 +322,7 @@ public partial class SettingsWindow : Window
         ToggleRegionMaskBox.Text = settings.Shortcuts.ToggleRegionMask;
         ClearRegionMasksBox.Text = settings.Shortcuts.ClearRegionMasks;
         ToggleFadingAnnotationsBox.Text = settings.Shortcuts.ToggleFadingAnnotations;
+        ToggleTimerBox.Text = settings.Shortcuts.ToggleTimer;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
@@ -364,6 +365,7 @@ public partial class SettingsWindow : Window
         shortcuts.ToggleRegionMask = ReadShortcutText(ToggleRegionMaskBox);
         shortcuts.ClearRegionMasks = ReadShortcutText(ClearRegionMasksBox);
         shortcuts.ToggleFadingAnnotations = ReadShortcutText(ToggleFadingAnnotationsBox);
+        shortcuts.ToggleTimer = ReadShortcutText(ToggleTimerBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
@@ -401,6 +403,7 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Region mask", shortcuts.ToggleRegionMask)
             || !ValidateShortcut("Clear region masks", shortcuts.ClearRegionMasks)
             || !ValidateShortcut("Fading annotations", shortcuts.ToggleFadingAnnotations)
+            || !ValidateShortcut("Timer", shortcuts.ToggleTimer)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
@@ -481,6 +484,7 @@ public partial class SettingsWindow : Window
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
             ("Fading annotations", shortcuts.ToggleFadingAnnotations),
+            ("Timer", shortcuts.ToggleTimer),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
@@ -523,6 +527,7 @@ public partial class SettingsWindow : Window
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
             ("Fading annotations", shortcuts.ToggleFadingAnnotations),
+            ("Timer", shortcuts.ToggleTimer),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
