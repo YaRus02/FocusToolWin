@@ -87,6 +87,17 @@ internal sealed class TimerController : IDisposable
         }
     }
 
+    public void ReconcileToWorkingArea()
+    {
+        foreach (var window in _timers)
+        {
+            if (window.IsVisible)
+            {
+                window.ReconcileToWorkingArea();
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)

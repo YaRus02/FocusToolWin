@@ -24,8 +24,10 @@ public partial class App : System.Windows.Application
 
         DispatcherUnhandledException += (_, args) =>
         {
+            // Log-only and keep running. A modal dialog here would storm and freeze
+            // the UI thread if the exception originates in the 60 Hz render loop;
+            // failures are recorded in %APPDATA%\FocusTool\log.txt instead.
             Services.AppLog.Error("Unhandled dispatcher exception", args.Exception);
-            System.Windows.MessageBox.Show(args.Exception.Message, "FocusTool - error", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };
 

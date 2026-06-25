@@ -109,6 +109,27 @@ internal sealed class OverlayManager : IDisposable
         }
     }
 
+    // Repaint only the monitor(s) whose content actually changes as the cursor moves
+    // (spotlight hole / magnifier ring). Other monitors keep an identical cached
+    // frame, so on a multi-monitor setup idle surfaces are not repainted every move.
+    // Both the current and previous cursor monitors are refreshed to clear the old
+    // position when the cursor crosses a monitor boundary.
+    public void InvalidateForCursor(ScreenPoint current, ScreenPoint previous)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        foreach (var window in _windows)
+        {
+            if (window.Contains(current) || window.Contains(previous))
+            {
+                window.Refresh();
+            }
+        }
+    }
+
     public void SetInteractionMode(InteractionMode mode)
     {
         foreach (var window in _windows)

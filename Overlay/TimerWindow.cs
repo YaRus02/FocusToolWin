@@ -207,6 +207,32 @@ internal sealed class TimerWindow : Window
             NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
     }
 
+    // Pull the timer back onto the nearest surviving monitor's working area after a
+    // display change so it is never stranded off-screen on a removed monitor.
+    public void ReconcileToWorkingArea()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero || !NativeMethods.GetWindowRect(handle, out var rect))
+        {
+            return;
+        }
+
+        var width = Math.Max(1, rect.Right - rect.Left);
+        var height = Math.Max(1, rect.Bottom - rect.Top);
+        var area = System.Windows.Forms.Screen
+            .FromRectangle(System.Drawing.Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom))
+            .WorkingArea;
+        const int margin = 1;
+        var maxLeft = Math.Max(area.Left + margin, area.Right - width - margin);
+        var maxTop = Math.Max(area.Top + margin, area.Bottom - height - margin);
+        var x = Math.Clamp(rect.Left, area.Left + margin, maxLeft);
+        var y = Math.Clamp(rect.Top, area.Top + margin, maxTop);
+        if (x != rect.Left || y != rect.Top)
+        {
+            MoveToPhysical(x, y);
+        }
+    }
+
     public void ReassertTopmost()
     {
         var handle = new WindowInteropHelper(this).Handle;

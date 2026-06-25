@@ -201,9 +201,7 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawInputCatcher(DrawingContext drawingContext)
     {
-        var brush = new SolidColorBrush(MediaColor.FromArgb(1, 0, 0, 0));
-        brush.Freeze();
-        drawingContext.DrawRectangle(brush, null, new Rect(0, 0, ActualWidth, ActualHeight));
+        drawingContext.DrawRectangle(GetBrush(MediaColor.FromArgb(1, 0, 0, 0), 1), null, new Rect(0, 0, ActualWidth, ActualHeight));
     }
 
     private void DrawBlankScreen(DrawingContext drawingContext, InteractionMode mode)
@@ -313,20 +311,12 @@ internal sealed class OverlaySurface : FrameworkElement
         }
     }
 
-    private void DrawSelectionRectangle(DrawingContext drawingContext, ScreenRect screenRect, bool isDraft)
+    // The dashed selection outline is identical every frame, so build it once and
+    // reuse the frozen pen instead of allocating brush + pen + DashStyle per draw.
+    private static readonly WpfPen SelectionDashPen = CreateSelectionDashPen();
+
+    private static WpfPen CreateSelectionDashPen()
     {
-        var rect = ToRect(screenRect);
-        if (rect.Width < 1 || rect.Height < 1)
-        {
-            return;
-        }
-
-        var fill = new SolidColorBrush(Colors.DeepSkyBlue) { Opacity = isDraft ? 0.045 : 0.07 };
-        fill.Freeze();
-        drawingContext.DrawRectangle(fill, null, rect);
-
-        drawingContext.DrawRectangle(null, CreatePen(Colors.Black, 0.32, 3.2), rect);
-
         var brush = new SolidColorBrush(Colors.White) { Opacity = 0.98 };
         brush.Freeze();
         var pen = new WpfPen(brush, 1.2)
@@ -337,7 +327,20 @@ internal sealed class OverlaySurface : FrameworkElement
             LineJoin = PenLineJoin.Miter
         };
         pen.Freeze();
-        drawingContext.DrawRectangle(null, pen, rect);
+        return pen;
+    }
+
+    private void DrawSelectionRectangle(DrawingContext drawingContext, ScreenRect screenRect, bool isDraft)
+    {
+        var rect = ToRect(screenRect);
+        if (rect.Width < 1 || rect.Height < 1)
+        {
+            return;
+        }
+
+        drawingContext.DrawRectangle(GetBrush(Colors.DeepSkyBlue, isDraft ? 0.045 : 0.07), null, rect);
+        drawingContext.DrawRectangle(null, CreatePen(Colors.Black, 0.32, 3.2), rect);
+        drawingContext.DrawRectangle(null, SelectionDashPen, rect);
     }
 
     private void DrawPinnedLensSelection(DrawingContext drawingContext)

@@ -266,6 +266,22 @@ internal sealed class PinnedLensHostWindow : IDisposable
         _host?.ReassertContextMenuTopmost();
     }
 
+    // Pull the window back onto the nearest surviving monitor's working area after a
+    // display change so it is never stranded off-screen on a removed monitor.
+    public void ReconcileToWorkingArea()
+    {
+        if (_disposed || _hostHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var clamped = ClampWindowBoundsToNearestWorkingArea(_windowBounds);
+        if (clamped != _windowBounds)
+        {
+            ApplyHostWindowBounds(clamped, topmost: true);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)

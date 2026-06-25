@@ -17,7 +17,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 {
     private static readonly TimeSpan ActiveInterval = TimeSpan.FromMilliseconds(8);
     private static readonly TimeSpan FadeInterval = TimeSpan.FromMilliseconds(16);
-    private static readonly TimeSpan IdleInterval = TimeSpan.FromMilliseconds(55);
+    // Idle cadence. In the idle path the tick only polls for the laser-hold mouse
+    // button (Hold mode) or first cursor movement (Always mode) - there is no
+    // animation to drive - so a slower ~8 Hz tick keeps idle CPU/battery low.
+    // Worst case it adds ~120 ms before a held laser appears: imperceptible.
+    private static readonly TimeSpan IdleInterval = TimeSpan.FromMilliseconds(120);
     private const double MovementThresholdPixels = 0.75;
     private const double RegionMaskMinSizePixels = 8;
     private const double RegionMaskResizeHitRadiusPixels = 12;
@@ -73,6 +77,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _magnifierRenderingSubscribed;
     private ScreenPoint _spotlightCursor;
     private IntPtr _previousForegroundWindow = IntPtr.Zero;
+    private IntPtr _lastExternalForegroundWindow = IntPtr.Zero;
     private ScreenPoint _lastMagnifierCursor;
     private bool _hasLastMagnifierCursor;
     private InteractionMode _mode = InteractionMode.Passthrough;
@@ -210,7 +215,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _settingsSaveTimer.Stop();
-        _settingsStore.Save(Settings);
+
+        // Write off the UI thread so a slow disk / AV scan can't hitch the overlay.
+        // A snapshot is serialized so the background write never races UI-thread
+        // mutations of the live Settings; Dispose still flushes synchronously.
+        var snapshot = Settings.Clone();
+        _ = Task.Run(() => _settingsStore.Save(snapshot));
     }
 
     public void Start()
@@ -219,6 +229,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         RegisterHotKeys();
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _overlayManager.Show();
         _timer.Start();
@@ -596,11 +607,22 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _captureInProgress = true;
         var toolbarWasVisible = ToolbarVisible;
+        var magnifierWasActive = Settings.MagnifierEnabled;
+
+        // Keep the screen overlay (region masks are a privacy layer that must be in the
+        // shot), pinned lenses and timers visible. Only the toolbar and the cursor-
+        // following magnifier lens are excluded from the capture.
         if (toolbarWasVisible)
         {
-            // Keep the screen overlay visible: region masks are a privacy layer and
-            // must be included in screenshots. Only floating chrome is hidden.
             _toolbarWindow?.Hide();
+        }
+
+        // UpdateMagnifierHost stays a no-op while _captureInProgress, so the render
+        // loop will not bring the lens back before the capture completes.
+        CloseMagnifierHost();
+
+        if (toolbarWasVisible || magnifierWasActive)
+        {
             await WaitForScreenRefreshAsync();
         }
 
@@ -621,6 +643,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             }
 
             _captureInProgress = false;
+
+            if (magnifierWasActive && !_disposed)
+            {
+                UpdateMagnifierHost();
+            }
         }
     }
 
@@ -642,6 +669,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _overlayManager?.Hide();
         CloseMagnifierHost();
+        HidePinnedLensesForBoard();
         await WaitForScreenRefreshAsync();
 
         try
@@ -666,6 +694,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if (magnifierWasEnabled && _mode != InteractionMode.ScreenBoard && !_disposed)
             {
                 UpdateMagnifierHost();
+            }
+
+            // Restore pinned lenses unless we actually entered a board (then they stay
+            // hidden until the board is dismissed, which restores them via SetInteractionMode).
+            if (!IsVisualBoardMode(_mode) && !_disposed)
+            {
+                RestorePinnedLensesAfterBoard();
             }
 
             _captureInProgress = false;
@@ -740,7 +775,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (enteringAnnotationInput)
         {
-            _previousForegroundWindow = NativeMethods.GetForegroundWindow();
+            // At this instant the foreground may already be our own toolbar/overlay
+            // (e.g. annotate was toggled by a toolbar-button click), so fall back to
+            // the last tracked external window to restore focus correctly on exit.
+            var foreground = NativeMethods.GetForegroundWindow();
+            _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
+            _previousForegroundWindow = processId != 0 && processId != (uint)Environment.ProcessId
+                ? foreground
+                : _lastExternalForegroundWindow;
         }
 
         if (leavingAnnotationInput)
@@ -800,6 +842,17 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 UpdateSpotlightCursor(force: true);
                 UpdateMagnifierHost();
             }
+        }
+
+        // Boards are a clean canvas: hide pinned lenses while a board is shown and
+        // restore them on the way out. Timers intentionally stay visible.
+        if (enteringVisualBoard)
+        {
+            HidePinnedLensesForBoard();
+        }
+        else if (leavingVisualBoard)
+        {
+            RestorePinnedLensesAfterBoard();
         }
 
         _overlayManager?.Invalidate();
@@ -1555,6 +1608,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _disposed = true;
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _timer.Stop();
         _timer.Tick -= OnTimerTick;
         _settingsSaveTimer.Stop();
@@ -1583,6 +1637,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             return;
         }
+
+        TrackExternalForegroundWindow();
 
         var fadingAnnotationsAnimating = UpdateFadingAnnotations();
         var magnifierActive = Settings.MagnifierEnabled;
@@ -1729,6 +1785,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void UpdateMagnifierHost()
     {
+        if (_captureInProgress)
+        {
+            // The cursor-following magnifier lens must not appear in a screenshot or
+            // screen-board frame; the render loop recreates it once capture ends.
+            CloseMagnifierHost();
+            return;
+        }
+
         if (!Settings.MagnifierEnabled || IsVisualBoardMode(_mode) || !_hasSpotlightCursor || _overlayManager is null)
         {
             if (IsVisualBoardMode(_mode))
@@ -1856,11 +1920,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             || cursor.DistanceTo(_lastMagnifierCursor) >= 0.5;
         if (cursorMoved)
         {
+            var previous = _hasLastMagnifierCursor ? _lastMagnifierCursor : cursor;
             _lastMagnifierCursor = cursor;
             _hasLastMagnifierCursor = true;
             _spotlightCursor = cursor;
             _hasSpotlightCursor = true;
-            _overlayManager?.Invalidate();
+            _overlayManager?.InvalidateForCursor(cursor, previous);
         }
 
         // Refresh the magnified source even while the cursor is stationary so
@@ -1933,6 +1998,55 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
             _overlayManager?.ReassertTopmost();
         }
+    }
+
+    // Boards present a clean canvas, so pinned lenses are hidden for the board's
+    // duration (they would otherwise float over it and get baked into a screen-board
+    // capture). Reuses the same hide/restore path as the freeze-frame desktop capture.
+    private void HidePinnedLensesForBoard()
+    {
+        foreach (var host in _pinnedLensHosts)
+        {
+            host.HideForDesktopCapture();
+        }
+    }
+
+    private void RestorePinnedLensesAfterBoard()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        foreach (var host in _pinnedLensHosts)
+        {
+            host.RestoreAfterDesktopCapture();
+        }
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnDisplaySettingsChanged(sender, e));
+            return;
+        }
+
+        // OverlayManager rebuilds the per-monitor overlays itself; here we rescue the
+        // floating windows a removed/rearranged monitor would otherwise strand
+        // off-screen, by clamping them back onto the nearest surviving monitor.
+        foreach (var host in _pinnedLensHosts.ToArray())
+        {
+            host.ReconcileToWorkingArea();
+        }
+
+        _timerController?.ReconcileToWorkingArea();
     }
 
     public void ClosePinnedLenses()
@@ -2210,9 +2324,17 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        var previous = _hasSpotlightCursor ? _spotlightCursor : cursor;
         _spotlightCursor = cursor;
         _hasSpotlightCursor = true;
-        _overlayManager?.Invalidate();
+        if (force)
+        {
+            _overlayManager?.Invalidate();
+        }
+        else
+        {
+            _overlayManager?.InvalidateForCursor(cursor, previous);
+        }
     }
 
     private void CacheParsedSettings()
@@ -2346,6 +2468,24 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     // Retain exactly the trail length: a point that ages out of the window is
     // trimmed at the same instant, so it can never be revealed again as a phantom.
     private int RetainedTrailLengthMs => Settings.TrailLengthMs;
+
+    // Continuously remember the last foreground window that is not one of ours, so
+    // entering Annotate via a toolbar-button click (where our own window is briefly
+    // foreground) can still restore focus to the real underlying app on exit.
+    private void TrackExternalForegroundWindow()
+    {
+        var foreground = NativeMethods.GetForegroundWindow();
+        if (foreground == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
+        if (processId != 0 && processId != (uint)Environment.ProcessId)
+        {
+            _lastExternalForegroundWindow = foreground;
+        }
+    }
 
     private static bool TryGetCursor(out ScreenPoint point)
     {
