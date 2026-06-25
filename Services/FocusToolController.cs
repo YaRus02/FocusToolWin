@@ -58,12 +58,19 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private ScreenPoint _lastRegionMaskMovePoint;
     private ScreenPoint _lastScreenshotRegionMovePoint;
     private ScreenPoint _lastSpotlightRegionMovePoint;
+    private ScreenPoint _lastTextClickPoint;
+    private ScreenPoint _lastObjectClickPoint;
     private readonly List<CursorClickPulse> _cursorClickPulses = [];
     private readonly RectSelectionSession _rectSelection = new();
     private bool _hasLastCursor;
     private bool _hasCursorHighlightPoint;
+    private bool _hasLastTextClick;
+    private bool _hasLastObjectClick;
+    private double _lastTextClickMs = double.NegativeInfinity;
+    private double _lastObjectClickMs = double.NegativeInfinity;
     private bool _drawing;
     private bool _movingSelection;
+    private bool _draggingAnnotationEditHandle;
     private bool _restoreToolbarAfterRectSelection;
     private ScreenRect? _pendingScreenshotRegion;
     private bool _screenshotRegionToolbarRestorePending;
@@ -1070,9 +1077,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (leavingAnnotationInput)
         {
-            if (_annotations.HasDraftText)
+            if (_annotations.HasTextInput)
             {
-                _annotations.CommitTextDraft();
+                _annotations.CommitTextInput();
             }
             else
             {
@@ -1271,6 +1278,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var updated = Settings.Clone();
         updated.AnnotationColor = color;
         ApplySettings(updated);
+        _annotations.ApplyColorToSelection(color);
     }
 
     public void SetAnnotationPresetColor(int index)
@@ -1285,6 +1293,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetAnnotationTool(AnnotationTool tool)
     {
+        if (_annotations.IsEditingText)
+        {
+            _annotations.CommitTextInput();
+        }
+
         if (IsStepTool(tool))
         {
             _lastStepTool = tool;
@@ -1314,6 +1327,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var updated = Settings.Clone();
         updated.AnnotationThickness += delta;
         ApplySettings(updated);
+        _annotations.AdjustSelectedThickness(delta);
     }
 
     public void AdjustAnnotationFontSize(double delta)
@@ -1321,6 +1335,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var updated = Settings.Clone();
         updated.AnnotationFontSize += delta;
         ApplySettings(updated);
+        _annotations.AdjustSelectedTextFontSize(delta);
     }
 
     public void AdjustLaserTrailLength(int delta)
@@ -1648,6 +1663,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (HandleTextObjectClick(point))
+        {
+            return;
+        }
+
+        if (HandleObjectEditClick(point))
+        {
+            return;
+        }
+
         if (CurrentTool == AnnotationTool.StepOval)
         {
             _annotations.AddPointShape(AnnotationTool.StepOval, point, Settings);
@@ -1776,6 +1801,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (!IsAnnotationMode(_mode))
         {
+            return;
+        }
+
+        if (_draggingAnnotationEditHandle)
+        {
+            _annotations.UpdateObjectEditHandleDrag(point, (modifiers & ModifierKeys.Shift) != 0);
             return;
         }
 
@@ -1957,6 +1988,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (_draggingAnnotationEditHandle)
+        {
+            _annotations.EndObjectEditHandleDrag();
+            _draggingAnnotationEditHandle = false;
+            return;
+        }
+
         if (_movingSelection)
         {
             _annotations.EndSelectionMove();
@@ -2045,6 +2083,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _movingSelection = false;
         }
 
+        if (_draggingAnnotationEditHandle)
+        {
+            _annotations.EndObjectEditHandleDrag();
+            _draggingAnnotationEditHandle = false;
+        }
+
         if (_drawing)
         {
             _annotations.CancelDraft();
@@ -2110,11 +2154,17 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         var shortcuts = Settings.Shortcuts;
 
-        if (_annotations.HasDraftText)
+        if (_annotations.HasTextInput)
         {
+            if (key == Key.Enter && modifiers == ModifierKeys.Shift)
+            {
+                _annotations.AppendText("\n");
+                return true;
+            }
+
             if (Matches(key, modifiers, "Enter"))
             {
-                _annotations.CommitTextDraft();
+                _annotations.CommitTextInput();
                 return true;
             }
 
@@ -2124,9 +2174,23 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 return true;
             }
 
+            if (key == Key.Delete && modifiers == ModifierKeys.None)
+            {
+                _annotations.DeleteText();
+                return true;
+            }
+
             if (Matches(key, modifiers, shortcuts.ExitAnnotate))
             {
-                SetInteractionMode(InteractionMode.Passthrough);
+                if (_annotations.IsEditingText)
+                {
+                    _annotations.CancelTextEdit();
+                }
+                else
+                {
+                    SetInteractionMode(InteractionMode.Passthrough);
+                }
+
                 return true;
             }
 
@@ -2135,6 +2199,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (Matches(key, modifiers, shortcuts.ExitAnnotate))
         {
+            if (_annotations.IsObjectEditing)
+            {
+                _annotations.EndObjectEdit();
+                return true;
+            }
+
             SetInteractionMode(InteractionMode.Passthrough);
             return true;
         }
@@ -2205,6 +2275,139 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _overlayManager?.Invalidate();
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool HandleTextObjectClick(ScreenPoint point)
+    {
+        if (_annotations.IsEditingText)
+        {
+            if (!_annotations.TextEditContains(point))
+            {
+                _annotations.CommitTextInput();
+            }
+
+            ResetTextClickTracking();
+            return true;
+        }
+
+        if (!_annotations.HitTestText(point))
+        {
+            ResetTextClickTracking();
+            return false;
+        }
+
+        if (IsTextDoubleClick(point))
+        {
+            _annotations.CancelDraft();
+            _annotations.TryBeginTextEditAt(point);
+            ResetTextClickTracking();
+            return true;
+        }
+
+        _lastTextClickPoint = point;
+        _lastTextClickMs = NowMs();
+        _hasLastTextClick = true;
+        ResetObjectClickTracking();
+        return false;
+    }
+
+    private bool HandleObjectEditClick(ScreenPoint point)
+    {
+        if (_annotations.IsObjectEditing)
+        {
+            if (_annotations.TryHitObjectEditHandle(point, out var handle)
+                && _annotations.BeginObjectEditHandleDrag(handle))
+            {
+                _draggingAnnotationEditHandle = true;
+                ResetObjectClickTracking();
+                return true;
+            }
+
+            if (!_annotations.ObjectEditContains(point))
+            {
+                _annotations.EndObjectEdit();
+                ResetObjectClickTracking();
+                return true;
+            }
+
+            if (_annotations.BeginSelectionMove(point))
+            {
+                _movingSelection = true;
+                _lastSelectionMovePoint = point;
+                ResetObjectClickTracking();
+                return true;
+            }
+        }
+
+        if (CurrentTool == AnnotationTool.Move && _annotations.BeginSelectionMove(point))
+        {
+            _movingSelection = true;
+            _lastSelectionMovePoint = point;
+            ResetObjectClickTracking();
+            return true;
+        }
+
+        if (!_annotations.HitTestShape(point))
+        {
+            ResetObjectClickTracking();
+            return false;
+        }
+
+        if (IsObjectDoubleClick(point))
+        {
+            _annotations.CancelDraft();
+            _annotations.TryBeginObjectEditAt(point);
+            ResetObjectClickTracking();
+            return true;
+        }
+
+        _lastObjectClickPoint = point;
+        _lastObjectClickMs = NowMs();
+        _hasLastObjectClick = true;
+        ResetTextClickTracking();
+        return false;
+    }
+
+    private bool IsTextDoubleClick(ScreenPoint point)
+    {
+        if (!_hasLastTextClick)
+        {
+            return false;
+        }
+
+        var elapsedMs = NowMs() - _lastTextClickMs;
+        var size = Forms.SystemInformation.DoubleClickSize;
+        return elapsedMs >= 0
+            && elapsedMs <= Forms.SystemInformation.DoubleClickTime
+            && Math.Abs(point.X - _lastTextClickPoint.X) <= size.Width / 2.0
+            && Math.Abs(point.Y - _lastTextClickPoint.Y) <= size.Height / 2.0;
+    }
+
+    private bool IsObjectDoubleClick(ScreenPoint point)
+    {
+        if (!_hasLastObjectClick)
+        {
+            return false;
+        }
+
+        var elapsedMs = NowMs() - _lastObjectClickMs;
+        var size = Forms.SystemInformation.DoubleClickSize;
+        return elapsedMs >= 0
+            && elapsedMs <= Forms.SystemInformation.DoubleClickTime
+            && Math.Abs(point.X - _lastObjectClickPoint.X) <= size.Width / 2.0
+            && Math.Abs(point.Y - _lastObjectClickPoint.Y) <= size.Height / 2.0;
+    }
+
+    private void ResetTextClickTracking()
+    {
+        _hasLastTextClick = false;
+        _lastTextClickMs = double.NegativeInfinity;
+    }
+
+    private void ResetObjectClickTracking()
+    {
+        _hasLastObjectClick = false;
+        _lastObjectClickMs = double.NegativeInfinity;
     }
 
     private void CommitPendingScreenshotRegion()
@@ -2278,7 +2481,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void HandleOverlayTextInput(string text)
     {
-        if (IsAnnotationMode(_mode) && _annotations.HasDraftText)
+        if (IsAnnotationMode(_mode) && _annotations.HasTextInput)
         {
             _annotations.AppendText(text);
         }

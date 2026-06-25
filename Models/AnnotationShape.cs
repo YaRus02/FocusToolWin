@@ -145,6 +145,13 @@ internal sealed class AnnotationShape
         GeometryVersion++;
     }
 
+    public void SetEndpoints(ScreenPoint start, ScreenPoint end)
+    {
+        Start = start;
+        End = end;
+        GeometryVersion++;
+    }
+
     private ScreenRect TextBounds()
     {
         var lines = Text.Replace("\r\n", "\n").Split('\n');
