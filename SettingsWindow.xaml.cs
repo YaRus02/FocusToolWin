@@ -48,7 +48,7 @@ public partial class SettingsWindow : Window
         SelectCursorHighlightActivationMode(settings.GetCursorHighlightActivationMode());
         CursorHighlightRadiusSlider.Value = settings.CursorHighlightRadius;
         CursorHighlightThicknessSlider.Value = settings.CursorHighlightThickness;
-        CursorHighlightClickPulseCheckBox.IsChecked = settings.CursorHighlightClickPulseEnabled;
+        CursorHighlightClickPulseCheckBox.IsChecked = settings.ClickPulseEnabled;
         SpotlightRadiusSlider.Value = settings.SpotlightRadius;
         SpotlightOpacitySlider.Value = settings.SpotlightOpacity * 100;
         MagnifierRadiusSlider.Value = settings.MagnifierRadius;
@@ -314,7 +314,7 @@ public partial class SettingsWindow : Window
         updated.SetCursorHighlightActivationMode(ReadCursorHighlightActivationMode());
         updated.CursorHighlightRadius = CursorHighlightRadiusSlider.Value;
         updated.CursorHighlightThickness = CursorHighlightThicknessSlider.Value;
-        updated.CursorHighlightClickPulseEnabled = CursorHighlightClickPulseCheckBox.IsChecked == true;
+        updated.ClickPulseEnabled = CursorHighlightClickPulseCheckBox.IsChecked == true;
         updated.SpotlightRadius = SpotlightRadiusSlider.Value;
         updated.SpotlightOpacity = SpotlightOpacitySlider.Value / 100.0;
         updated.MagnifierRadius = MagnifierRadiusSlider.Value;

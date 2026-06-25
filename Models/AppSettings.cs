@@ -39,7 +39,7 @@ public sealed class AppSettings
     public double CursorHighlightThickness { get; set; } = 3;
     public string CursorHighlightActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Always.ToString();
     public string CursorHighlightHoldShortcut { get; set; } = "XButton1";
-    public bool CursorHighlightClickPulseEnabled { get; set; } = true;
+    public bool ClickPulseEnabled { get; set; }
     [JsonIgnore]
     public bool SpotlightEnabled { get; set; }
     public double SpotlightRadius { get; set; } = 160;
@@ -81,7 +81,7 @@ public sealed class AppSettings
         CursorHighlightThickness = CursorHighlightThickness,
         CursorHighlightActivationMode = CursorHighlightActivationMode,
         CursorHighlightHoldShortcut = CursorHighlightHoldShortcut,
-        CursorHighlightClickPulseEnabled = CursorHighlightClickPulseEnabled,
+        ClickPulseEnabled = ClickPulseEnabled,
         SpotlightEnabled = SpotlightEnabled,
         SpotlightRadius = SpotlightRadius,
         SpotlightOpacity = SpotlightOpacity,
@@ -122,7 +122,7 @@ public sealed class AppSettings
         CursorHighlightThickness = other.CursorHighlightThickness;
         CursorHighlightActivationMode = other.CursorHighlightActivationMode;
         CursorHighlightHoldShortcut = other.CursorHighlightHoldShortcut;
-        CursorHighlightClickPulseEnabled = other.CursorHighlightClickPulseEnabled;
+        ClickPulseEnabled = other.ClickPulseEnabled;
         SpotlightEnabled = other.SpotlightEnabled;
         SpotlightRadius = other.SpotlightRadius;
         SpotlightOpacity = other.SpotlightOpacity;

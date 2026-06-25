@@ -116,7 +116,7 @@ internal sealed class TrayIconController : IDisposable
         {
             if (!_updating)
             {
-                _controller.SetCursorHighlightClickPulseEnabled(_cursorHighlightPulseItem.Checked);
+                _controller.SetClickPulseEnabled(_cursorHighlightPulseItem.Checked);
             }
         };
 
@@ -412,7 +412,7 @@ internal sealed class TrayIconController : IDisposable
         _cursorHighlightAlwaysModeItem.Checked = _controller.Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always;
         _cursorHighlightHoldModeItem.Checked = _controller.Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Hold;
         _cursorHighlightHoldModeItem.ShortcutKeyDisplayString = _controller.Settings.CursorHighlightHoldShortcut;
-        _cursorHighlightPulseItem.Checked = _controller.Settings.CursorHighlightClickPulseEnabled;
+        _cursorHighlightPulseItem.Checked = _controller.ClickPulseEnabled;
 
         _spotlightItem.Checked = _controller.SpotlightEnabled;
         _spotlightItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleSpotlight;
@@ -517,6 +517,8 @@ internal sealed class TrayIconController : IDisposable
                 ? "FocusTool: Spotlight"
             : _controller.CursorHighlightEnabled
                 ? "FocusTool: Cursor highlight"
+            : _controller.ClickPulseEnabled
+                ? "FocusTool: Click pulse"
             : _controller.ActivationMode == LaserActivationMode.Always
                 ? "FocusTool: Always"
                 : $"FocusTool: Hold {_controller.Settings.LaserHoldShortcut}";

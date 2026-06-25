@@ -285,7 +285,7 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(CreateSeparator());
         _highlightRadiusText = CreateStepper(row, "Size", () => _controller.AdjustCursorHighlightRadius(-2), () => _controller.AdjustCursorHighlightRadius(2));
         row.Children.Add(CreateSeparator());
-        _highlightPulseButton = CreateButton("Pulse", "Toggle click pulse", (_, _) => _controller.SetCursorHighlightClickPulseEnabled(!_controller.Settings.CursorHighlightClickPulseEnabled), width: 44);
+        _highlightPulseButton = CreateButton("Pulse", "Toggle click pulse", (_, _) => _controller.SetClickPulseEnabled(!_controller.ClickPulseEnabled), width: 44);
         row.Children.Add(_highlightPulseButton);
         return row;
     }
@@ -899,7 +899,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_highlightAlwaysButton, settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always);
             SetButtonActive(_highlightHoldButton, settings.GetCursorHighlightActivationMode() == LaserActivationMode.Hold);
             UpdateColorSwatches(_highlightColorButtons, settings.LaserColorPresets, settings.CursorHighlightColor);
-            SetButtonActive(_highlightPulseButton, settings.CursorHighlightClickPulseEnabled);
+            SetButtonActive(_highlightPulseButton, settings.ClickPulseEnabled);
             _highlightRadiusText.Text = $"{settings.CursorHighlightRadius:0}";
 
             foreach (var (tool, button) in _toolButtons)
@@ -964,6 +964,7 @@ internal sealed class OverlayToolbarWindow : Window
     {
         return _controller.ActivationMode == LaserActivationMode.Always
             || _controller.CursorHighlightEnabled
+            || _controller.ClickPulseEnabled
             || _controller.SpotlightEnabled
             || _controller.RegionSpotlightActive
             || _controller.RegionSpotlightSelectionActive

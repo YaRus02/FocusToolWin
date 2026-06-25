@@ -121,6 +121,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public AnnotationDocument Annotations => _annotations;
     public bool LaserVisuallyActive => _laserVisuallyActive;
     public bool CursorHighlightEnabled => Settings.CursorHighlightEnabled;
+    public bool ClickPulseEnabled => Settings.ClickPulseEnabled;
     public bool SpotlightEnabled => _spotlightEnabled;
     public bool MagnifierEnabled => Settings.MagnifierEnabled;
     public bool ToolbarVisible => _toolbarWindow?.IsVisible == true;
@@ -371,15 +372,15 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         ApplySettings(updated);
     }
 
-    public void SetCursorHighlightClickPulseEnabled(bool enabled)
+    public void SetClickPulseEnabled(bool enabled)
     {
-        if (Settings.CursorHighlightClickPulseEnabled == enabled)
+        if (Settings.ClickPulseEnabled == enabled)
         {
             return;
         }
 
         var updated = Settings.Clone();
-        updated.CursorHighlightClickPulseEnabled = enabled;
+        updated.ClickPulseEnabled = enabled;
         ApplySettings(updated);
     }
 
@@ -1368,6 +1369,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         var previousActivationMode = ActivationMode;
         var cursorHighlightWasEnabled = Settings.CursorHighlightEnabled;
+        var clickPulseWasEnabled = Settings.ClickPulseEnabled;
         var magnifierWasEnabled = Settings.MagnifierEnabled;
         var globalHotKeysChanged = !HaveSameGlobalHotKeys(Settings.Shortcuts, settings.Shortcuts);
         var exitVisualHotKeyWasNeeded = ShouldRegisterExitVisualHotKey(
@@ -1387,9 +1389,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _timer.Interval = ActiveInterval;
             UpdateCursorHighlight(force: true);
         }
-        else if (cursorHighlightWasEnabled || _hasCursorHighlightPoint || _cursorClickPulses.Count > 0)
+        else if (cursorHighlightWasEnabled || _hasCursorHighlightPoint)
         {
-            ClearCursorHighlightVisuals();
+            ClearCursorHighlightPoint();
+        }
+
+        if (!Settings.ClickPulseEnabled && (clickPulseWasEnabled || _cursorClickPulses.Count > 0))
+        {
+            ClearCursorClickPulses();
         }
 
         if (Settings.MagnifierEnabled)
@@ -3177,15 +3184,25 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _cursorClickPulses.ToArray());
     }
 
-    private void ClearCursorHighlightVisuals()
+    private void ClearCursorHighlightPoint()
     {
-        var hadVisuals = _hasCursorHighlightPoint || _cursorClickPulses.Count > 0;
+        var hadVisual = _hasCursorHighlightPoint;
         _hasCursorHighlightPoint = false;
-        _cursorClickPulses.Clear();
-        if (hadVisuals)
+        if (hadVisual)
         {
             _overlayManager?.Invalidate();
         }
+    }
+
+    private void ClearCursorClickPulses()
+    {
+        if (_cursorClickPulses.Count == 0)
+        {
+            return;
+        }
+
+        _cursorClickPulses.Clear();
+        _overlayManager?.Invalidate();
     }
 
     private bool IsCursorHighlightVisuallyActive()
@@ -3206,7 +3223,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
-        if (Settings.CursorHighlightEnabled && Settings.CursorHighlightClickPulseEnabled)
+        if (Settings.ClickPulseEnabled)
         {
             if (!_mouseHook.Install())
             {
@@ -3217,11 +3234,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _mouseHook.Uninstall();
-        if (_cursorClickPulses.Count > 0)
-        {
-            _cursorClickPulses.Clear();
-            _overlayManager?.Invalidate();
-        }
+        ClearCursorClickPulses();
     }
 
     private void OnMouseHookClicked(object? sender, MouseHookClickEventArgs e)
@@ -3234,9 +3247,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         if (_disposed
-            || !Settings.CursorHighlightEnabled
-            || !Settings.CursorHighlightClickPulseEnabled
-            || !IsCursorHighlightVisuallyActive())
+            || !Settings.ClickPulseEnabled)
         {
             return;
         }
