@@ -1,4 +1,5 @@
-﻿using FocusTool.Win.Overlay;
+﻿using System.Windows.Media.Imaging;
+using FocusTool.Win.Overlay;
 
 namespace FocusTool.Win.Models;
 
@@ -15,6 +16,7 @@ internal sealed class AnnotationShape
     public string Color { get; set; } = "#FFFF2020";
     public double Thickness { get; set; } = 4;
     public string Text { get; set; } = string.Empty;
+    public BitmapSource? Image { get; set; }
     public double FontSize { get; set; } = 28;
     public bool IsTemporary { get; set; }
     public double CreatedAtMs { get; set; }
@@ -34,6 +36,7 @@ internal sealed class AnnotationShape
             Color = Color,
             Thickness = Thickness,
             Text = Text,
+            Image = Image,
             FontSize = FontSize,
             IsTemporary = IsTemporary,
             CreatedAtMs = CreatedAtMs,
@@ -102,6 +105,7 @@ internal sealed class AnnotationShape
         {
             AnnotationTool.Pencil or AnnotationTool.Highlighter when Points.Count > 0 => BoundsFromPoints(Points),
             AnnotationTool.Text => TextBounds(),
+            AnnotationTool.Image => ImageBounds(),
             AnnotationTool.StepOval => StepOvalBounds(),
             AnnotationTool.StepRect => StepRectBounds(),
             _ => ScreenRect.FromPoints(Start, End)
@@ -111,6 +115,7 @@ internal sealed class AnnotationShape
         {
             AnnotationTool.Highlighter => Math.Max(6, Thickness * 2.1),
             AnnotationTool.Text => 3,
+            AnnotationTool.Image => 3,
             AnnotationTool.StepOval or AnnotationTool.StepRect => 4,
             _ => Math.Max(3, Thickness / 2 + 2)
         };
@@ -127,7 +132,7 @@ internal sealed class AnnotationShape
             AnnotationTool.Rectangle => RectangleOutlineIntersects(selection),
             AnnotationTool.Ellipse => EllipseOutlineIntersects(selection),
             AnnotationTool.Pencil or AnnotationTool.Highlighter => PolylineIntersects(selection),
-            AnnotationTool.Text or AnnotationTool.StepOval or AnnotationTool.StepRect => GetBounds().Intersects(selection),
+            AnnotationTool.Text or AnnotationTool.Image or AnnotationTool.StepOval or AnnotationTool.StepRect => GetBounds().Intersects(selection),
             _ => GetBounds().Intersects(selection)
         };
     }
@@ -159,6 +164,19 @@ internal sealed class AnnotationShape
         var width = Math.Max(FontSize * 0.7, longestLine * FontSize * 0.58);
         var height = Math.Max(FontSize, lines.Length * TextLineHeight);
 
+        return new ScreenRect(Start.X, Start.Y, Start.X + width, Start.Y + height);
+    }
+
+    private ScreenRect ImageBounds()
+    {
+        var rect = ScreenRect.FromPoints(Start, End);
+        if (rect.Width >= 1 && rect.Height >= 1)
+        {
+            return rect;
+        }
+
+        var width = Math.Max(1, Image?.PixelWidth ?? 1);
+        var height = Math.Max(1, Image?.PixelHeight ?? 1);
         return new ScreenRect(Start.X, Start.Y, Start.X + width, Start.Y + height);
     }
 

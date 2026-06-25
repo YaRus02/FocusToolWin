@@ -9,6 +9,7 @@ internal enum AnnotationTool
     Pencil,
     Highlighter,
     Text,
+    Image,
     Move,
     StepOval,
     StepRect

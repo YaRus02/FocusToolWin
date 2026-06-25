@@ -339,6 +339,9 @@ internal sealed class OverlaySurface : FrameworkElement
                 DrawText(drawingContext, shape, Colors.Black, haloOpacity + 0.12 * opacityScale, new Vector(1.2, 1.2));
                 DrawText(drawingContext, shape, color, opacity, default);
                 break;
+            case AnnotationTool.Image:
+                DrawImageAnnotation(drawingContext, shape, opacity);
+                break;
             case AnnotationTool.StepOval:
                 DrawStepOval(drawingContext, shape, color, opacity, stepNumber ?? 1);
                 break;
@@ -464,7 +467,7 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawObjectEditHandles(DrawingContext drawingContext, AnnotationShape shape)
     {
-        if (shape.Tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect)
+        if (shape.Tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect or AnnotationTool.Image)
         {
             DrawRectHandles(drawingContext, ToRect(shape.Start, shape.End));
             return;
@@ -482,6 +485,24 @@ internal sealed class OverlaySurface : FrameworkElement
         var fill = GetBrush(Colors.White, 0.94);
         var pen = CreatePen(Colors.Black, 0.72, 1.2);
         drawingContext.DrawEllipse(fill, pen, center, RegionMaskHandleSize / 2, RegionMaskHandleSize / 2);
+    }
+
+    private void DrawImageAnnotation(DrawingContext drawingContext, AnnotationShape shape, double opacity)
+    {
+        if (shape.Image is null)
+        {
+            return;
+        }
+
+        var rect = ToRect(shape.Start, shape.End);
+        if (rect.Width < 1 || rect.Height < 1)
+        {
+            return;
+        }
+
+        drawingContext.PushOpacity(opacity);
+        drawingContext.DrawImage(shape.Image, rect);
+        drawingContext.Pop();
     }
 
     private void DrawRectReadout(DrawingContext drawingContext, ScreenRect screenRect, Rect localRect)

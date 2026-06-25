@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Windows.Media.Imaging;
 using FocusTool.Win.Overlay;
 
 namespace FocusTool.Win.Models;
@@ -395,7 +396,9 @@ internal sealed class AnnotationDocument
             return true;
         }
 
-        var indices = SelectedShapeIndices().ToList();
+        var indices = SelectedShapeIndices()
+            .Where(index => _shapes[index].Tool != AnnotationTool.Image)
+            .ToList();
         if (indices.Count == 0 || indices.All(index => string.Equals(_shapes[index].Color, color, StringComparison.Ordinal)))
         {
             return false;
@@ -467,7 +470,7 @@ internal sealed class AnnotationDocument
         }
 
         var indices = SelectedShapeIndices()
-            .Where(index => _shapes[index].Tool != AnnotationTool.Text)
+            .Where(index => _shapes[index].Tool is not AnnotationTool.Text and not AnnotationTool.Image)
             .ToList();
         if (indices.Count == 0)
         {
@@ -519,6 +522,61 @@ internal sealed class AnnotationDocument
         }
 
         ClearSelectionCore();
+        OnChanged();
+        return true;
+    }
+
+    public bool AddPastedText(string text, ScreenPoint point, AppSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        CommitTextInput();
+        ClearSelectionCore();
+        PushUndo();
+
+        var shape = new AnnotationShape
+        {
+            Tool = AnnotationTool.Text,
+            Start = point,
+            End = point,
+            Color = settings.AnnotationColor,
+            Thickness = settings.AnnotationThickness,
+            FontSize = settings.AnnotationFontSize,
+            Text = text.Replace("\r\n", "\n").Replace('\r', '\n')
+        };
+        shape.MarkCreated(_clockProvider());
+        _shapes.Add(shape);
+        SelectSingleIndexCore(_shapes.Count - 1, objectEdit: true);
+
+        OnChanged();
+        return true;
+    }
+
+    public bool AddPastedImage(BitmapSource image, ScreenRect rect)
+    {
+        if (rect.Width < 1 || rect.Height < 1)
+        {
+            return false;
+        }
+
+        CommitTextInput();
+        ClearSelectionCore();
+        PushUndo();
+
+        var shape = new AnnotationShape
+        {
+            Tool = AnnotationTool.Image,
+            Start = new ScreenPoint(rect.Left, rect.Top),
+            End = new ScreenPoint(rect.Right, rect.Bottom),
+            Image = image
+        };
+        shape.MarkCreated(_clockProvider());
+        _shapes.Add(shape);
+        SelectSingleIndexCore(_shapes.Count - 1, objectEdit: true);
+
         OnChanged();
         return true;
     }
@@ -997,6 +1055,7 @@ internal sealed class AnnotationDocument
             && string.Equals(left.Color, right.Color, StringComparison.Ordinal)
             && Math.Abs(left.Thickness - right.Thickness) < 0.0001
             && string.Equals(left.Text, right.Text, StringComparison.Ordinal)
+            && ReferenceEquals(left.Image, right.Image)
             && Math.Abs(left.FontSize - right.FontSize) < 0.0001
             && left.IsTemporary == right.IsTemporary
             && Math.Abs(left.CreatedAtMs - right.CreatedAtMs) < 0.0001
@@ -1053,7 +1112,7 @@ internal sealed class AnnotationDocument
                 return true;
             }
         }
-        else if (shape.Tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect)
+        else if (shape.Tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect or AnnotationTool.Image)
         {
             var rect = ScreenRect.FromPoints(shape.Start, shape.End);
             if (DistanceSquared(point, new ScreenPoint(rect.Left, rect.Top)) <= hitRadiusSquared)
@@ -1103,7 +1162,7 @@ internal sealed class AnnotationDocument
             return;
         }
 
-        if (shape.Tool is not (AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect))
+        if (shape.Tool is not (AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect or AnnotationTool.Image))
         {
             return;
         }
@@ -1117,7 +1176,9 @@ internal sealed class AnnotationDocument
             AnnotationEditHandle.BottomRight => new ScreenPoint(rect.Left, rect.Top),
             _ => shape.Start
         };
-        var next = ApplyConstraint(shape.Tool, anchor, point, shift);
+        var next = shape.Tool == AnnotationTool.Image
+            ? ApplyImageResizeConstraint(anchor, point, shape)
+            : ApplyConstraint(shape.Tool, anchor, point, shift);
         shape.SetEndpoints(anchor, next);
     }
 
@@ -1126,8 +1187,33 @@ internal sealed class AnnotationDocument
         return tool is AnnotationTool.Rectangle
             or AnnotationTool.Ellipse
             or AnnotationTool.StepRect
+            or AnnotationTool.Image
             or AnnotationTool.Line
             or AnnotationTool.Arrow;
+    }
+
+    private static ScreenPoint ApplyImageResizeConstraint(ScreenPoint anchor, ScreenPoint point, AnnotationShape shape)
+    {
+        var width = Math.Max(1, shape.Image?.PixelWidth ?? 1);
+        var height = Math.Max(1, shape.Image?.PixelHeight ?? 1);
+        var aspect = width / height;
+        var dx = point.X - anchor.X;
+        var dy = point.Y - anchor.Y;
+        if (Math.Abs(dx) < 1 && Math.Abs(dy) < 1)
+        {
+            return point;
+        }
+
+        if (Math.Abs(dx) / aspect >= Math.Abs(dy))
+        {
+            dy = Math.Sign(dy == 0 ? 1 : dy) * Math.Abs(dx) / aspect;
+        }
+        else
+        {
+            dx = Math.Sign(dx == 0 ? 1 : dx) * Math.Abs(dy) * aspect;
+        }
+
+        return new ScreenPoint(anchor.X + dx, anchor.Y + dy);
     }
 
     private static double DistanceSquared(ScreenPoint first, ScreenPoint second)

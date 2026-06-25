@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FocusTool.Win.Models;
 using FocusTool.Win.Native;
@@ -2154,6 +2155,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         var shortcuts = Settings.Shortcuts;
 
+        if (key == Key.V && modifiers == ModifierKeys.Control)
+        {
+            return TryPasteClipboardAnnotation();
+        }
+
         if (_annotations.HasTextInput)
         {
             if (key == Key.Enter && modifiers == ModifierKeys.Shift)
@@ -2275,6 +2281,90 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _overlayManager?.Invalidate();
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool TryPasteClipboardAnnotation()
+    {
+        try
+        {
+            if (System.Windows.Clipboard.ContainsImage())
+            {
+                var image = System.Windows.Clipboard.GetImage();
+                if (image is null)
+                {
+                    return false;
+                }
+
+                var frozen = FreezeClipboardImage(image);
+                var rect = CreatePastedImageRect(frozen, GetPasteAnchorPoint());
+                return _annotations.AddPastedImage(frozen, rect);
+            }
+
+            if (!System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.UnicodeText))
+            {
+                return false;
+            }
+
+            var text = System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.UnicodeText);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            if (_annotations.HasTextInput)
+            {
+                _annotations.AppendText(text.Replace("\r\n", "\n").Replace('\r', '\n'));
+                return true;
+            }
+
+            return _annotations.AddPastedText(text, GetPasteAnchorPoint(), Settings);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException or InvalidOperationException)
+        {
+            AppLog.Error("Could not paste clipboard annotation.", ex);
+            return false;
+        }
+    }
+
+    private static BitmapSource FreezeClipboardImage(BitmapSource image)
+    {
+        if (image.IsFrozen)
+        {
+            return image;
+        }
+
+        var clone = image.Clone();
+        clone.Freeze();
+        return clone;
+    }
+
+    private static ScreenPoint GetPasteAnchorPoint()
+    {
+        if (TryGetCursor(out var cursor))
+        {
+            return cursor;
+        }
+
+        var screen = Forms.Screen.PrimaryScreen ?? Forms.Screen.AllScreens[0];
+        return new ScreenPoint(
+            screen.Bounds.Left + screen.Bounds.Width / 2.0,
+            screen.Bounds.Top + screen.Bounds.Height / 2.0);
+    }
+
+    private static ScreenRect CreatePastedImageRect(BitmapSource image, ScreenPoint anchor)
+    {
+        var screen = Forms.Screen.FromPoint(new DrawingPoint((int)Math.Round(anchor.X), (int)Math.Round(anchor.Y)));
+        var maxWidth = Math.Max(160, screen.Bounds.Width * 0.62);
+        var maxHeight = Math.Max(120, screen.Bounds.Height * 0.62);
+        var width = Math.Max(1, image.PixelWidth);
+        var height = Math.Max(1, image.PixelHeight);
+        var scale = Math.Min(1, Math.Min(maxWidth / width, maxHeight / height));
+        var displayWidth = Math.Max(1, width * scale);
+        var displayHeight = Math.Max(1, height * scale);
+        var left = anchor.X - displayWidth / 2;
+        var top = anchor.Y - displayHeight / 2;
+
+        return new ScreenRect(left, top, left + displayWidth, top + displayHeight);
     }
 
     private bool HandleTextObjectClick(ScreenPoint point)
