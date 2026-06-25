@@ -337,6 +337,7 @@ public partial class SettingsWindow : Window
         ToolHighlighterBox.Text = settings.Shortcuts.ToolHighlighter;
         ToolTextBox.Text = settings.Shortcuts.ToolText;
         ToolMoveBox.Text = settings.Shortcuts.ToolMove;
+        ToolStepBox.Text = settings.Shortcuts.ToolStep;
         Color1Box.Text = settings.Shortcuts.Color1;
         Color2Box.Text = settings.Shortcuts.Color2;
         Color3Box.Text = settings.Shortcuts.Color3;
@@ -380,6 +381,7 @@ public partial class SettingsWindow : Window
         shortcuts.ToolHighlighter = ReadShortcutText(ToolHighlighterBox);
         shortcuts.ToolText = ReadShortcutText(ToolTextBox);
         shortcuts.ToolMove = ReadShortcutText(ToolMoveBox);
+        shortcuts.ToolStep = ReadShortcutText(ToolStepBox);
         shortcuts.Color1 = ReadShortcutText(Color1Box);
         shortcuts.Color2 = ReadShortcutText(Color2Box);
         shortcuts.Color3 = ReadShortcutText(Color3Box);
@@ -418,6 +420,7 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Highlighter", shortcuts.ToolHighlighter)
             || !ValidateShortcut("Text", shortcuts.ToolText)
             || !ValidateShortcut("Move selection", shortcuts.ToolMove)
+            || !ValidateShortcut("Step marker", shortcuts.ToolStep)
             || !ValidateShortcut("Color 1", shortcuts.Color1)
             || !ValidateShortcut("Color 2", shortcuts.Color2)
             || !ValidateShortcut("Color 3", shortcuts.Color3)
@@ -542,6 +545,7 @@ public partial class SettingsWindow : Window
             ("Highlighter", shortcuts.ToolHighlighter),
             ("Text", shortcuts.ToolText),
             ("Move selection", shortcuts.ToolMove),
+            ("Step marker", shortcuts.ToolStep),
             ("Color 1", shortcuts.Color1),
             ("Color 2", shortcuts.Color2),
             ("Color 3", shortcuts.Color3),

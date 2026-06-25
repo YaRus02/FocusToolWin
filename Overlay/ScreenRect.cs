@@ -24,6 +24,15 @@ internal readonly record struct ScreenRect(double Left, double Top, double Right
         return new ScreenRect(Left + dx, Top + dy, Right + dx, Bottom + dy);
     }
 
+    public ScreenRect Union(ScreenRect other)
+    {
+        return new ScreenRect(
+            Math.Min(Left, other.Left),
+            Math.Min(Top, other.Top),
+            Math.Max(Right, other.Right),
+            Math.Max(Bottom, other.Bottom));
+    }
+
     public bool Contains(ScreenPoint point)
     {
         return point.X >= Left && point.X <= Right && point.Y >= Top && point.Y <= Bottom;

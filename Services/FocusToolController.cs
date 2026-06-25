@@ -74,6 +74,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private ScreenPoint _lastMagnifierCursor;
     private bool _hasLastMagnifierCursor;
     private InteractionMode _mode = InteractionMode.Passthrough;
+    private AnnotationTool _lastStepTool = AnnotationTool.StepOval;
 
     public event EventHandler? StateChanged;
 
@@ -114,6 +115,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _annotations = new AnnotationDocument(NowMs);
         Settings = _settingsStore.Load();
         CacheParsedSettings();
+        if (IsStepTool(CurrentTool))
+        {
+            _lastStepTool = CurrentTool;
+        }
+
         Settings.SpotlightEnabled = false;
         Settings.MagnifierEnabled = false;
         _spotlightEnabled = false;
@@ -979,6 +985,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetAnnotationTool(AnnotationTool tool)
     {
+        if (IsStepTool(tool))
+        {
+            _lastStepTool = tool;
+        }
+
         var updated = Settings.Clone();
         updated.SetAnnotationTool(tool);
         ApplySettings(updated);
@@ -986,6 +997,15 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         if (tool != AnnotationTool.Move)
         {
             _annotations.ClearSelection();
+        }
+    }
+
+    public void SelectStepTool()
+    {
+        SetAnnotationTool(_lastStepTool);
+        if (_mode == InteractionMode.Passthrough)
+        {
+            SetInteractionMode(InteractionMode.Annotate);
         }
     }
 
@@ -1245,6 +1265,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (!IsAnnotationMode(_mode) || button != MouseButton.Left)
         {
+            return;
+        }
+
+        if (CurrentTool == AnnotationTool.StepOval)
+        {
+            _annotations.AddPointShape(AnnotationTool.StepOval, point, Settings);
             return;
         }
 
@@ -2373,6 +2399,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return true;
         }
 
+        if (Matches(key, modifiers, shortcuts.ToolStep))
+        {
+            SelectStepTool();
+            return true;
+        }
+
         return false;
     }
 
@@ -2425,6 +2457,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private static bool IsRectSelectionMode(InteractionMode mode)
     {
         return mode is InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect;
+    }
+
+    private static bool IsStepTool(AnnotationTool tool)
+    {
+        return tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
     }
 
     private bool IsSpotlightVisibleInMode(InteractionMode mode)

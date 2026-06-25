@@ -54,6 +54,11 @@ internal sealed class OverlayToolbarWindow : Window
     private TextBlock _trailText = null!;
     private TextBlock _thicknessText = null!;
     private TextBlock _fontText = null!;
+    private WpfButton _stepButton = null!;
+    private WpfButton _stepOptionsButton = null!;
+    private UIElement _stepOptionsRow = null!;
+    private WpfButton _stepOvalButton = null!;
+    private WpfButton _stepRectButton = null!;
     private WpfButton _fadeButton = null!;
     private WpfButton _fadeOptionsButton = null!;
     private UIElement _fadeOptionsRow = null!;
@@ -78,6 +83,7 @@ internal sealed class OverlayToolbarWindow : Window
 
     private Border _contextualHost = null!;
     private string? _openRowKey;
+    private bool _stepOptionsVisible;
     private bool _fadeOptionsVisible;
 
     private UIElement _expandedRoot = null!;
@@ -267,6 +273,10 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(CreateToolButton(AnnotationTool.Ellipse, "Oval", "Ellipse / Circle", 37));
         row.Children.Add(CreateToolButton(AnnotationTool.Text, "Text", "Text", 37));
         row.Children.Add(CreateToolButton(AnnotationTool.Move, "Move", "Move selection", 41));
+        _stepButton = CreateButton("Step", "Numbered step marker", (_, _) => _controller.SelectStepTool(), width: 41);
+        row.Children.Add(_stepButton);
+        _stepOptionsButton = CreateInlineOptionsButton("Step marker shape", ToggleStepOptions);
+        row.Children.Add(_stepOptionsButton);
         row.Children.Add(CreateSeparator());
         AddColorSwatches(row, _colorButtons, "Annotation color", _controller.SetAnnotationPresetColor);
         row.Children.Add(CreateSeparator());
@@ -285,12 +295,34 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(_redoButton);
         row.Children.Add(_clearButton);
 
+        _stepOptionsRow = BuildStepOptionsRow();
+        _stepOptionsRow.Visibility = Visibility.Collapsed;
         _fadeOptionsRow = BuildFadeOptionsRow();
         _fadeOptionsRow.Visibility = Visibility.Collapsed;
 
         stack.Children.Add(row);
+        stack.Children.Add(_stepOptionsRow);
         stack.Children.Add(_fadeOptionsRow);
         return stack;
+    }
+
+    private UIElement BuildStepOptionsRow()
+    {
+        var row = CreateRow();
+        row.Margin = new Thickness(0, 5, 0, 0);
+        row.Children.Add(new TextBlock
+        {
+            Text = "Step",
+            Foreground = LabelBrush,
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0)
+        });
+        _stepOvalButton = CreateToolButton(AnnotationTool.StepOval, "Oval", "Click to place numbered oval marker", 45);
+        _stepRectButton = CreateToolButton(AnnotationTool.StepRect, "Rect", "Drag numbered rectangle marker", 43);
+        row.Children.Add(_stepOvalButton);
+        row.Children.Add(_stepRectButton);
+        return row;
     }
 
     private UIElement BuildFadeOptionsRow()
@@ -689,6 +721,7 @@ internal sealed class OverlayToolbarWindow : Window
 
         if (key != "draw")
         {
+            HideStepOptions();
             HideFadeOptions();
         }
 
@@ -709,6 +742,7 @@ internal sealed class OverlayToolbarWindow : Window
         }
 
         _openRowKey = null;
+        HideStepOptions();
         HideFadeOptions();
         _contextualHost.Child = null;
         _contextualHost.Visibility = Visibility.Collapsed;
@@ -721,9 +755,40 @@ internal sealed class OverlayToolbarWindow : Window
         ReassertTopmost();
     }
 
+    private void ToggleStepOptions()
+    {
+        _stepOptionsVisible = !_stepOptionsVisible;
+        if (_stepOptionsVisible)
+        {
+            HideFadeOptions();
+        }
+
+        _stepOptionsRow.Visibility = _stepOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
+        UpdateState();
+        UpdateLayout();
+        ClampOntoMonitor();
+        ReassertTopmost();
+    }
+
+    private void HideStepOptions()
+    {
+        if (_stepOptionsRow is null)
+        {
+            return;
+        }
+
+        _stepOptionsVisible = false;
+        _stepOptionsRow.Visibility = Visibility.Collapsed;
+    }
+
     private void ToggleFadeOptions()
     {
         _fadeOptionsVisible = !_fadeOptionsVisible;
+        if (_fadeOptionsVisible)
+        {
+            HideStepOptions();
+        }
+
         _fadeOptionsRow.Visibility = _fadeOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
         UpdateState();
         UpdateLayout();
@@ -792,6 +857,11 @@ internal sealed class OverlayToolbarWindow : Window
                 SetButtonActive(button, _controller.CurrentTool == tool);
             }
 
+            SetButtonActive(_stepButton, IsStepTool(_controller.CurrentTool));
+            SetButtonActive(_stepOptionsButton, _stepOptionsVisible);
+            SetButtonActive(_stepOvalButton, _controller.CurrentTool == AnnotationTool.StepOval);
+            SetButtonActive(_stepRectButton, _controller.CurrentTool == AnnotationTool.StepRect);
+
             UpdateColorSwatches(_colorButtons, settings.AnnotationColorPresets, settings.AnnotationColor);
             _thicknessText.Text = $"{settings.AnnotationThickness:0}";
             _fontText.Text = $"{settings.AnnotationFontSize:0}";
@@ -855,6 +925,11 @@ internal sealed class OverlayToolbarWindow : Window
     {
         var seconds = ms / 1000.0;
         return $"{seconds:0.#}s";
+    }
+
+    private static bool IsStepTool(AnnotationTool tool)
+    {
+        return tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
     }
 
     private static void UpdateColorSwatches(List<WpfButton> buttons, IReadOnlyList<string> presets, string currentColor)

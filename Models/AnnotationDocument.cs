@@ -62,6 +62,33 @@ internal sealed class AnnotationDocument
         OnChanged();
     }
 
+    public void AddPointShape(AnnotationTool tool, ScreenPoint point, AppSettings settings)
+    {
+        if (tool != AnnotationTool.StepOval)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tool), tool, "Only point-based annotation tools can be added directly.");
+        }
+
+        CommitTextDraft();
+        ClearSelectionCore();
+        PushUndo();
+
+        var shape = new AnnotationShape
+        {
+            Tool = tool,
+            Start = point,
+            End = point,
+            Color = settings.AnnotationColor,
+            Thickness = settings.AnnotationThickness,
+            FontSize = settings.AnnotationFontSize
+        };
+        shape.ApplyFadingSettings(settings);
+        shape.MarkCreated(_clockProvider());
+        _shapes.Add(shape);
+
+        OnChanged();
+    }
+
     public void UpdateStroke(ScreenPoint current, bool shift)
     {
         if (Draft is null || Draft.Tool is AnnotationTool.Text or AnnotationTool.Move)
@@ -634,9 +661,12 @@ internal sealed class AnnotationDocument
 
     private static bool IsMeaningful(AnnotationShape shape)
     {
-        return (shape.Tool == AnnotationTool.Pencil || shape.Tool == AnnotationTool.Highlighter)
-            ? shape.Points.Count > 1
-            : shape.Start.DistanceTo(shape.End) >= 2.0;
+        return shape.Tool switch
+        {
+            AnnotationTool.Pencil or AnnotationTool.Highlighter => shape.Points.Count > 1,
+            AnnotationTool.StepOval => true,
+            _ => shape.Start.DistanceTo(shape.End) >= 2.0
+        };
     }
 
     private static ScreenPoint ApplyConstraint(AnnotationTool tool, ScreenPoint start, ScreenPoint current, bool shift)
@@ -649,7 +679,7 @@ internal sealed class AnnotationDocument
         var dx = current.X - start.X;
         var dy = current.Y - start.Y;
 
-        if (tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse)
+        if (tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect)
         {
             var size = Math.Max(Math.Abs(dx), Math.Abs(dy));
             // Use a non-zero sign so an axis-aligned drag (dx==0 or dy==0) still

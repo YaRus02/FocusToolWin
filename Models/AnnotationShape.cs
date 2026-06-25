@@ -5,6 +5,8 @@ namespace FocusTool.Win.Models;
 internal sealed class AnnotationShape
 {
     private const double TextLineHeightFactor = 1.12;
+    private const double StepBadgeHeightFactor = 1.45;
+    private const double StepBadgeWidthFactor = 2.2;
 
     public AnnotationTool Tool { get; set; }
     public ScreenPoint Start { get; set; }
@@ -100,6 +102,8 @@ internal sealed class AnnotationShape
         {
             AnnotationTool.Pencil or AnnotationTool.Highlighter when Points.Count > 0 => BoundsFromPoints(Points),
             AnnotationTool.Text => TextBounds(),
+            AnnotationTool.StepOval => StepOvalBounds(),
+            AnnotationTool.StepRect => StepRectBounds(),
             _ => ScreenRect.FromPoints(Start, End)
         };
 
@@ -107,6 +111,7 @@ internal sealed class AnnotationShape
         {
             AnnotationTool.Highlighter => Math.Max(6, Thickness * 2.1),
             AnnotationTool.Text => 3,
+            AnnotationTool.StepOval or AnnotationTool.StepRect => 4,
             _ => Math.Max(3, Thickness / 2 + 2)
         };
 
@@ -122,7 +127,7 @@ internal sealed class AnnotationShape
             AnnotationTool.Rectangle => RectangleOutlineIntersects(selection),
             AnnotationTool.Ellipse => EllipseOutlineIntersects(selection),
             AnnotationTool.Pencil or AnnotationTool.Highlighter => PolylineIntersects(selection),
-            AnnotationTool.Text => GetBounds().Intersects(selection),
+            AnnotationTool.Text or AnnotationTool.StepOval or AnnotationTool.StepRect => GetBounds().Intersects(selection),
             _ => GetBounds().Intersects(selection)
         };
     }
@@ -148,6 +153,41 @@ internal sealed class AnnotationShape
         var height = Math.Max(FontSize, lines.Length * TextLineHeight);
 
         return new ScreenRect(Start.X, Start.Y, Start.X + width, Start.Y + height);
+    }
+
+    private ScreenRect StepOvalBounds()
+    {
+        var height = StepBadgeHeight(FontSize);
+        var width = StepBadgeWidth(FontSize);
+        return new ScreenRect(
+            Start.X - width / 2,
+            Start.Y - height / 2,
+            Start.X + width / 2,
+            Start.Y + height / 2);
+    }
+
+    private ScreenRect StepRectBounds()
+    {
+        var rect = ScreenRect.FromPoints(Start, End);
+        var height = StepBadgeHeight(FontSize);
+        var width = StepBadgeWidth(FontSize);
+        var badge = new ScreenRect(
+            rect.Left - width / 2,
+            rect.Top - height / 2,
+            rect.Left + width / 2,
+            rect.Top + height / 2);
+
+        return rect.Union(badge);
+    }
+
+    private static double StepBadgeHeight(double fontSize)
+    {
+        return Math.Clamp(fontSize * StepBadgeHeightFactor, 22, 96);
+    }
+
+    private static double StepBadgeWidth(double fontSize)
+    {
+        return Math.Max(StepBadgeHeight(fontSize), fontSize * StepBadgeWidthFactor);
     }
 
     private bool PolylineIntersects(ScreenRect selection)

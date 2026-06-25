@@ -197,6 +197,8 @@ internal sealed class TrayIconController : IDisposable
         AddTool(tools, AnnotationTool.Highlighter, "Highlighter");
         AddTool(tools, AnnotationTool.Text, "Text");
         AddTool(tools, AnnotationTool.Move, "Move selection");
+        AddTool(tools, AnnotationTool.StepOval, "Step oval");
+        AddTool(tools, AnnotationTool.StepRect, "Step rectangle");
 
         var annotationColors = new ToolStripMenuItem("Annotation color");
         for (var i = 0; i < 5; i++)
@@ -439,6 +441,8 @@ internal sealed class TrayIconController : IDisposable
             AnnotationTool.Highlighter => "Highlighter",
             AnnotationTool.Text => "Text",
             AnnotationTool.Move => "Move selection",
+            AnnotationTool.StepOval => "Step oval",
+            AnnotationTool.StepRect => "Step rectangle",
             _ => tool.ToString()
         };
     }
@@ -515,6 +519,7 @@ internal sealed class TrayIconController : IDisposable
             AnnotationTool.Highlighter => _controller.Settings.Shortcuts.ToolHighlighter,
             AnnotationTool.Text => _controller.Settings.Shortcuts.ToolText,
             AnnotationTool.Move => _controller.Settings.Shortcuts.ToolMove,
+            AnnotationTool.StepOval or AnnotationTool.StepRect => _controller.Settings.Shortcuts.ToolStep,
             _ => string.Empty
         };
     }

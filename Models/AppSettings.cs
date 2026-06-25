@@ -343,6 +343,7 @@ public sealed class ShortcutSettings
     public string ToolHighlighter { get; set; } = "H";
     public string ToolText { get; set; } = "T";
     public string ToolMove { get; set; } = "M";
+    public string ToolStep { get; set; } = "N";
     public string Color1 { get; set; } = "1";
     public string Color2 { get; set; } = "2";
     public string Color3 { get; set; } = "3";
@@ -382,6 +383,7 @@ public sealed class ShortcutSettings
         ToolHighlighter = ToolHighlighter,
         ToolText = ToolText,
         ToolMove = ToolMove,
+        ToolStep = ToolStep,
         Color1 = Color1,
         Color2 = Color2,
         Color3 = Color3,
@@ -422,6 +424,7 @@ public sealed class ShortcutSettings
         ToolHighlighter = NormalizeShortcut(ToolHighlighter, "H");
         ToolText = NormalizeShortcut(ToolText, "T");
         ToolMove = NormalizeShortcut(ToolMove, "M");
+        ToolStep = NormalizeShortcut(ToolStep, "N");
         Color1 = NormalizeShortcut(Color1, "1");
         Color2 = NormalizeShortcut(Color2, "2");
         Color3 = NormalizeShortcut(Color3, "3");

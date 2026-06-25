@@ -233,18 +233,21 @@ internal sealed class OverlaySurface : FrameworkElement
     private void DrawAnnotations(DrawingContext drawingContext)
     {
         var nowMs = _clockProvider();
+        var stepNumber = 1;
         foreach (var shape in _annotations.Shapes)
         {
             var opacityScale = shape.GetOpacityScale(nowMs);
             if (opacityScale > 0.001)
             {
-                DrawShape(drawingContext, shape, isDraft: false, opacityScale);
+                var number = IsStepTool(shape.Tool) ? stepNumber++ : (int?)null;
+                DrawShape(drawingContext, shape, isDraft: false, opacityScale, number);
             }
         }
 
         if (_annotations.Draft is { Tool: not AnnotationTool.Move } draft)
         {
-            DrawShape(drawingContext, draft, isDraft: true, opacityScale: 1);
+            var number = IsStepTool(draft.Tool) ? stepNumber : (int?)null;
+            DrawShape(drawingContext, draft, isDraft: true, opacityScale: 1, number);
         }
 
         if (_annotations.SelectionBounds is { } selectionBounds)
@@ -258,7 +261,7 @@ internal sealed class OverlaySurface : FrameworkElement
         }
     }
 
-    private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft, double opacityScale)
+    private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft, double opacityScale, int? stepNumber = null)
     {
         var opacity = (isDraft ? 0.72 : 0.95) * opacityScale;
         if (opacity <= 0.001)
@@ -305,9 +308,20 @@ internal sealed class OverlaySurface : FrameworkElement
                 DrawText(drawingContext, shape, Colors.Black, haloOpacity + 0.12 * opacityScale, new Vector(1.2, 1.2));
                 DrawText(drawingContext, shape, color, opacity, default);
                 break;
+            case AnnotationTool.StepOval:
+                DrawStepOval(drawingContext, shape, color, opacity, stepNumber ?? 1);
+                break;
+            case AnnotationTool.StepRect:
+                DrawStepRect(drawingContext, shape, color, haloPen, pen, opacity, stepNumber ?? 1);
+                break;
             case AnnotationTool.Move:
                 break;
         }
+    }
+
+    private static bool IsStepTool(AnnotationTool tool)
+    {
+        return tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
     }
 
     // The dashed selection outline is identical every frame, so build it once and
@@ -534,6 +548,78 @@ internal sealed class OverlaySurface : FrameworkElement
 
         var formattedText = GetFormattedText(text, color, opacity, shape.FontSize, shape.TextLineHeight);
         drawingContext.DrawText(formattedText, ToLocal(shape.Start) + offset);
+    }
+
+    private void DrawStepOval(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, double opacity, int number)
+    {
+        var center = ToLocal(shape.Start);
+        var formattedText = CreateStepFormattedText(number, color, opacity, shape.FontSize);
+        var badge = CreateStepBadgeRect(center, shape.FontSize, formattedText.WidthIncludingTrailingWhitespace);
+        DrawStepBadge(drawingContext, badge, color, opacity, formattedText);
+    }
+
+    private void DrawStepRect(
+        DrawingContext drawingContext,
+        AnnotationShape shape,
+        MediaColor color,
+        WpfPen haloPen,
+        WpfPen pen,
+        double opacity,
+        int number)
+    {
+        var rect = ToRect(shape.Start, shape.End);
+        if (rect.Width >= 1 && rect.Height >= 1)
+        {
+            drawingContext.DrawRectangle(null, haloPen, rect);
+            drawingContext.DrawRectangle(null, pen, rect);
+        }
+
+        var formattedText = CreateStepFormattedText(number, color, opacity, shape.FontSize);
+        var badge = CreateStepBadgeRect(new WpfPoint(rect.Left, rect.Top), shape.FontSize, formattedText.WidthIncludingTrailingWhitespace);
+        DrawStepBadge(drawingContext, badge, color, opacity, formattedText);
+    }
+
+    private FormattedText CreateStepFormattedText(int number, MediaColor badgeColor, double opacity, double baseFontSize)
+    {
+        var fontSize = Math.Clamp(baseFontSize * 0.82, 10, 72);
+        return GetFormattedText(
+            Math.Max(1, number).ToString(CultureInfo.InvariantCulture),
+            GetReadableTextColor(badgeColor),
+            opacity,
+            fontSize,
+            fontSize * 1.05);
+    }
+
+    private static Rect CreateStepBadgeRect(WpfPoint center, double fontSize, double textWidth)
+    {
+        var height = Math.Clamp(fontSize * 1.45, 22, 96);
+        var width = Math.Max(height, textWidth + fontSize * 0.85);
+        return new Rect(center.X - width / 2, center.Y - height / 2, width, height);
+    }
+
+    private static void DrawStepBadge(
+        DrawingContext drawingContext,
+        Rect badge,
+        MediaColor color,
+        double opacity,
+        FormattedText formattedText)
+    {
+        var radius = badge.Height / 2;
+        var haloPen = CreatePen(Colors.Black, 0.36 * opacity, Math.Max(2, badge.Height * 0.09));
+        var edgePen = CreatePen(GetReadableTextColor(color), 0.22 * opacity, 1.1);
+        drawingContext.DrawRoundedRectangle(GetBrush(color, opacity), haloPen, badge, radius, radius);
+        drawingContext.DrawRoundedRectangle(null, edgePen, badge, radius, radius);
+
+        var textPoint = new WpfPoint(
+            badge.Left + (badge.Width - formattedText.WidthIncludingTrailingWhitespace) / 2,
+            badge.Top + (badge.Height - formattedText.Height) / 2);
+        drawingContext.DrawText(formattedText, textPoint);
+    }
+
+    private static MediaColor GetReadableTextColor(MediaColor background)
+    {
+        var luminance = (0.299 * background.R + 0.587 * background.G + 0.114 * background.B) / 255.0;
+        return luminance > 0.58 ? Colors.Black : Colors.White;
     }
 
     // FormattedText glyph layout is one of the most expensive WPF objects to build;
