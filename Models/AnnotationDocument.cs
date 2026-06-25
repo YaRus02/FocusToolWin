@@ -329,6 +329,12 @@ internal sealed class AnnotationDocument
         return TryFindShapeAt(point, out _);
     }
 
+    public bool HitTestStep(ScreenPoint point)
+    {
+        return TryFindShapeAt(point, out var index)
+            && _shapes[index].Tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
+    }
+
     public bool TryBeginTextEditAt(ScreenPoint point)
     {
         CommitTextInput();

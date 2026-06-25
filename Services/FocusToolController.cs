@@ -38,6 +38,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _settingsSaveTimer;
     private readonly DispatcherTimer _pinnedLensRefreshTimer;
+    private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
     private MagnifierHostWindow? _magnifierHost;
@@ -62,6 +63,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private ScreenPoint _lastSpotlightRegionMovePoint;
     private ScreenPoint _lastTextClickPoint;
     private ScreenPoint _lastObjectClickPoint;
+    private ScreenPoint _pendingTextEditMovePoint;
     private readonly List<CursorClickPulse> _cursorClickPulses = [];
     private readonly RectSelectionSession _rectSelection = new();
     private bool _hasLastCursor;
@@ -73,6 +75,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _drawing;
     private bool _movingSelection;
     private bool _draggingAnnotationEditHandle;
+    private bool _pendingTextEditMove;
     private bool _pushToAnnotateActive;
     private bool _pushToAnnotateExitPending;
     private bool _restoreToolbarAfterRectSelection;
@@ -305,6 +308,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _pushToAnnotateActive = true;
         _pushToAnnotateExitPending = false;
+        _pushToAnnotatePolledShortcutDown.Clear();
         _timer.Interval = ActiveInterval;
         SetInteractionMode(InteractionMode.Annotate);
     }
@@ -1879,6 +1883,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (IsStepTool(CurrentTool) && _annotations.HitTestStep(point))
+        {
+            return;
+        }
+
         if (CurrentTool == AnnotationTool.StepOval)
         {
             _annotations.AddPointShape(AnnotationTool.StepOval, point, Settings);
@@ -2008,6 +2017,26 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (!IsAnnotationMode(_mode))
         {
+            return;
+        }
+
+        if (_pendingTextEditMove)
+        {
+            if (point.DistanceTo(_pendingTextEditMovePoint) < MovementThresholdPixels * 4)
+            {
+                return;
+            }
+
+            _annotations.CommitTextInput();
+            if (_annotations.BeginSelectionMove(_pendingTextEditMovePoint))
+            {
+                _movingSelection = true;
+                _lastSelectionMovePoint = _pendingTextEditMovePoint;
+                _annotations.MoveSelectionBy(point.X - _lastSelectionMovePoint.X, point.Y - _lastSelectionMovePoint.Y);
+                _lastSelectionMovePoint = point;
+            }
+
+            _pendingTextEditMove = false;
             return;
         }
 
@@ -2198,6 +2227,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (_pendingTextEditMove)
+        {
+            _pendingTextEditMove = false;
+            return;
+        }
+
         if (_draggingAnnotationEditHandle)
         {
             _annotations.EndObjectEditHandleDrag();
@@ -2331,6 +2366,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _annotations.EndSelectionMove();
             _movingSelection = false;
         }
+
+        _pendingTextEditMove = false;
 
         if (_draggingAnnotationEditHandle)
         {
@@ -2641,8 +2678,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if (!_annotations.TextEditContains(point))
             {
                 _annotations.CommitTextInput();
+                _pendingTextEditMove = false;
+                ResetTextClickTracking();
+                return true;
             }
 
+            _pendingTextEditMove = true;
+            _pendingTextEditMovePoint = point;
             ResetTextClickTracking();
             return true;
         }
@@ -2665,7 +2707,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _lastTextClickMs = NowMs();
         _hasLastTextClick = true;
         ResetObjectClickTracking();
-        return false;
+        return true;
     }
 
     private bool HandleObjectEditClick(ScreenPoint point)
@@ -2956,12 +2998,18 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (!_pushToAnnotateExitPending)
+        {
+            PollPushToAnnotateShortcuts();
+        }
+
         if (!_pushToAnnotateExitPending && _pushToAnnotateShortcut.IsPressed())
         {
             _timer.Interval = ActiveInterval;
             return;
         }
 
+        _pushToAnnotatePolledShortcutDown.Clear();
         _pushToAnnotateExitPending = true;
         TryCompletePushToAnnotateExit();
         if (_pushToAnnotateActive)
@@ -2979,6 +3027,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _pushToAnnotateActive = false;
         _pushToAnnotateExitPending = false;
+        _pushToAnnotatePolledShortcutDown.Clear();
         if (_mode == InteractionMode.Annotate)
         {
             SetInteractionMode(InteractionMode.Passthrough);
@@ -2992,6 +3041,52 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             && !_movingSelection
             && !_draggingAnnotationEditHandle
             && !_annotations.HasTextInput;
+    }
+
+    private void PollPushToAnnotateShortcuts()
+    {
+        if (_mode != InteractionMode.Annotate || _annotations.HasTextInput)
+        {
+            _pushToAnnotatePolledShortcutDown.Clear();
+            return;
+        }
+
+        var shortcuts = Settings.Shortcuts;
+        PollPushToAnnotateShortcut("clear-alt", shortcuts.ClearAlternate, ClearAnnotations);
+        PollPushToAnnotateShortcut("tool-arrow", shortcuts.ToolArrow, () => SetAnnotationTool(AnnotationTool.Arrow));
+        PollPushToAnnotateShortcut("tool-rectangle", shortcuts.ToolRectangle, () => SetAnnotationTool(AnnotationTool.Rectangle));
+        PollPushToAnnotateShortcut("tool-ellipse", shortcuts.ToolEllipse, () => SetAnnotationTool(AnnotationTool.Ellipse));
+        PollPushToAnnotateShortcut("tool-line", shortcuts.ToolLine, () => SetAnnotationTool(AnnotationTool.Line));
+        PollPushToAnnotateShortcut("tool-pencil", shortcuts.ToolPencil, () => SetAnnotationTool(AnnotationTool.Pencil));
+        PollPushToAnnotateShortcut("tool-highlighter", shortcuts.ToolHighlighter, () => SetAnnotationTool(AnnotationTool.Highlighter));
+        PollPushToAnnotateShortcut("tool-text", shortcuts.ToolText, () => SetAnnotationTool(AnnotationTool.Text));
+        PollPushToAnnotateShortcut("tool-move", shortcuts.ToolMove, () => SetAnnotationTool(AnnotationTool.Move));
+        PollPushToAnnotateShortcut("tool-step", shortcuts.ToolStep, SelectStepTool);
+        PollPushToAnnotateShortcut("color-1", shortcuts.Color1, () => SetAnnotationPresetColor(0));
+        PollPushToAnnotateShortcut("color-2", shortcuts.Color2, () => SetAnnotationPresetColor(1));
+        PollPushToAnnotateShortcut("color-3", shortcuts.Color3, () => SetAnnotationPresetColor(2));
+        PollPushToAnnotateShortcut("color-4", shortcuts.Color4, () => SetAnnotationPresetColor(3));
+        PollPushToAnnotateShortcut("color-5", shortcuts.Color5, () => SetAnnotationPresetColor(4));
+    }
+
+    private void PollPushToAnnotateShortcut(string id, string shortcutText, Action action)
+    {
+        if (ShortcutSettings.IsShortcutDisabled(shortcutText) || !Shortcut.TryParse(shortcutText, out var shortcut))
+        {
+            _pushToAnnotatePolledShortcutDown.Remove(id);
+            return;
+        }
+
+        if (!shortcut.IsPressed())
+        {
+            _pushToAnnotatePolledShortcutDown.Remove(id);
+            return;
+        }
+
+        if (_pushToAnnotatePolledShortcutDown.Add(id))
+        {
+            action();
+        }
     }
 
     private bool UpdateFadingAnnotations()

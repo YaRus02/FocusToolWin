@@ -6,6 +6,7 @@ namespace FocusTool.Win.Models;
 internal sealed class AnnotationShape
 {
     private const double TextLineHeightFactor = 1.12;
+    private const double TextAverageGlyphWidthFactor = 0.64;
     private const double StepBadgeHeightFactor = 1.45;
     private const double StepBadgeWidthFactor = 2.2;
 
@@ -132,7 +133,8 @@ internal sealed class AnnotationShape
             AnnotationTool.Rectangle => RectangleOutlineIntersects(selection),
             AnnotationTool.Ellipse => EllipseOutlineIntersects(selection),
             AnnotationTool.Pencil or AnnotationTool.Highlighter => PolylineIntersects(selection),
-            AnnotationTool.Text or AnnotationTool.Image or AnnotationTool.StepOval or AnnotationTool.StepRect => GetBounds().Intersects(selection),
+            AnnotationTool.StepRect => StepRectIntersects(selection),
+            AnnotationTool.Text or AnnotationTool.Image or AnnotationTool.StepOval => GetBounds().Intersects(selection),
             _ => GetBounds().Intersects(selection)
         };
     }
@@ -161,7 +163,7 @@ internal sealed class AnnotationShape
     {
         var lines = Text.Replace("\r\n", "\n").Split('\n');
         var longestLine = Math.Max(1, lines.Max(line => line.Length));
-        var width = Math.Max(FontSize * 0.7, longestLine * FontSize * 0.58);
+        var width = Math.Max(FontSize * 0.7, longestLine * FontSize * TextAverageGlyphWidthFactor);
         var height = Math.Max(FontSize, lines.Length * TextLineHeight);
 
         return new ScreenRect(Start.X, Start.Y, Start.X + width, Start.Y + height);
@@ -194,15 +196,7 @@ internal sealed class AnnotationShape
     private ScreenRect StepRectBounds()
     {
         var rect = ScreenRect.FromPoints(Start, End);
-        var height = StepBadgeHeight(FontSize);
-        var width = StepBadgeWidth(FontSize);
-        var badge = new ScreenRect(
-            rect.Left - width / 2,
-            rect.Top - height / 2,
-            rect.Left + width / 2,
-            rect.Top + height / 2);
-
-        return rect.Union(badge);
+        return rect.Union(StepRectBadgeBounds(rect));
     }
 
     private static double StepBadgeHeight(double fontSize)
@@ -252,6 +246,24 @@ internal sealed class AnnotationShape
             || SegmentIntersectsRect(topRight, bottomRight, hitRect)
             || SegmentIntersectsRect(bottomRight, bottomLeft, hitRect)
             || SegmentIntersectsRect(bottomLeft, topLeft, hitRect);
+    }
+
+    private bool StepRectIntersects(ScreenRect selection)
+    {
+        var rect = ScreenRect.FromPoints(Start, End);
+        return RectangleOutlineIntersects(selection)
+            || StepRectBadgeBounds(rect).Intersects(selection);
+    }
+
+    private ScreenRect StepRectBadgeBounds(ScreenRect rect)
+    {
+        var height = StepBadgeHeight(FontSize);
+        var width = StepBadgeWidth(FontSize);
+        return new ScreenRect(
+            rect.Left - width / 2,
+            rect.Top - height / 2,
+            rect.Left + width / 2,
+            rect.Top + height / 2);
     }
 
     private bool EllipseOutlineIntersects(ScreenRect selection)

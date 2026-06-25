@@ -262,20 +262,20 @@ internal sealed class OverlaySurface : FrameworkElement
     private void DrawAnnotations(DrawingContext drawingContext)
     {
         var nowMs = _clockProvider();
-        var stepNumber = 1;
+        var stepNumbersByColor = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var shape in _annotations.Shapes)
         {
             var opacityScale = shape.GetOpacityScale(nowMs);
             if (opacityScale > 0.001)
             {
-                var number = IsStepTool(shape.Tool) ? stepNumber++ : (int?)null;
+                var number = IsStepTool(shape.Tool) ? NextStepNumber(stepNumbersByColor, shape.Color) : (int?)null;
                 DrawShape(drawingContext, shape, isDraft: false, opacityScale, number);
             }
         }
 
         if (_annotations.Draft is { Tool: not AnnotationTool.Move } draft)
         {
-            var number = IsStepTool(draft.Tool) ? stepNumber : (int?)null;
+            var number = IsStepTool(draft.Tool) ? PeekStepNumber(stepNumbersByColor, draft.Color) : (int?)null;
             DrawShape(drawingContext, draft, isDraft: true, opacityScale: 1, number);
         }
 
@@ -359,6 +359,30 @@ internal sealed class OverlaySurface : FrameworkElement
     private static bool IsStepTool(AnnotationTool tool)
     {
         return tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
+    }
+
+    private static int NextStepNumber(Dictionary<string, int> stepNumbersByColor, string color)
+    {
+        var key = StepColorKey(color);
+        var number = stepNumbersByColor.TryGetValue(key, out var current)
+            ? current + 1
+            : 1;
+        stepNumbersByColor[key] = number;
+        return number;
+    }
+
+    private static int PeekStepNumber(Dictionary<string, int> stepNumbersByColor, string color)
+    {
+        return stepNumbersByColor.TryGetValue(StepColorKey(color), out var current)
+            ? current + 1
+            : 1;
+    }
+
+    private static string StepColorKey(string color)
+    {
+        return AppSettings.TryParseColor(color, out var parsed)
+            ? parsed.ToString()
+            : color.Trim();
     }
 
     // The dashed selection outline is identical every frame, so build it once and

@@ -17,7 +17,7 @@ internal readonly record struct Shortcut(ModifierKeys Modifiers, Key Key, int Vi
     public bool Matches(Key key, ModifierKeys modifiers)
     {
         var virtualKey = KeyInterop.VirtualKeyFromKey(key);
-        return virtualKey == VirtualKey && Normalize(modifiers) == Modifiers;
+        return MatchesVirtualKey(virtualKey) && Normalize(modifiers) == Modifiers;
     }
 
     public bool IsPressed()
@@ -42,7 +42,8 @@ internal readonly record struct Shortcut(ModifierKeys Modifiers, Key Key, int Vi
             return false;
         }
 
-        return IsVirtualKeyPressed(VirtualKey);
+        return IsVirtualKeyPressed(VirtualKey)
+            || TryGetTopRowDigit(Key, out var digit) && IsVirtualKeyPressed(VkNumpadDigit(digit));
     }
 
     public uint ToNativeModifiers()
@@ -185,6 +186,34 @@ internal readonly record struct Shortcut(ModifierKeys Modifiers, Key Key, int Vi
 
         return Enum.TryParse<Key>(token, true, out var key) ? key : Key.None;
     }
+
+    private bool MatchesVirtualKey(int virtualKey)
+    {
+        return virtualKey == VirtualKey
+            || TryGetTopRowDigit(Key, out var digit) && virtualKey == VkNumpadDigit(digit);
+    }
+
+    private static bool TryGetTopRowDigit(Key key, out int digit)
+    {
+        digit = key switch
+        {
+            Key.D0 => 0,
+            Key.D1 => 1,
+            Key.D2 => 2,
+            Key.D3 => 3,
+            Key.D4 => 4,
+            Key.D5 => 5,
+            Key.D6 => 6,
+            Key.D7 => 7,
+            Key.D8 => 8,
+            Key.D9 => 9,
+            _ => -1
+        };
+
+        return digit >= 0;
+    }
+
+    private static int VkNumpadDigit(int digit) => 0x60 + digit;
 
     private static bool IsVirtualKeyPressed(int virtualKey)
     {
