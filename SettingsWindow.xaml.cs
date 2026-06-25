@@ -359,10 +359,13 @@ public partial class SettingsWindow : Window
         TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
         ToggleRegionMaskBox.Text = settings.Shortcuts.ToggleRegionMask;
         ClearRegionMasksBox.Text = settings.Shortcuts.ClearRegionMasks;
+        ToggleRegionSpotlightBox.Text = settings.Shortcuts.ToggleRegionSpotlight;
+        ClearRegionSpotlightsBox.Text = settings.Shortcuts.ClearRegionSpotlights;
         ToggleFadingAnnotationsBox.Text = settings.Shortcuts.ToggleFadingAnnotations;
         ToggleTimerBox.Text = settings.Shortcuts.ToggleTimer;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
+        TakeRegionScreenshotBox.Text = settings.Shortcuts.TakeRegionScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
         ToggleBlackScreenBox.Text = settings.Shortcuts.ToggleBlackScreen;
         ToggleWhiteScreenBox.Text = settings.Shortcuts.ToggleWhiteScreen;
@@ -405,10 +408,13 @@ public partial class SettingsWindow : Window
         shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
         shortcuts.ToggleRegionMask = ReadShortcutText(ToggleRegionMaskBox);
         shortcuts.ClearRegionMasks = ReadShortcutText(ClearRegionMasksBox);
+        shortcuts.ToggleRegionSpotlight = ReadShortcutText(ToggleRegionSpotlightBox);
+        shortcuts.ClearRegionSpotlights = ReadShortcutText(ClearRegionSpotlightsBox);
         shortcuts.ToggleFadingAnnotations = ReadShortcutText(ToggleFadingAnnotationsBox);
         shortcuts.ToggleTimer = ReadShortcutText(ToggleTimerBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
+        shortcuts.TakeRegionScreenshot = ReadShortcutText(TakeRegionScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
         shortcuts.ToggleBlackScreen = ReadShortcutText(ToggleBlackScreenBox);
         shortcuts.ToggleWhiteScreen = ReadShortcutText(ToggleWhiteScreenBox);
@@ -446,10 +452,13 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
             || !ValidateShortcut("Region mask", shortcuts.ToggleRegionMask)
             || !ValidateShortcut("Clear region masks", shortcuts.ClearRegionMasks)
+            || !ValidateShortcut("Region spotlight", shortcuts.ToggleRegionSpotlight)
+            || !ValidateShortcut("Clear region spotlights", shortcuts.ClearRegionSpotlights)
             || !ValidateShortcut("Fading annotations", shortcuts.ToggleFadingAnnotations)
             || !ValidateShortcut("Timer", shortcuts.ToggleTimer)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
+            || !ValidateShortcut("Screenshot region", shortcuts.TakeRegionScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
             || !ValidateShortcut("Black board", shortcuts.ToggleBlackScreen)
             || !ValidateShortcut("White board", shortcuts.ToggleWhiteScreen)
@@ -529,10 +538,13 @@ public partial class SettingsWindow : Window
             ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Region spotlight", shortcuts.ToggleRegionSpotlight),
+            ("Clear region spotlights", shortcuts.ClearRegionSpotlights),
             ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Timer", shortcuts.ToggleTimer),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
+            ("Screenshot region", shortcuts.TakeRegionScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
             ("Black board", shortcuts.ToggleBlackScreen),
             ("White board", shortcuts.ToggleWhiteScreen),
@@ -573,10 +585,13 @@ public partial class SettingsWindow : Window
             ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Region spotlight", shortcuts.ToggleRegionSpotlight),
+            ("Clear region spotlights", shortcuts.ClearRegionSpotlights),
             ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Timer", shortcuts.ToggleTimer),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
+            ("Screenshot region", shortcuts.TakeRegionScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
             ("Black board", shortcuts.ToggleBlackScreen),
             ("White board", shortcuts.ToggleWhiteScreen),

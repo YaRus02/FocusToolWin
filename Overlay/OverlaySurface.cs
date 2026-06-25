@@ -44,8 +44,10 @@ internal sealed class OverlaySurface : FrameworkElement
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<CursorHighlightFrame> _cursorHighlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
-    private readonly Func<ScreenRect?> _rectSelectionProvider;
+    private readonly Func<RectOverlayVisual?> _rectOverlayProvider;
     private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
+    private readonly Func<IReadOnlyList<ScreenRect>> _spotlightRegionProvider;
+    private readonly Func<int> _spotlightRegionSelectionProvider;
     private readonly ScreenRect _screenBounds;
     // Cached frozen polyline geometry per pencil/highlighter shape, so we don't
     // re-tessellate committed strokes on every laser frame. Cleared whenever the
@@ -58,6 +60,8 @@ internal sealed class OverlaySurface : FrameworkElement
     // cursor, fade frames, other elements animating).
     private Geometry? _spotlightDimGeometry;
     private (double Width, double Height, double X, double Y, double Radius) _spotlightDimKey;
+    private Geometry? _regionSpotlightDimGeometry;
+    private string? _regionSpotlightDimKey;
     // Reusable scratch buffers for the laser pipeline, cleared and refilled every
     // frame instead of allocating fresh Lists. UI-thread only and never re-entrant
     // (OnRender is synchronous), so the geometry/visual output is byte-identical to
@@ -81,8 +85,10 @@ internal sealed class OverlaySurface : FrameworkElement
         Func<ScreenPoint?> spotlightProvider,
         Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> rectSelectionProvider,
+        Func<RectOverlayVisual?> rectOverlayProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
+        Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
+        Func<int> spotlightRegionSelectionProvider,
         ScreenRect screenBounds)
     {
         _trailModel = trailModel;
@@ -93,8 +99,10 @@ internal sealed class OverlaySurface : FrameworkElement
         _spotlightProvider = spotlightProvider;
         _cursorHighlightProvider = cursorHighlightProvider;
         _screenBoardProvider = screenBoardProvider;
-        _rectSelectionProvider = rectSelectionProvider;
+        _rectOverlayProvider = rectOverlayProvider;
         _regionMaskProvider = regionMaskProvider;
+        _spotlightRegionProvider = spotlightRegionProvider;
+        _spotlightRegionSelectionProvider = spotlightRegionSelectionProvider;
         _screenBounds = screenBounds;
         _annotations.Changed += OnAnnotationsChanged;
         SnapsToDevicePixels = false;
@@ -175,7 +183,11 @@ internal sealed class OverlaySurface : FrameworkElement
             DrawBlankScreen(drawingContext, mode);
         }
 
-        if (mode is InteractionMode.Annotate or InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect)
+        if (mode is InteractionMode.Annotate
+            or InteractionMode.PinnedLensSelect
+            or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenshotRegionSelect
+            or InteractionMode.RegionSpotlightSelect)
         {
             DrawInputCatcher(drawingContext);
         }
@@ -188,12 +200,20 @@ internal sealed class OverlaySurface : FrameworkElement
         DrawAnnotations(drawingContext);
         DrawCursorHighlight(drawingContext, _cursorHighlightProvider());
         DrawLaserTrail(drawingContext);
+        if (!blankScreen)
+        {
+            DrawRegionSpotlights(drawingContext);
+        }
+
         if (!blankScreen || magnifierActive)
         {
             DrawSpotlight(drawingContext, lensPoint, magnifierActive);
         }
 
-        if (mode is InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect)
+        if (mode is InteractionMode.PinnedLensSelect
+            or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenshotRegionSelect
+            or InteractionMode.RegionSpotlightSelect)
         {
             DrawRectSelection(drawingContext);
         }
@@ -364,12 +384,22 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawRectSelection(DrawingContext drawingContext)
     {
-        if (_rectSelectionProvider() is not { } selection || !selection.Intersects(_screenBounds))
+        if (_rectOverlayProvider() is not { } visual || !visual.Rect.Intersects(_screenBounds))
         {
             return;
         }
 
-        DrawSelectionRectangle(drawingContext, selection, isDraft: true);
+        var rect = ToRect(visual.Rect);
+        DrawSelectionRectangle(drawingContext, visual.Rect, visual.IsDraft);
+        if (visual.ShowHandles)
+        {
+            DrawRectHandles(drawingContext, rect);
+        }
+
+        if (visual.ShowReadout)
+        {
+            DrawRectReadout(drawingContext, visual.Rect, rect);
+        }
     }
 
     private void DrawRegionMasks(DrawingContext drawingContext)
@@ -390,7 +420,7 @@ internal sealed class OverlaySurface : FrameworkElement
             drawingContext.DrawRectangle(GetBrush(color, mask.Opacity), null, rect);
             if (showHandles)
             {
-                DrawRegionMaskHandles(drawingContext, rect);
+                DrawRectHandles(drawingContext, rect);
             }
 
             drewMask = true;
@@ -412,7 +442,7 @@ internal sealed class OverlaySurface : FrameworkElement
         }
     }
 
-    private static void DrawRegionMaskHandles(DrawingContext drawingContext, Rect rect)
+    private static void DrawRectHandles(DrawingContext drawingContext, Rect rect)
     {
         if (rect.Width < 1 || rect.Height < 1)
         {
@@ -425,6 +455,35 @@ internal sealed class OverlaySurface : FrameworkElement
         drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Right, rect.Top), RegionMaskHandleSize));
         drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Left, rect.Bottom), RegionMaskHandleSize));
         drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Right, rect.Bottom), RegionMaskHandleSize));
+    }
+
+    private void DrawRectReadout(DrawingContext drawingContext, ScreenRect screenRect, Rect localRect)
+    {
+        if (localRect.Width < 1 || localRect.Height < 1)
+        {
+            return;
+        }
+
+        var width = Math.Max(1, (int)Math.Round(screenRect.Width));
+        var height = Math.Max(1, (int)Math.Round(screenRect.Height));
+        var x = (int)Math.Round(screenRect.Left);
+        var y = (int)Math.Round(screenRect.Top);
+        var text = $"{width} x {height}px  X {x}  Y {y}";
+        var formatted = GetFormattedText(text, Colors.White, 0.96, 12.5, 15);
+        var paddingX = 8.0;
+        var paddingY = 4.0;
+        var bubbleWidth = formatted.WidthIncludingTrailingWhitespace + paddingX * 2;
+        var bubbleHeight = formatted.Height + paddingY * 2;
+        var bubbleLeft = Math.Clamp(localRect.Left, 4, Math.Max(4, ActualWidth - bubbleWidth - 4));
+        var bubbleTop = localRect.Top - bubbleHeight - 8;
+        if (bubbleTop < 4)
+        {
+            bubbleTop = Math.Min(ActualHeight - bubbleHeight - 4, localRect.Bottom + 8);
+        }
+
+        var bubble = new Rect(bubbleLeft, Math.Max(4, bubbleTop), bubbleWidth, bubbleHeight);
+        drawingContext.DrawRoundedRectangle(GetBrush(Colors.Black, 0.78), CreatePen(Colors.White, 0.18, 1), bubble, 4, 4);
+        drawingContext.DrawText(formatted, new WpfPoint(bubble.Left + paddingX, bubble.Top + paddingY));
     }
 
     private static Rect CenteredRect(WpfPoint center, double size)
@@ -1223,6 +1282,90 @@ internal sealed class OverlaySurface : FrameworkElement
 
         var edgePen = CreatePen(Colors.White, 0.26, 1.4);
         drawingContext.DrawEllipse(null, edgePen, center, radius, radius);
+    }
+
+    private void DrawRegionSpotlights(DrawingContext drawingContext)
+    {
+        var settings = _settingsProvider();
+        if (settings.SpotlightEnabled)
+        {
+            return;
+        }
+
+        var regions = _spotlightRegionProvider();
+        if (regions.Count == 0)
+        {
+            return;
+        }
+
+        var localRects = new List<Rect>();
+        var keyParts = new List<string>
+        {
+            ActualWidth.ToString("0.0", CultureInfo.InvariantCulture),
+            ActualHeight.ToString("0.0", CultureInfo.InvariantCulture)
+        };
+
+        var selectedIndex = _modeProvider() == InteractionMode.RegionSpotlightSelect
+            ? _spotlightRegionSelectionProvider()
+            : -1;
+
+        foreach (var region in regions)
+        {
+            keyParts.Add(region.Left.ToString("0.0", CultureInfo.InvariantCulture));
+            keyParts.Add(region.Top.ToString("0.0", CultureInfo.InvariantCulture));
+            keyParts.Add(region.Right.ToString("0.0", CultureInfo.InvariantCulture));
+            keyParts.Add(region.Bottom.ToString("0.0", CultureInfo.InvariantCulture));
+
+            if (region.Intersects(_screenBounds))
+            {
+                var rect = ToRect(region);
+                if (rect.Width > 0.5 && rect.Height > 0.5)
+                {
+                    localRects.Add(rect);
+                }
+            }
+        }
+
+        var key = string.Join("|", keyParts);
+        if (_regionSpotlightDimGeometry is null || !string.Equals(_regionSpotlightDimKey, key, StringComparison.Ordinal))
+        {
+            Geometry dimGeometry = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight));
+            foreach (var rect in localRects)
+            {
+                dimGeometry = new CombinedGeometry(
+                    GeometryCombineMode.Exclude,
+                    dimGeometry,
+                    new RectangleGeometry(rect));
+            }
+
+            dimGeometry.Freeze();
+            _regionSpotlightDimGeometry = dimGeometry;
+            _regionSpotlightDimKey = key;
+        }
+
+        drawingContext.DrawGeometry(GetBrush(Colors.Black, settings.SpotlightOpacity), null, _regionSpotlightDimGeometry);
+
+        var edgePen = CreatePen(Colors.White, 0.30, 1.2);
+        for (var i = 0; i < regions.Count; i++)
+        {
+            var region = regions[i];
+            if (!region.Intersects(_screenBounds))
+            {
+                continue;
+            }
+
+            var rect = ToRect(region);
+            if (rect.Width <= 0.5 || rect.Height <= 0.5)
+            {
+                continue;
+            }
+
+            drawingContext.DrawRectangle(null, edgePen, rect);
+            if (i == selectedIndex)
+            {
+                DrawRectHandles(drawingContext, rect);
+            }
+        }
     }
 
     private void DrawMagnifierFrame(DrawingContext drawingContext, WpfPoint center, double radius)
