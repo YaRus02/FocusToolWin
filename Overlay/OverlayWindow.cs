@@ -32,8 +32,10 @@ internal sealed class OverlayWindow : Window
         Func<ScreenPoint?> spotlightProvider,
         Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> rectSelectionProvider,
+        Func<RectOverlayVisual?> rectOverlayProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
+        Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
+        Func<int> spotlightRegionSelectionProvider,
         IOverlayInputHandler inputHandler)
     {
         _screen = screen;
@@ -48,8 +50,10 @@ internal sealed class OverlayWindow : Window
             spotlightProvider,
             cursorHighlightProvider,
             screenBoardProvider,
-            rectSelectionProvider,
+            rectOverlayProvider,
             regionMaskProvider,
+            spotlightRegionProvider,
+            spotlightRegionSelectionProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
 
         Title = "FocusTool";
@@ -285,6 +289,8 @@ internal sealed class OverlayWindow : Window
         return mode is InteractionMode.Annotate
             or InteractionMode.PinnedLensSelect
             or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenshotRegionSelect
+            or InteractionMode.RegionSpotlightSelect
             or InteractionMode.ScreenBoard
             or InteractionMode.BlackScreen
             or InteractionMode.WhiteScreen;

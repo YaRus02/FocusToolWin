@@ -42,6 +42,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private MagnifierHostWindow? _magnifierHost;
     private readonly List<PinnedLensHostWindow> _pinnedLensHosts = [];
     private readonly List<RegionMask> _regionMasks = [];
+    private readonly List<ScreenRect> _spotlightRegions = [];
     private TimerController? _timerController;
     private TrayIconController? _trayIcon;
     private HotKeyManager? _hotKeyManager;
@@ -55,6 +56,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private ScreenPoint _cursorHighlightPoint;
     private ScreenPoint _lastSelectionMovePoint;
     private ScreenPoint _lastRegionMaskMovePoint;
+    private ScreenPoint _lastScreenshotRegionMovePoint;
+    private ScreenPoint _lastSpotlightRegionMovePoint;
     private readonly List<CursorClickPulse> _cursorClickPulses = [];
     private readonly RectSelectionSession _rectSelection = new();
     private bool _hasLastCursor;
@@ -62,9 +65,18 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _drawing;
     private bool _movingSelection;
     private bool _restoreToolbarAfterRectSelection;
+    private ScreenRect? _pendingScreenshotRegion;
+    private bool _screenshotRegionToolbarRestorePending;
     private RegionMask? _movingRegionMask;
     private RegionMask? _resizingRegionMask;
     private ScreenPoint _regionMaskResizeAnchor;
+    private bool _movingScreenshotRegion;
+    private RectResizeHandle _screenshotRegionResizeHandle;
+    private ScreenPoint _screenshotRegionResizeAnchor;
+    private int _selectedSpotlightRegionIndex = -1;
+    private bool _movingSpotlightRegion;
+    private RectResizeHandle _spotlightRegionResizeHandle;
+    private ScreenPoint _spotlightRegionResizeAnchor;
     private Forms.ContextMenuStrip? _regionMaskContextMenu;
     private int _regionMaskContextMenuMaskId;
     private bool _regionMaskContextMenuActionTaken;
@@ -105,6 +117,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool RegionMaskActive => _regionMasks.Count > 0;
     public int RegionMaskCount => _regionMasks.Count;
     public bool RegionMaskSelectionActive => _mode == InteractionMode.RegionMaskSelect;
+    public bool RegionSpotlightActive => _spotlightRegions.Count > 0;
+    public int RegionSpotlightCount => _spotlightRegions.Count;
+    public bool RegionSpotlightSelectionActive => _mode == InteractionMode.RegionSpotlightSelect;
+    public bool ScreenshotRegionSelectionActive => _mode == InteractionMode.ScreenshotRegionSelect;
     public bool FadingAnnotationsEnabled => Settings.FadingAnnotationsEnabled;
     public string MagnifierShortcut => Settings.Shortcuts.ToggleMagnifier;
     public string CursorHighlightShortcut => Settings.Shortcuts.ToggleCursorHighlight;
@@ -117,6 +133,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public string TimerShortcut => Settings.Shortcuts.ToggleTimer;
     public string ToolbarShortcut => Settings.Shortcuts.ToggleToolbar;
     public string ScreenshotShortcut => Settings.Shortcuts.TakeScreenshot;
+    public string RegionScreenshotShortcut => Settings.Shortcuts.TakeRegionScreenshot;
+    public string RegionSpotlightShortcut => Settings.Shortcuts.ToggleRegionSpotlight;
+    public string ClearRegionSpotlightsShortcut => Settings.Shortcuts.ClearRegionSpotlights;
     public string ScreenBoardShortcut => Settings.Shortcuts.ToggleScreenBoard;
 
     public FocusToolController()
@@ -233,7 +252,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, () => _rectSelection.Draft, () => _regionMasks, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks, () => _spotlightRegions, () => _selectedSpotlightRegionIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         _mouseHook = new MouseHook();
@@ -365,6 +384,60 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         BeginRegionMaskSelection();
     }
 
+    public void TakeRegionScreenshot()
+    {
+        if (_mode == InteractionMode.ScreenshotRegionSelect)
+        {
+            SetInteractionMode(InteractionMode.Passthrough);
+            return;
+        }
+
+        BeginScreenshotRegionSelection();
+    }
+
+    public void ToggleRegionSpotlight()
+    {
+        if (_mode == InteractionMode.RegionSpotlightSelect)
+        {
+            SetInteractionMode(InteractionMode.Passthrough);
+            return;
+        }
+
+        BeginRegionSpotlightSelection();
+    }
+
+    public void ClearRegionSpotlights()
+    {
+        var hadRegions = _spotlightRegions.Count > 0;
+        var wasSelecting = _mode == InteractionMode.RegionSpotlightSelect;
+        if (!hadRegions && !wasSelecting)
+        {
+            return;
+        }
+
+        _spotlightRegions.Clear();
+        ResetSpotlightRegionEditState();
+        _rectSelection.Cancel();
+        if (hadRegions)
+        {
+            RegisterHotKeys();
+        }
+
+        if (wasSelecting)
+        {
+            SetInteractionMode(InteractionMode.Passthrough);
+        }
+        else
+        {
+            _overlayManager?.Invalidate();
+        }
+
+        if (!_disposed && !wasSelecting)
+        {
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public void ClearRegionMasks()
     {
         var hadMasks = _regionMasks.Count > 0;
@@ -408,43 +481,86 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return false;
     }
 
-    private bool TryHitRegionMaskResizeHandle(ScreenPoint point, out RegionMask mask, out RegionMaskResizeHandle handle)
+    private bool TryHitRegionMaskResizeHandle(ScreenPoint point, out RegionMask mask, out RectResizeHandle handle)
     {
-        var hitRadiusSquared = RegionMaskResizeHitRadiusPixels * RegionMaskResizeHitRadiusPixels;
         for (var i = _regionMasks.Count - 1; i >= 0; i--)
         {
-            var rect = _regionMasks[i].Rect;
-            if (DistanceSquared(point, new ScreenPoint(rect.Left, rect.Top)) <= hitRadiusSquared)
+            if (TryHitRectResizeHandle(_regionMasks[i].Rect, point, out handle))
             {
                 mask = _regionMasks[i];
-                handle = RegionMaskResizeHandle.TopLeft;
-                return true;
-            }
-
-            if (DistanceSquared(point, new ScreenPoint(rect.Right, rect.Top)) <= hitRadiusSquared)
-            {
-                mask = _regionMasks[i];
-                handle = RegionMaskResizeHandle.TopRight;
-                return true;
-            }
-
-            if (DistanceSquared(point, new ScreenPoint(rect.Left, rect.Bottom)) <= hitRadiusSquared)
-            {
-                mask = _regionMasks[i];
-                handle = RegionMaskResizeHandle.BottomLeft;
-                return true;
-            }
-
-            if (DistanceSquared(point, new ScreenPoint(rect.Right, rect.Bottom)) <= hitRadiusSquared)
-            {
-                mask = _regionMasks[i];
-                handle = RegionMaskResizeHandle.BottomRight;
                 return true;
             }
         }
 
         mask = null!;
-        handle = RegionMaskResizeHandle.None;
+        handle = RectResizeHandle.None;
+        return false;
+    }
+
+    private bool TryHitSpotlightRegionResizeHandle(ScreenPoint point, out int index, out RectResizeHandle handle)
+    {
+        for (var i = _spotlightRegions.Count - 1; i >= 0; i--)
+        {
+            if (TryHitRectResizeHandle(_spotlightRegions[i], point, out handle))
+            {
+                index = i;
+                return true;
+            }
+        }
+
+        index = -1;
+        handle = RectResizeHandle.None;
+        return false;
+    }
+
+    private bool TryHitSpotlightRegion(ScreenPoint point, out int index)
+    {
+        for (var i = _spotlightRegions.Count - 1; i >= 0; i--)
+        {
+            if (_spotlightRegions[i].Contains(point))
+            {
+                index = i;
+                return true;
+            }
+        }
+
+        index = -1;
+        return false;
+    }
+
+    private bool IsValidSpotlightRegionIndex(int index)
+    {
+        return index >= 0 && index < _spotlightRegions.Count;
+    }
+
+    private static bool TryHitRectResizeHandle(ScreenRect rect, ScreenPoint point, out RectResizeHandle handle)
+    {
+        var hitRadiusSquared = RegionMaskResizeHitRadiusPixels * RegionMaskResizeHitRadiusPixels;
+        if (DistanceSquared(point, new ScreenPoint(rect.Left, rect.Top)) <= hitRadiusSquared)
+        {
+            handle = RectResizeHandle.TopLeft;
+            return true;
+        }
+
+        if (DistanceSquared(point, new ScreenPoint(rect.Right, rect.Top)) <= hitRadiusSquared)
+        {
+            handle = RectResizeHandle.TopRight;
+            return true;
+        }
+
+        if (DistanceSquared(point, new ScreenPoint(rect.Left, rect.Bottom)) <= hitRadiusSquared)
+        {
+            handle = RectResizeHandle.BottomLeft;
+            return true;
+        }
+
+        if (DistanceSquared(point, new ScreenPoint(rect.Right, rect.Bottom)) <= hitRadiusSquared)
+        {
+            handle = RectResizeHandle.BottomRight;
+            return true;
+        }
+
+        handle = RectResizeHandle.None;
         return false;
     }
 
@@ -455,19 +571,19 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return dx * dx + dy * dy;
     }
 
-    private static ScreenPoint GetRegionMaskResizeAnchor(ScreenRect rect, RegionMaskResizeHandle handle)
+    private static ScreenPoint GetRectResizeAnchor(ScreenRect rect, RectResizeHandle handle)
     {
         return handle switch
         {
-            RegionMaskResizeHandle.TopLeft => new ScreenPoint(rect.Right, rect.Bottom),
-            RegionMaskResizeHandle.TopRight => new ScreenPoint(rect.Left, rect.Bottom),
-            RegionMaskResizeHandle.BottomLeft => new ScreenPoint(rect.Right, rect.Top),
-            RegionMaskResizeHandle.BottomRight => new ScreenPoint(rect.Left, rect.Top),
+            RectResizeHandle.TopLeft => new ScreenPoint(rect.Right, rect.Bottom),
+            RectResizeHandle.TopRight => new ScreenPoint(rect.Left, rect.Bottom),
+            RectResizeHandle.BottomLeft => new ScreenPoint(rect.Right, rect.Top),
+            RectResizeHandle.BottomRight => new ScreenPoint(rect.Left, rect.Top),
             _ => new ScreenPoint(rect.Left, rect.Top)
         };
     }
 
-    private static ScreenRect CreateRegionMaskResizeRect(ScreenPoint anchor, ScreenPoint point)
+    private static ScreenRect CreateResizeRect(ScreenPoint anchor, ScreenPoint point)
     {
         var left = point.X < anchor.X
             ? Math.Min(point.X, anchor.X - RegionMaskMinSizePixels)
@@ -658,6 +774,34 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         BeginRectSelectionMode(InteractionMode.RegionMaskSelect);
     }
 
+    private void BeginScreenshotRegionSelection()
+    {
+        _pendingScreenshotRegion = null;
+        _screenshotRegionToolbarRestorePending = false;
+        _movingScreenshotRegion = false;
+        _screenshotRegionResizeHandle = RectResizeHandle.None;
+        BeginRectSelectionMode(InteractionMode.ScreenshotRegionSelect);
+    }
+
+    private void BeginRegionSpotlightSelection()
+    {
+        if (_spotlightEnabled)
+        {
+            var updated = Settings.Clone();
+            updated.SpotlightEnabled = false;
+            ApplySettings(updated);
+        }
+
+        _selectedSpotlightRegionIndex = _spotlightRegions.Count - 1;
+        _movingSpotlightRegion = false;
+        _spotlightRegionResizeHandle = RectResizeHandle.None;
+        BeginRectSelectionMode(InteractionMode.RegionSpotlightSelect);
+        if (_spotlightRegions.Count > 0)
+        {
+            RestoreToolbarAfterRectSelection();
+        }
+    }
+
     private void BeginRectSelectionMode(InteractionMode mode)
     {
         if (!IsRectSelectionMode(mode))
@@ -673,6 +817,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _rectSelection.Cancel();
         _movingRegionMask = null;
         _resizingRegionMask = null;
+        _movingScreenshotRegion = false;
+        _screenshotRegionResizeHandle = RectResizeHandle.None;
+        _movingSpotlightRegion = false;
+        _spotlightRegionResizeHandle = RectResizeHandle.None;
         _restoreToolbarAfterRectSelection = ToolbarVisible;
         if (_restoreToolbarAfterRectSelection)
         {
@@ -722,6 +870,57 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         finally
         {
             if (toolbarWasVisible && !_disposed)
+            {
+                ShowToolbar();
+            }
+
+            _captureInProgress = false;
+
+            if (magnifierWasActive && !_disposed)
+            {
+                UpdateMagnifierHost();
+            }
+        }
+    }
+
+    private async Task TakeRegionScreenshotAsync(ScreenRect sourceRect, bool restoreToolbar)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_captureInProgress)
+        {
+            if (restoreToolbar && !_disposed)
+            {
+                ShowToolbar();
+            }
+
+            return;
+        }
+
+        _captureInProgress = true;
+        var magnifierWasActive = Settings.MagnifierEnabled;
+
+        // The toolbar is already hidden by BeginRectSelectionMode and is restored
+        // only after capture. Keep overlays visible so annotations and masks are
+        // captured exactly like the full-monitor screenshot path.
+        CloseMagnifierHost();
+        await WaitForScreenRefreshAsync();
+
+        try
+        {
+            await _screenshotService.CaptureRegionAsync(sourceRect, copyToClipboard: true);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Could not capture region screenshot.", ex);
+            _trayIcon?.ShowMessage("Region screenshot failed", ex.Message);
+        }
+        finally
+        {
+            if (restoreToolbar && !_disposed)
             {
                 ShowToolbar();
             }
@@ -855,7 +1054,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var exitVisualHotKeyWasNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
-            _spotlightEnabled);
+            HasExitVisualSpotlightEffect());
 
         if (enteringAnnotationInput)
         {
@@ -888,6 +1087,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         if (leavingRectSelection)
         {
             _rectSelection.Cancel();
+            if (_mode == InteractionMode.ScreenshotRegionSelect)
+            {
+                ResetScreenshotRegionEditState(restoreToolbar: true);
+            }
+
+            if (_mode == InteractionMode.RegionSpotlightSelect)
+            {
+                ResetSpotlightRegionEditState();
+            }
+
             RestoreToolbarAfterRectSelection();
         }
 
@@ -947,7 +1156,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var exitVisualHotKeyIsNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
-            _spotlightEnabled);
+            HasExitVisualSpotlightEffect());
         if (exitVisualHotKeyWasNeeded != exitVisualHotKeyIsNeeded)
         {
             RegisterHotKeys();
@@ -965,7 +1174,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var exitVisualHotKeyWasNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
-            _spotlightEnabled);
+            HasExitVisualSpotlightEffect());
         var magnifierVisualChanged = Math.Abs(Settings.MagnifierRadius - settings.MagnifierRadius) > 0.001
             || Math.Abs(Settings.MagnifierZoom - settings.MagnifierZoom) > 0.001;
         Settings.CopyFrom(settings);
@@ -1020,7 +1229,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var exitVisualHotKeyIsNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
-            _spotlightEnabled);
+            HasExitVisualSpotlightEffect());
         if (globalHotKeysChanged || exitVisualHotKeyWasNeeded != exitVisualHotKeyIsNeeded)
         {
             RegisterHotKeys();
@@ -1244,6 +1453,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (enabled && _mode == InteractionMode.RegionSpotlightSelect)
+        {
+            SetInteractionMode(InteractionMode.Passthrough);
+        }
+
         var updated = Settings.Clone();
         updated.SpotlightEnabled = enabled;
         ApplySettings(updated);
@@ -1315,6 +1529,80 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (_mode == InteractionMode.ScreenshotRegionSelect)
+        {
+            if (button != MouseButton.Left)
+            {
+                return;
+            }
+
+            if (_pendingScreenshotRegion is { } pending)
+            {
+                if (TryHitRectResizeHandle(pending, point, out var handle))
+                {
+                    _screenshotRegionResizeHandle = handle;
+                    _screenshotRegionResizeAnchor = GetRectResizeAnchor(pending, handle);
+                    _movingScreenshotRegion = false;
+                    _rectSelection.Cancel();
+                    return;
+                }
+
+                if (pending.Contains(point))
+                {
+                    _movingScreenshotRegion = true;
+                    _screenshotRegionResizeHandle = RectResizeHandle.None;
+                    _lastScreenshotRegionMovePoint = point;
+                    _rectSelection.Cancel();
+                    return;
+                }
+
+                _pendingScreenshotRegion = null;
+                _movingScreenshotRegion = false;
+                _screenshotRegionResizeHandle = RectResizeHandle.None;
+            }
+
+            _rectSelection.Begin(point);
+            _overlayManager?.Invalidate();
+            return;
+        }
+
+        if (_mode == InteractionMode.RegionSpotlightSelect)
+        {
+            if (button != MouseButton.Left)
+            {
+                return;
+            }
+
+            if (TryHitSpotlightRegionResizeHandle(point, out var resizeIndex, out var resizeHandle))
+            {
+                _selectedSpotlightRegionIndex = resizeIndex;
+                _spotlightRegionResizeHandle = resizeHandle;
+                _spotlightRegionResizeAnchor = GetRectResizeAnchor(_spotlightRegions[resizeIndex], resizeHandle);
+                _movingSpotlightRegion = false;
+                _rectSelection.Cancel();
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (TryHitSpotlightRegion(point, out var moveIndex))
+            {
+                _selectedSpotlightRegionIndex = moveIndex;
+                _movingSpotlightRegion = true;
+                _spotlightRegionResizeHandle = RectResizeHandle.None;
+                _lastSpotlightRegionMovePoint = point;
+                _rectSelection.Cancel();
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            _selectedSpotlightRegionIndex = -1;
+            _movingSpotlightRegion = false;
+            _spotlightRegionResizeHandle = RectResizeHandle.None;
+            _rectSelection.Begin(point);
+            _overlayManager?.Invalidate();
+            return;
+        }
+
         if (_mode == InteractionMode.RegionMaskSelect)
         {
             if (button == MouseButton.Right)
@@ -1335,7 +1623,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if (TryHitRegionMaskResizeHandle(point, out var resizeMask, out var resizeHandle))
             {
                 _resizingRegionMask = resizeMask;
-                _regionMaskResizeAnchor = GetRegionMaskResizeAnchor(resizeMask.Rect, resizeHandle);
+                _regionMaskResizeAnchor = GetRectResizeAnchor(resizeMask.Rect, resizeHandle);
                 _movingRegionMask = null;
                 _rectSelection.Cancel();
                 return;
@@ -1408,11 +1696,64 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (_mode == InteractionMode.ScreenshotRegionSelect)
+        {
+            if (_pendingScreenshotRegion is { } pending && _screenshotRegionResizeHandle != RectResizeHandle.None)
+            {
+                _pendingScreenshotRegion = CreateResizeRect(_screenshotRegionResizeAnchor, point);
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (_pendingScreenshotRegion is { } movingPending && _movingScreenshotRegion)
+            {
+                _pendingScreenshotRegion = movingPending.Offset(point.X - _lastScreenshotRegionMovePoint.X, point.Y - _lastScreenshotRegionMovePoint.Y);
+                _lastScreenshotRegionMovePoint = point;
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (_rectSelection.Update(point))
+            {
+                _overlayManager?.Invalidate();
+            }
+
+            return;
+        }
+
+        if (_mode == InteractionMode.RegionSpotlightSelect)
+        {
+            if (IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex)
+                && _spotlightRegionResizeHandle != RectResizeHandle.None)
+            {
+                _spotlightRegions[_selectedSpotlightRegionIndex] = CreateResizeRect(_spotlightRegionResizeAnchor, point);
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex) && _movingSpotlightRegion)
+            {
+                _spotlightRegions[_selectedSpotlightRegionIndex] = _spotlightRegions[_selectedSpotlightRegionIndex].Offset(
+                    point.X - _lastSpotlightRegionMovePoint.X,
+                    point.Y - _lastSpotlightRegionMovePoint.Y);
+                _lastSpotlightRegionMovePoint = point;
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (_rectSelection.Update(point))
+            {
+                _overlayManager?.Invalidate();
+            }
+
+            return;
+        }
+
         if (_mode == InteractionMode.RegionMaskSelect)
         {
             if (_resizingRegionMask is not null)
             {
-                _resizingRegionMask.SetRect(CreateRegionMaskResizeRect(_regionMaskResizeAnchor, point));
+                _resizingRegionMask.SetRect(CreateResizeRect(_regionMaskResizeAnchor, point));
                 _overlayManager?.Invalidate();
                 return;
             }
@@ -1485,6 +1826,91 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 SetInteractionMode(InteractionMode.Passthrough);
             }
 
+            return;
+        }
+
+        if (_mode == InteractionMode.ScreenshotRegionSelect)
+        {
+            if (button != MouseButton.Left)
+            {
+                return;
+            }
+
+            if (_screenshotRegionResizeHandle != RectResizeHandle.None)
+            {
+                _screenshotRegionResizeHandle = RectResizeHandle.None;
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (_movingScreenshotRegion)
+            {
+                _movingScreenshotRegion = false;
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            var sourceRect = _rectSelection.Complete(point);
+            if (sourceRect is null)
+            {
+                return;
+            }
+
+            var completedSourceRect = sourceRect.Value;
+            if (completedSourceRect.Width >= RegionMaskMinSizePixels && completedSourceRect.Height >= RegionMaskMinSizePixels)
+            {
+                _pendingScreenshotRegion = completedSourceRect;
+                _screenshotRegionToolbarRestorePending = _restoreToolbarAfterRectSelection;
+                _restoreToolbarAfterRectSelection = false;
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            _overlayManager?.Invalidate();
+            return;
+        }
+
+        if (_mode == InteractionMode.RegionSpotlightSelect)
+        {
+            if (button != MouseButton.Left)
+            {
+                return;
+            }
+
+            if (_spotlightRegionResizeHandle != RectResizeHandle.None)
+            {
+                _spotlightRegionResizeHandle = RectResizeHandle.None;
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            if (_movingSpotlightRegion)
+            {
+                _movingSpotlightRegion = false;
+                _overlayManager?.Invalidate();
+                return;
+            }
+
+            var sourceRect = _rectSelection.Complete(point);
+            if (sourceRect is null)
+            {
+                return;
+            }
+
+            var completedSourceRect = sourceRect.Value;
+            if (completedSourceRect.Width >= RegionMaskMinSizePixels && completedSourceRect.Height >= RegionMaskMinSizePixels)
+            {
+                var hadSpotlightRegions = _spotlightRegions.Count > 0;
+                _spotlightRegions.Add(completedSourceRect);
+                _selectedSpotlightRegionIndex = _spotlightRegions.Count - 1;
+                if (!hadSpotlightRegions)
+                {
+                    RegisterHotKeys();
+                }
+            }
+
+            RestoreToolbarAfterRectSelection();
+            _overlayManager?.Invalidate();
+            StateChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -1564,6 +1990,32 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (_mode == InteractionMode.ScreenshotRegionSelect)
+        {
+            _movingScreenshotRegion = false;
+            _screenshotRegionResizeHandle = RectResizeHandle.None;
+            if (_rectSelection.IsActive)
+            {
+                _rectSelection.Cancel();
+            }
+
+            _overlayManager?.Invalidate();
+            return;
+        }
+
+        if (_mode == InteractionMode.RegionSpotlightSelect)
+        {
+            _movingSpotlightRegion = false;
+            _spotlightRegionResizeHandle = RectResizeHandle.None;
+            if (_rectSelection.IsActive)
+            {
+                _rectSelection.Cancel();
+            }
+
+            _overlayManager?.Invalidate();
+            return;
+        }
+
         if (_mode == InteractionMode.RegionMaskSelect)
         {
             if (_resizingRegionMask is not null)
@@ -1608,6 +2060,44 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             {
                 SetInteractionMode(InteractionMode.Passthrough);
                 return true;
+            }
+
+            if (_mode == InteractionMode.ScreenshotRegionSelect)
+            {
+                if (key == Key.Enter && modifiers == ModifierKeys.None)
+                {
+                    CommitPendingScreenshotRegion();
+                    return true;
+                }
+
+                if (TryNudgeScreenshotRegion(key, modifiers))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (_mode == InteractionMode.RegionSpotlightSelect)
+            {
+                if (key == Key.Back && modifiers == ModifierKeys.None)
+                {
+                    DeleteSelectedSpotlightRegion();
+                    return true;
+                }
+
+                if (key == Key.Enter && modifiers == ModifierKeys.None)
+                {
+                    SetInteractionMode(InteractionMode.Passthrough);
+                    return true;
+                }
+
+                if (TryNudgeSelectedSpotlightRegion(key, modifiers))
+                {
+                    return true;
+                }
+
+                return false;
             }
 
             return false;
@@ -1691,6 +2181,99 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         return false;
+    }
+
+    private void DeleteSelectedSpotlightRegion()
+    {
+        if (!IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex))
+        {
+            return;
+        }
+
+        _spotlightRegions.RemoveAt(_selectedSpotlightRegionIndex);
+        if (_spotlightRegions.Count == 0)
+        {
+            ResetSpotlightRegionEditState();
+            RegisterHotKeys();
+        }
+        else
+        {
+            _selectedSpotlightRegionIndex = Math.Min(_selectedSpotlightRegionIndex, _spotlightRegions.Count - 1);
+            _movingSpotlightRegion = false;
+            _spotlightRegionResizeHandle = RectResizeHandle.None;
+        }
+
+        _overlayManager?.Invalidate();
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void CommitPendingScreenshotRegion()
+    {
+        if (_pendingScreenshotRegion is not { } rect)
+        {
+            return;
+        }
+
+        var restoreToolbar = _screenshotRegionToolbarRestorePending;
+        ResetScreenshotRegionEditState(restoreToolbar: false);
+        _restoreToolbarAfterRectSelection = false;
+        SetInteractionMode(InteractionMode.Passthrough);
+        _ = TakeRegionScreenshotAsync(rect, restoreToolbar);
+    }
+
+    private bool TryNudgeScreenshotRegion(Key key, ModifierKeys modifiers)
+    {
+        if (_pendingScreenshotRegion is not { } rect || !TryGetNudgeDelta(key, modifiers, out var dx, out var dy))
+        {
+            return false;
+        }
+
+        _pendingScreenshotRegion = rect.Offset(dx, dy);
+        _overlayManager?.Invalidate();
+        return true;
+    }
+
+    private bool TryNudgeSelectedSpotlightRegion(Key key, ModifierKeys modifiers)
+    {
+        if (!IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex)
+            || !TryGetNudgeDelta(key, modifiers, out var dx, out var dy))
+        {
+            return false;
+        }
+
+        _spotlightRegions[_selectedSpotlightRegionIndex] = _spotlightRegions[_selectedSpotlightRegionIndex].Offset(dx, dy);
+        _overlayManager?.Invalidate();
+        return true;
+    }
+
+    private static bool TryGetNudgeDelta(Key key, ModifierKeys modifiers, out double dx, out double dy)
+    {
+        dx = 0;
+        dy = 0;
+
+        if ((modifiers & ~ModifierKeys.Shift) != 0)
+        {
+            return false;
+        }
+
+        var step = (modifiers & ModifierKeys.Shift) != 0 ? 10 : 1;
+        switch (key)
+        {
+            case Key.Left:
+                dx = -step;
+                return true;
+            case Key.Right:
+                dx = step;
+                return true;
+            case Key.Up:
+                dy = -step;
+                return true;
+            case Key.Down:
+                dy = step;
+                return true;
+            default:
+                return false;
+        }
     }
 
     public void HandleOverlayTextInput(string text)
@@ -2430,6 +3013,65 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
     }
 
+    private void RestoreScreenshotRegionToolbarIfNeeded()
+    {
+        if (!_screenshotRegionToolbarRestorePending)
+        {
+            return;
+        }
+
+        _screenshotRegionToolbarRestorePending = false;
+        if (!_disposed)
+        {
+            ShowToolbar();
+        }
+    }
+
+    private void ResetScreenshotRegionEditState(bool restoreToolbar)
+    {
+        _pendingScreenshotRegion = null;
+        _movingScreenshotRegion = false;
+        _screenshotRegionResizeHandle = RectResizeHandle.None;
+        if (restoreToolbar)
+        {
+            RestoreScreenshotRegionToolbarIfNeeded();
+        }
+        else
+        {
+            _screenshotRegionToolbarRestorePending = false;
+        }
+    }
+
+    private void ResetSpotlightRegionEditState()
+    {
+        _selectedSpotlightRegionIndex = -1;
+        _movingSpotlightRegion = false;
+        _spotlightRegionResizeHandle = RectResizeHandle.None;
+    }
+
+    private RectOverlayVisual? GetRectOverlayVisual()
+    {
+        if (_rectSelection.Draft is { } draft)
+        {
+            return new RectOverlayVisual(
+                draft,
+                IsDraft: true,
+                ShowHandles: false,
+                ShowReadout: _mode == InteractionMode.ScreenshotRegionSelect);
+        }
+
+        if (_mode == InteractionMode.ScreenshotRegionSelect && _pendingScreenshotRegion is { } pending)
+        {
+            return new RectOverlayVisual(
+                pending,
+                IsDraft: false,
+                ShowHandles: true,
+                ShowReadout: true);
+        }
+
+        return null;
+    }
+
     private void ExitVisualEffects()
     {
         if (!Settings.MagnifierEnabled && !_spotlightEnabled)
@@ -2454,16 +3096,19 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TogglePinnedLens, TogglePinnedLens);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleRegionMask, ToggleRegionMask);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ClearRegionMasks, ClearRegionMasks);
+        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleRegionSpotlight, ToggleRegionSpotlight);
+        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ClearRegionSpotlights, ClearRegionSpotlights);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleFadingAnnotations, ToggleFadingAnnotations);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleTimer, NewTimer);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleToolbar, ToggleToolbar);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TakeScreenshot, TakeScreenshot);
+        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TakeRegionScreenshot, TakeRegionScreenshot);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleScreenBoard, ToggleScreenBoard);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleBlackScreen, ToggleBlackScreen);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleWhiteScreen, ToggleWhiteScreen);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ExitApp, Exit);
 
-        if (ShouldRegisterExitVisualHotKey(_mode, Settings.MagnifierEnabled, _spotlightEnabled))
+        if (ShouldRegisterExitVisualHotKey(_mode, Settings.MagnifierEnabled, HasExitVisualSpotlightEffect()))
         {
             registrations.Add(new HotKeyRegistration(ExitVisualShortcut, ExitVisualEffects));
         }
@@ -2497,10 +3142,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             && string.Equals(left.TogglePinnedLens, right.TogglePinnedLens, StringComparison.Ordinal)
             && string.Equals(left.ToggleRegionMask, right.ToggleRegionMask, StringComparison.Ordinal)
             && string.Equals(left.ClearRegionMasks, right.ClearRegionMasks, StringComparison.Ordinal)
+            && string.Equals(left.ToggleRegionSpotlight, right.ToggleRegionSpotlight, StringComparison.Ordinal)
+            && string.Equals(left.ClearRegionSpotlights, right.ClearRegionSpotlights, StringComparison.Ordinal)
             && string.Equals(left.ToggleFadingAnnotations, right.ToggleFadingAnnotations, StringComparison.Ordinal)
             && string.Equals(left.ToggleTimer, right.ToggleTimer, StringComparison.Ordinal)
             && string.Equals(left.ToggleToolbar, right.ToggleToolbar, StringComparison.Ordinal)
             && string.Equals(left.TakeScreenshot, right.TakeScreenshot, StringComparison.Ordinal)
+            && string.Equals(left.TakeRegionScreenshot, right.TakeRegionScreenshot, StringComparison.Ordinal)
             && string.Equals(left.ToggleScreenBoard, right.ToggleScreenBoard, StringComparison.Ordinal)
             && string.Equals(left.ToggleBlackScreen, right.ToggleBlackScreen, StringComparison.Ordinal)
             && string.Equals(left.ToggleWhiteScreen, right.ToggleWhiteScreen, StringComparison.Ordinal)
@@ -2533,6 +3181,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             host.ReassertTopmost();
         }
+    }
+
+    private bool HasExitVisualSpotlightEffect()
+    {
+        return _spotlightEnabled;
     }
 
     private static bool ShouldRegisterExitVisualHotKey(
@@ -2719,7 +3372,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private static bool IsRectSelectionMode(InteractionMode mode)
     {
-        return mode is InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect;
+        return mode is InteractionMode.PinnedLensSelect
+            or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenshotRegionSelect
+            or InteractionMode.RegionSpotlightSelect;
     }
 
     private static bool IsStepTool(AnnotationTool tool)
@@ -2774,7 +3430,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return false;
     }
 
-    private enum RegionMaskResizeHandle
+    private enum RectResizeHandle
     {
         None,
         TopLeft,

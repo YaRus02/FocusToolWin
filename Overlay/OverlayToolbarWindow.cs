@@ -75,6 +75,8 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _clearButton = null!;
     private TextBlock _spotRadiusText = null!;
     private TextBlock _spotDimText = null!;
+    private WpfButton _spotRegionButton = null!;
+    private WpfButton _clearSpotRegionsButton = null!;
     private TextBlock _zoomZoomText = null!;
     private TextBlock _zoomRadiusText = null!;
     private TextBlock _pinZoomText = null!;
@@ -85,6 +87,7 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _boardScreenButton = null!;
     private WpfButton _boardBlackButton = null!;
     private WpfButton _boardWhiteButton = null!;
+    private WpfButton _shotRegionButton = null!;
     private WpfButton _closeTimersButton = null!;
 
     private Border _contextualHost = null!;
@@ -214,7 +217,7 @@ internal sealed class OverlayToolbarWindow : Window
         _maskButton = AddSplitButton(primary, "Mask", "Select a region to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
         primary.Children.Add(CreateSeparator());
         _boardButton = AddSplitButton(primary, "Board", "Screen board, black or white", 48, (_, _) => ShowContextualRow("board"), "board");
-        AddSplitButton(primary, "Shot", "Screenshot current monitor", 40, (_, _) => _controller.TakeScreenshot(), null);
+        AddSplitButton(primary, "Shot", "Screenshot current monitor", 40, (_, _) => _controller.TakeScreenshot(), "shot");
         primary.Children.Add(CreateSeparator());
         _timerButton = AddSplitButton(primary, "Timer", "New timer (multiple allowed)", 44, (_, _) => _controller.NewTimer(), "timer");
         primary.Children.Add(CreateSeparator());
@@ -248,6 +251,7 @@ internal sealed class OverlayToolbarWindow : Window
         _rows["pin"] = BuildPinRow();
         _rows["mask"] = BuildMaskRow();
         _rows["board"] = BuildBoardRow();
+        _rows["shot"] = BuildShotRow();
         _rows["timer"] = BuildTimerRow();
         _rows["more"] = BuildMoreRow();
     }
@@ -362,6 +366,11 @@ internal sealed class OverlayToolbarWindow : Window
     private UIElement BuildSpotRow()
     {
         var row = CreateRow();
+        _spotRegionButton = CreateButton("Region", "Dim everything except selected rectangles", (_, _) => _controller.ToggleRegionSpotlight(), width: 52);
+        _clearSpotRegionsButton = CreateButton("Clear", "Clear region spotlights", (_, _) => _controller.ClearRegionSpotlights(), width: 44);
+        row.Children.Add(_spotRegionButton);
+        row.Children.Add(_clearSpotRegionsButton);
+        row.Children.Add(CreateSeparator());
         _spotRadiusText = CreateStepper(row, "Radius", () => _controller.AdjustSpotlightRadius(-16), () => _controller.AdjustSpotlightRadius(16));
         _spotDimText = CreateStepper(row, "Dim", () => _controller.AdjustSpotlightOpacity(-0.06), () => _controller.AdjustSpotlightOpacity(0.06));
         return row;
@@ -407,6 +416,15 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(_boardScreenButton);
         row.Children.Add(_boardBlackButton);
         row.Children.Add(_boardWhiteButton);
+        return row;
+    }
+
+    private UIElement BuildShotRow()
+    {
+        var row = CreateRow();
+        row.Children.Add(CreateButton("Monitor", "Screenshot current monitor", (_, _) => _controller.TakeScreenshot(), width: 58));
+        _shotRegionButton = CreateButton("Region", "Screenshot selected region", (_, _) => _controller.TakeRegionScreenshot(), width: 52);
+        row.Children.Add(_shotRegionButton);
         return row;
     }
 
@@ -861,7 +879,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_laserButton, _controller.ActivationMode == LaserActivationMode.Always);
             SetButtonActive(_highlightButton, _controller.CursorHighlightEnabled);
             SetButtonActive(_drawButton, _controller.Mode == InteractionMode.Annotate);
-            SetButtonActive(_spotButton, _controller.SpotlightEnabled);
+            SetButtonActive(_spotButton, _controller.SpotlightEnabled || _controller.RegionSpotlightActive || _controller.RegionSpotlightSelectionActive);
             SetButtonActive(_zoomButton, _controller.MagnifierEnabled);
             SetButtonActive(_pinButton, _controller.PinnedLensSelectionActive || _controller.PinnedLensActive);
             SetButtonActive(_maskButton, _controller.RegionMaskSelectionActive || _controller.RegionMaskActive);
@@ -910,6 +928,9 @@ internal sealed class OverlayToolbarWindow : Window
 
             _spotRadiusText.Text = $"{settings.SpotlightRadius:0}";
             _spotDimText.Text = $"{settings.SpotlightOpacity * 100:0}%";
+            SetButtonActive(_spotRegionButton, _controller.RegionSpotlightSelectionActive || _controller.RegionSpotlightActive);
+            _clearSpotRegionsButton.IsEnabled = _controller.RegionSpotlightActive;
+            SetButtonEnabled(_clearSpotRegionsButton, _clearSpotRegionsButton.IsEnabled);
             _zoomZoomText.Text = $"{settings.MagnifierZoom:0.##}x";
             _zoomRadiusText.Text = $"{settings.MagnifierRadius:0}";
             _pinZoomText.Text = $"{settings.PinnedLensZoom:0.##}x";
@@ -925,6 +946,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_boardScreenButton, _controller.Mode == InteractionMode.ScreenBoard);
             SetButtonActive(_boardBlackButton, _controller.Mode == InteractionMode.BlackScreen);
             SetButtonActive(_boardWhiteButton, _controller.Mode == InteractionMode.WhiteScreen);
+            SetButtonActive(_shotRegionButton, _controller.ScreenshotRegionSelectionActive);
 
             SetButtonActive(_timerButton, _controller.TimerActive);
             _closeTimersButton.IsEnabled = _controller.TimerActive;
@@ -943,11 +965,14 @@ internal sealed class OverlayToolbarWindow : Window
         return _controller.ActivationMode == LaserActivationMode.Always
             || _controller.CursorHighlightEnabled
             || _controller.SpotlightEnabled
+            || _controller.RegionSpotlightActive
+            || _controller.RegionSpotlightSelectionActive
             || _controller.MagnifierEnabled
             || _controller.PinnedLensActive
             || _controller.PinnedLensSelectionActive
             || _controller.RegionMaskActive
             || _controller.RegionMaskSelectionActive
+            || _controller.ScreenshotRegionSelectionActive
             || _controller.Mode is InteractionMode.Annotate or InteractionMode.ScreenBoard
                 or InteractionMode.BlackScreen or InteractionMode.WhiteScreen
             || _controller.Annotations.Shapes.Count > 0

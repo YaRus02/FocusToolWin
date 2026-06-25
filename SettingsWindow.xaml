@@ -315,6 +315,8 @@
             </TabItem>
 
             <TabItem Header="Shortcuts">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -336,6 +338,9 @@
                                     <ColumnDefinition Width="132" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -392,6 +397,12 @@
                                 <TextBox Grid.Row="16" Grid.Column="1" x:Name="ToggleCursorHighlightBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="17" Text="Hold highlight" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="17" Grid.Column="1" x:Name="CursorHighlightHoldBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="18" Text="Screenshot region" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="18" Grid.Column="1" x:Name="TakeRegionScreenshotBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="19" Text="Region spotlight" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="19" Grid.Column="1" x:Name="ToggleRegionSpotlightBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="20" Text="Clear spot regions" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="20" Grid.Column="1" x:Name="ClearRegionSpotlightsBox" Margin="8,3,0,3" />
                             </Grid>
                         </GroupBox>
 
@@ -480,6 +491,7 @@
                         </GroupBox>
                     </Grid>
                 </Grid>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </DockPanel>

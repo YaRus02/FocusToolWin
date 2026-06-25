@@ -23,6 +23,15 @@ internal sealed class ScreenshotService
         }
     }
 
+    public async Task CaptureRegionAsync(ScreenRect rect, bool copyToClipboard)
+    {
+        var capture = await Task.Run(() => CaptureRegionCore(rect));
+        if (copyToClipboard)
+        {
+            await TrySetClipboardImageAsync(capture.Image);
+        }
+    }
+
     public async Task<ScreenBoardFrame> CaptureCurrentMonitorFrameAsync()
     {
         return await Task.Run(() =>
@@ -53,6 +62,15 @@ internal sealed class ScreenshotService
         return new ScreenshotCapture(image);
     }
 
+    private static ScreenshotCapture CaptureRegionCore(ScreenRect rect)
+    {
+        var bounds = ToIntegerBounds(rect);
+        using var bitmap = CaptureScreenBitmap(bounds);
+        var image = ToBitmapSource(bitmap);
+        SavePng(bitmap, "FocusTool_Region");
+        return new ScreenshotCapture(image);
+    }
+
     private static Forms.Screen GetCursorScreen()
     {
         if (NativeMethods.GetCursorPos(out var point))
@@ -66,6 +84,11 @@ internal sealed class ScreenshotService
     private static Bitmap CaptureScreenBitmap(Forms.Screen screen)
     {
         var bounds = screen.Bounds;
+        return CaptureScreenBitmap(bounds);
+    }
+
+    private static Bitmap CaptureScreenBitmap(Rectangle bounds)
+    {
         var bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         try
         {
@@ -78,6 +101,17 @@ internal sealed class ScreenshotService
             bitmap.Dispose();
             throw;
         }
+    }
+
+    private static Rectangle ToIntegerBounds(ScreenRect rect)
+    {
+        var left = (int)Math.Floor(rect.Left);
+        var top = (int)Math.Floor(rect.Top);
+        var right = (int)Math.Ceiling(rect.Right);
+        var bottom = (int)Math.Ceiling(rect.Bottom);
+        var width = Math.Max(1, right - left);
+        var height = Math.Max(1, bottom - top);
+        return new Rectangle(left, top, width, height);
     }
 
     private static ScreenBoardFrame CreateFrame(Rectangle bounds, BitmapSource image)

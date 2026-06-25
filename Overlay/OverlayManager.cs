@@ -16,8 +16,10 @@ internal sealed class OverlayManager : IDisposable
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<CursorHighlightFrame> _cursorHighlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
-    private readonly Func<ScreenRect?> _rectSelectionProvider;
+    private readonly Func<RectOverlayVisual?> _rectOverlayProvider;
     private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
+    private readonly Func<IReadOnlyList<ScreenRect>> _spotlightRegionProvider;
+    private readonly Func<int> _spotlightRegionSelectionProvider;
     private readonly IOverlayInputHandler _inputHandler;
     private readonly Action? _beforeTopmostReassert;
     private readonly Action? _afterTopmostReassert;
@@ -35,8 +37,10 @@ internal sealed class OverlayManager : IDisposable
         Func<ScreenPoint?> spotlightProvider,
         Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> rectSelectionProvider,
+        Func<RectOverlayVisual?> rectOverlayProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
+        Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
+        Func<int> spotlightRegionSelectionProvider,
         IOverlayInputHandler inputHandler,
         Action? beforeTopmostReassert = null,
         Action? afterTopmostReassert = null)
@@ -49,8 +53,10 @@ internal sealed class OverlayManager : IDisposable
         _spotlightProvider = spotlightProvider;
         _cursorHighlightProvider = cursorHighlightProvider;
         _screenBoardProvider = screenBoardProvider;
-        _rectSelectionProvider = rectSelectionProvider;
+        _rectOverlayProvider = rectOverlayProvider;
         _regionMaskProvider = regionMaskProvider;
+        _spotlightRegionProvider = spotlightRegionProvider;
+        _spotlightRegionSelectionProvider = spotlightRegionSelectionProvider;
         _inputHandler = inputHandler;
         _beforeTopmostReassert = beforeTopmostReassert;
         _afterTopmostReassert = afterTopmostReassert;
@@ -258,7 +264,7 @@ internal sealed class OverlayManager : IDisposable
 
         foreach (var screen in Screen.AllScreens)
         {
-            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _cursorHighlightProvider, _screenBoardProvider, _rectSelectionProvider, _regionMaskProvider, _inputHandler));
+            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _cursorHighlightProvider, _screenBoardProvider, _rectOverlayProvider, _regionMaskProvider, _spotlightRegionProvider, _spotlightRegionSelectionProvider, _inputHandler));
         }
     }
 
