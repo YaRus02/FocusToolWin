@@ -281,6 +281,11 @@ internal sealed class OverlaySurface : FrameworkElement
             DrawSelectionRectangle(drawingContext, selectionBounds, isDraft: false);
         }
 
+        if (_annotations.ObjectEditShape is { } objectEditShape)
+        {
+            DrawObjectEditHandles(drawingContext, objectEditShape);
+        }
+
         if (_annotations.SelectionDraftBounds is { } draftBounds)
         {
             DrawSelectionRectangle(drawingContext, draftBounds, isDraft: true);
@@ -457,6 +462,28 @@ internal sealed class OverlaySurface : FrameworkElement
         drawingContext.DrawRectangle(fill, pen, CenteredRect(new WpfPoint(rect.Right, rect.Bottom), RegionMaskHandleSize));
     }
 
+    private void DrawObjectEditHandles(DrawingContext drawingContext, AnnotationShape shape)
+    {
+        if (shape.Tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse or AnnotationTool.StepRect)
+        {
+            DrawRectHandles(drawingContext, ToRect(shape.Start, shape.End));
+            return;
+        }
+
+        if (shape.Tool is AnnotationTool.Line or AnnotationTool.Arrow)
+        {
+            DrawPointHandle(drawingContext, ToLocal(shape.Start));
+            DrawPointHandle(drawingContext, ToLocal(shape.End));
+        }
+    }
+
+    private static void DrawPointHandle(DrawingContext drawingContext, WpfPoint center)
+    {
+        var fill = GetBrush(Colors.White, 0.94);
+        var pen = CreatePen(Colors.Black, 0.72, 1.2);
+        drawingContext.DrawEllipse(fill, pen, center, RegionMaskHandleSize / 2, RegionMaskHandleSize / 2);
+    }
+
     private void DrawRectReadout(DrawingContext drawingContext, ScreenRect screenRect, Rect localRect)
     {
         if (localRect.Width < 1 || localRect.Height < 1)
@@ -606,7 +633,7 @@ internal sealed class OverlaySurface : FrameworkElement
         {
             text = "|";
         }
-        else if (_annotations.Draft == shape)
+        else if (_annotations.Draft == shape || _annotations.IsTextBeingEdited(shape))
         {
             text += "|";
         }
