@@ -20,6 +20,7 @@ public partial class SettingsWindow : Window
     private string _laserColor = "#FFFF2020";
     private string _annotationColor = "#FFFF2020";
     private string _regionMaskColor = "#FF000000";
+    private string _cursorHighlightColor = "#BFFFD400";
     private int _selectedLaserPresetIndex;
     private int _selectedAnnotationPresetIndex;
     private int _selectedRegionMaskPresetIndex;
@@ -42,6 +43,12 @@ public partial class SettingsWindow : Window
         FadeDurationSlider.Value = settings.FadeDurationMs;
         GlowCheckBox.IsChecked = settings.GlowEnabled;
         SelectLaserActivationMode(settings.GetLaserActivationMode());
+        _cursorHighlightColor = settings.CursorHighlightColor;
+        CursorHighlightColorBox.Text = settings.CursorHighlightColor;
+        SelectCursorHighlightActivationMode(settings.GetCursorHighlightActivationMode());
+        CursorHighlightRadiusSlider.Value = settings.CursorHighlightRadius;
+        CursorHighlightThicknessSlider.Value = settings.CursorHighlightThickness;
+        CursorHighlightClickPulseCheckBox.IsChecked = settings.CursorHighlightClickPulseEnabled;
         SpotlightRadiusSlider.Value = settings.SpotlightRadius;
         SpotlightOpacitySlider.Value = settings.SpotlightOpacity * 100;
         MagnifierRadiusSlider.Value = settings.MagnifierRadius;
@@ -84,6 +91,7 @@ public partial class SettingsWindow : Window
         UpdateSelectedLaserSwatch();
         UpdateSelectedAnnotationSwatch();
         UpdateSelectedRegionMaskSwatch();
+        UpdateCursorHighlightSwatch();
         UpdateLaserPresetSelection();
         UpdateAnnotationPresetSelection();
         UpdateRegionMaskPresetSelection();
@@ -219,6 +227,22 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void CursorHighlightColorBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        var hex = CursorHighlightColorBox.Text.Trim();
+        if (AppSettings.TryParseColor(hex, out _))
+        {
+            _cursorHighlightColor = hex;
+        }
+
+        UpdateCursorHighlightSwatch();
+    }
+
     private void MaskColorPreset_OnClick(object sender, RoutedEventArgs e)
     {
         if (sender is not System.Windows.Controls.Button button
@@ -265,12 +289,19 @@ public partial class SettingsWindow : Window
             return false;
         }
 
+        if (!AppSettings.TryParseColor(CursorHighlightColorBox.Text.Trim(), out _))
+        {
+            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the cursor highlight color.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
         _laserPresets[_selectedLaserPresetIndex] = LaserColorBox.Text.Trim();
         _laserColor = _laserPresets[_selectedLaserPresetIndex];
         _annotationPresets[_selectedAnnotationPresetIndex] = AnnotationPreset5Box.Text.Trim();
         _annotationColor = _annotationPresets[_selectedAnnotationPresetIndex];
         _regionMaskPresets[_selectedRegionMaskPresetIndex] = RegionMaskColorBox.Text.Trim();
         _regionMaskColor = _regionMaskPresets[_selectedRegionMaskPresetIndex];
+        _cursorHighlightColor = CursorHighlightColorBox.Text.Trim();
 
         var updated = _settings.Clone();
         updated.Color = _laserColor;
@@ -279,6 +310,11 @@ public partial class SettingsWindow : Window
         updated.FadeDurationMs = (int)FadeDurationSlider.Value;
         updated.GlowEnabled = GlowCheckBox.IsChecked == true;
         updated.SetLaserActivationMode(ReadLaserActivationMode());
+        updated.CursorHighlightColor = _cursorHighlightColor;
+        updated.SetCursorHighlightActivationMode(ReadCursorHighlightActivationMode());
+        updated.CursorHighlightRadius = CursorHighlightRadiusSlider.Value;
+        updated.CursorHighlightThickness = CursorHighlightThicknessSlider.Value;
+        updated.CursorHighlightClickPulseEnabled = CursorHighlightClickPulseCheckBox.IsChecked == true;
         updated.SpotlightRadius = SpotlightRadiusSlider.Value;
         updated.SpotlightOpacity = SpotlightOpacitySlider.Value / 100.0;
         updated.MagnifierRadius = MagnifierRadiusSlider.Value;
@@ -313,9 +349,11 @@ public partial class SettingsWindow : Window
     private void LoadShortcutFields(AppSettings settings)
     {
         LaserHoldBox.Text = settings.LaserHoldShortcut;
+        CursorHighlightHoldBox.Text = settings.CursorHighlightHoldShortcut;
 
         ToggleAnnotateBox.Text = settings.Shortcuts.ToggleAnnotate;
         ToggleLaserActivationBox.Text = settings.Shortcuts.ToggleLaserActivation;
+        ToggleCursorHighlightBox.Text = settings.Shortcuts.ToggleCursorHighlight;
         ToggleSpotlightBox.Text = settings.Shortcuts.ToggleSpotlight;
         ToggleMagnifierBox.Text = settings.Shortcuts.ToggleMagnifier;
         TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
@@ -358,8 +396,10 @@ public partial class SettingsWindow : Window
         var shortcuts = updated.Shortcuts.Clone();
 
         updated.LaserHoldShortcut = ReadShortcutText(LaserHoldBox);
+        updated.CursorHighlightHoldShortcut = ReadShortcutText(CursorHighlightHoldBox);
         shortcuts.ToggleAnnotate = ReadShortcutText(ToggleAnnotateBox);
         shortcuts.ToggleLaserActivation = ReadShortcutText(ToggleLaserActivationBox);
+        shortcuts.ToggleCursorHighlight = ReadShortcutText(ToggleCursorHighlightBox);
         shortcuts.ToggleSpotlight = ReadShortcutText(ToggleSpotlightBox);
         shortcuts.ToggleMagnifier = ReadShortcutText(ToggleMagnifierBox);
         shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
@@ -397,8 +437,10 @@ public partial class SettingsWindow : Window
         shortcuts.ExitAnnotate = ReadShortcutText(ExitAnnotateBox);
 
         if ((updated.GetLaserActivationMode() == LaserActivationMode.Hold && !ValidateShortcut("Hold laser", updated.LaserHoldShortcut, allowMouseButton: true, allowDisabled: false))
+            || (updated.GetCursorHighlightActivationMode() == LaserActivationMode.Hold && !ValidateShortcut("Hold cursor highlight", updated.CursorHighlightHoldShortcut, allowMouseButton: true, allowDisabled: false))
             || !ValidateShortcut("Toggle annotate mode", shortcuts.ToggleAnnotate)
             || !ValidateShortcut("Toggle laser mode", shortcuts.ToggleLaserActivation)
+            || !ValidateShortcut("Cursor highlight", shortcuts.ToggleCursorHighlight)
             || !ValidateShortcut("Toggle spotlight", shortcuts.ToggleSpotlight)
             || !ValidateShortcut("Toggle magnifier", shortcuts.ToggleMagnifier)
             || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
@@ -481,6 +523,7 @@ public partial class SettingsWindow : Window
         {
             ("Toggle annotate mode", shortcuts.ToggleAnnotate),
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
+            ("Cursor highlight", shortcuts.ToggleCursorHighlight),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
             ("Pinned lens", shortcuts.TogglePinnedLens),
@@ -524,6 +567,7 @@ public partial class SettingsWindow : Window
         {
             ("Toggle annotate mode", shortcuts.ToggleAnnotate),
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
+            ("Cursor highlight", shortcuts.ToggleCursorHighlight),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
             ("Pinned lens", shortcuts.TogglePinnedLens),
@@ -564,6 +608,11 @@ public partial class SettingsWindow : Window
         if (updated.GetLaserActivationMode() == LaserActivationMode.Hold)
         {
             entries.Insert(0, ("Hold laser", updated.LaserHoldShortcut));
+        }
+
+        if (updated.GetCursorHighlightActivationMode() == LaserActivationMode.Hold)
+        {
+            entries.Insert(0, ("Hold cursor highlight", updated.CursorHighlightHoldShortcut));
         }
 
         var used = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -610,6 +659,8 @@ public partial class SettingsWindow : Window
         if (PointSizeValue is null
             || TrailLengthValue is null
             || FadeDurationValue is null
+            || CursorHighlightRadiusValue is null
+            || CursorHighlightThicknessValue is null
             || SpotlightRadiusValue is null
             || SpotlightOpacityValue is null
             || MagnifierRadiusValue is null
@@ -628,6 +679,8 @@ public partial class SettingsWindow : Window
         PointSizeValue.Text = $"{PointSizeSlider.Value:0}px";
         TrailLengthValue.Text = $"{TrailLengthSlider.Value:0} ms";
         FadeDurationValue.Text = $"{FadeDurationSlider.Value:0} ms";
+        CursorHighlightRadiusValue.Text = $"{CursorHighlightRadiusSlider.Value:0}px";
+        CursorHighlightThicknessValue.Text = $"{CursorHighlightThicknessSlider.Value:0}px";
         SpotlightRadiusValue.Text = $"{SpotlightRadiusSlider.Value:0}px";
         SpotlightOpacityValue.Text = $"{SpotlightOpacitySlider.Value:0}%";
         MagnifierRadiusValue.Text = $"{MagnifierRadiusSlider.Value:0}px";
@@ -654,6 +707,25 @@ public partial class SettingsWindow : Window
     private void UpdateSelectedRegionMaskSwatch()
     {
         UpdateSelectedSwatch(RegionMaskColorBox, RegionMaskColorPreview, GetRegionMaskPresetButtons(), _selectedRegionMaskPresetIndex);
+    }
+
+    private void UpdateCursorHighlightSwatch()
+    {
+        if (CursorHighlightColorBox is null || CursorHighlightColorPreview is null)
+        {
+            return;
+        }
+
+        if (AppSettings.TryParseColor(CursorHighlightColorBox.Text.Trim(), out var color))
+        {
+            CursorHighlightColorPreview.Background = new SolidColorBrush(color);
+            CursorHighlightColorBox.ClearValue(BorderBrushProperty);
+        }
+        else
+        {
+            CursorHighlightColorPreview.Background = System.Windows.Media.Brushes.Transparent;
+            CursorHighlightColorBox.BorderBrush = System.Windows.Media.Brushes.Firebrick;
+        }
     }
 
     private static void UpdateSelectedSwatch(
@@ -811,6 +883,20 @@ public partial class SettingsWindow : Window
         LaserActivationModeBox.SelectedIndex = 0;
     }
 
+    private void SelectCursorHighlightActivationMode(LaserActivationMode mode)
+    {
+        foreach (var item in CursorHighlightActivationModeBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag?.ToString()?.Equals(mode.ToString(), StringComparison.OrdinalIgnoreCase) == true)
+            {
+                CursorHighlightActivationModeBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        CursorHighlightActivationModeBox.SelectedIndex = 0;
+    }
+
     private LaserActivationMode ReadLaserActivationMode()
     {
         if (LaserActivationModeBox.SelectedItem is ComboBoxItem item
@@ -820,6 +906,17 @@ public partial class SettingsWindow : Window
         }
 
         return LaserActivationMode.Hold;
+    }
+
+    private LaserActivationMode ReadCursorHighlightActivationMode()
+    {
+        if (CursorHighlightActivationModeBox.SelectedItem is ComboBoxItem item
+            && Enum.TryParse<LaserActivationMode>(item.Tag?.ToString(), true, out var mode))
+        {
+            return mode;
+        }
+
+        return LaserActivationMode.Always;
     }
 
     private void UpdateLaserHoldFieldState()

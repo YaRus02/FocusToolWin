@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FocusTool Settings"
         Width="860"
+        MaxHeight="760"
         SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
@@ -80,11 +81,13 @@
 
         <TabControl>
             <TabItem Header="General">
-                <Grid Margin="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Margin="0,0,16,0">
                         <TextBlock Text="Laser" FontSize="16" FontWeight="SemiBold" />
@@ -135,6 +138,48 @@
                         <Slider x:Name="FadeDurationSlider" Minimum="80" Maximum="2000" TickFrequency="20" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
 
                         <CheckBox x:Name="GlowCheckBox" Content="Glow" Margin="0,10,0,0" />
+
+                        <Separator Margin="0,18,0,14" />
+                        <TextBlock Text="Cursor highlight" FontSize="16" FontWeight="SemiBold" />
+
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Color" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <TextBox Grid.Column="1" x:Name="CursorHighlightColorBox" TextChanged="CursorHighlightColorBox_OnTextChanged" />
+                            <Border Grid.Column="2"
+                                    x:Name="CursorHighlightColorPreview"
+                                    Width="24"
+                                    Height="24"
+                                    Margin="8,0,0,0"
+                                    BorderBrush="#66000000"
+                                    BorderThickness="1"
+                                    Background="#BFFFD400" />
+                        </Grid>
+
+                        <TextBlock Text="Activation mode" FontWeight="SemiBold" Margin="0,10,0,0" />
+                        <ComboBox x:Name="CursorHighlightActivationModeBox" Margin="0,6,0,0">
+                            <ComboBoxItem Content="Always on" Tag="Always" />
+                            <ComboBoxItem Content="Hold key / mouse button" Tag="Hold" />
+                        </ComboBox>
+                        <TextBlock Text="Hold key is configured on the Shortcuts tab." Foreground="#666666" FontSize="11" Margin="0,6,0,0" />
+
+                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                            <TextBlock Text="Radius" FontWeight="SemiBold" />
+                            <TextBlock x:Name="CursorHighlightRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                        </DockPanel>
+                        <Slider x:Name="CursorHighlightRadiusSlider" Minimum="12" Maximum="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                            <TextBlock Text="Thickness" FontWeight="SemiBold" />
+                            <TextBlock x:Name="CursorHighlightThicknessValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                        </DockPanel>
+                        <Slider x:Name="CursorHighlightThicknessSlider" Minimum="1" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                        <CheckBox x:Name="CursorHighlightClickPulseCheckBox" Content="Click pulse" Margin="0,10,0,0" />
 
                         <Separator Margin="0,18,0,14" />
                         <TextBlock Text="Spotlight" FontSize="16" FontWeight="SemiBold" />
@@ -265,7 +310,8 @@
                         </DockPanel>
                         <Slider x:Name="FadingAnnotationFadeSlider" Minimum="0.1" Maximum="10" TickFrequency="0.1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
                     </StackPanel>
-                </Grid>
+                    </Grid>
+                </ScrollViewer>
             </TabItem>
 
             <TabItem Header="Shortcuts">
@@ -290,6 +336,8 @@
                                     <ColumnDefinition Width="132" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -340,6 +388,10 @@
                                 <TextBox Grid.Row="14" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="15" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="15" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="16" Text="Cursor highlight" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="16" Grid.Column="1" x:Name="ToggleCursorHighlightBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="17" Text="Hold highlight" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="17" Grid.Column="1" x:Name="CursorHighlightHoldBox" Margin="8,3,0,3" />
                             </Grid>
                         </GroupBox>
 

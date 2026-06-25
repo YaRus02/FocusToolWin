@@ -36,6 +36,7 @@ internal static class NativeMethods
     public const int WmLButtonUp = 0x0202;
     public const int WmRButtonDown = 0x0204;
     public const int WmRButtonUp = 0x0205;
+    public const int WhMouseLl = 14;
     public const int WmCancelMode = 0x001F;
     public const int WmCaptureChanged = 0x0215;
     public const int WmNcHitTest = 0x0084;
@@ -97,6 +98,18 @@ internal static class NativeMethods
         };
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MouseHookStruct
+    {
+        public Point Point;
+        public uint MouseData;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool GetCursorPos(out Point point);
 
@@ -135,6 +148,18 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern IntPtr GetModuleHandle(string? lpModuleName);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowPos(

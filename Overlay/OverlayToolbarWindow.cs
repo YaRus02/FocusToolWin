@@ -35,11 +35,13 @@ internal sealed class OverlayToolbarWindow : Window
     private readonly Dictionary<AnnotationTool, WpfButton> _toolButtons = [];
     private readonly List<WpfButton> _colorButtons = [];
     private readonly List<WpfButton> _laserColorButtons = [];
+    private readonly List<WpfButton> _highlightColorButtons = [];
     private readonly List<WpfButton> _maskColorButtons = [];
     private readonly Dictionary<string, UIElement> _rows = [];
     private readonly Dictionary<string, WpfButton> _carets = [];
 
     private WpfButton _laserButton = null!;
+    private WpfButton _highlightButton = null!;
     private WpfButton _drawButton = null!;
     private WpfButton _spotButton = null!;
     private WpfButton _zoomButton = null!;
@@ -52,6 +54,10 @@ internal sealed class OverlayToolbarWindow : Window
     private WpfButton _laserHoldButton = null!;
     private WpfButton _glowButton = null!;
     private TextBlock _trailText = null!;
+    private WpfButton _highlightAlwaysButton = null!;
+    private WpfButton _highlightHoldButton = null!;
+    private WpfButton _highlightPulseButton = null!;
+    private TextBlock _highlightRadiusText = null!;
     private TextBlock _thicknessText = null!;
     private TextBlock _fontText = null!;
     private WpfButton _stepButton = null!;
@@ -199,6 +205,7 @@ internal sealed class OverlayToolbarWindow : Window
         primary.Children.Add(CreateSeparator());
 
         _laserButton = AddSplitButton(primary, "Laser", "Toggle laser always/hold", 45, (_, _) => _controller.ToggleLaserActivationMode(), "laser");
+        _highlightButton = AddSplitButton(primary, "Cursor", "Toggle cursor highlight", 48, (_, _) => _controller.ToggleCursorHighlight(), "highlight");
         _drawButton = AddSplitButton(primary, "Draw", "Toggle annotation mode", 42, (_, _) => ToggleMode(InteractionMode.Annotate), "draw");
         primary.Children.Add(CreateSeparator());
         _spotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
@@ -234,6 +241,7 @@ internal sealed class OverlayToolbarWindow : Window
     private void BuildContextualRows()
     {
         _rows["laser"] = BuildLaserRow();
+        _rows["highlight"] = BuildHighlightRow();
         _rows["draw"] = BuildDrawRow();
         _rows["spot"] = BuildSpotRow();
         _rows["zoom"] = BuildZoomRow();
@@ -258,6 +266,23 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(_glowButton);
         row.Children.Add(CreateSeparator());
         _trailText = CreateStepper(row, "Trail", () => _controller.AdjustLaserTrailLength(-40), () => _controller.AdjustLaserTrailLength(40));
+        return row;
+    }
+
+    private UIElement BuildHighlightRow()
+    {
+        var row = CreateRow();
+        _highlightAlwaysButton = CreateButton("Always", "Highlight stays on", (_, _) => _controller.SetCursorHighlightActivationMode(LaserActivationMode.Always), width: 52);
+        _highlightHoldButton = CreateButton("Hold", "Highlight only while the hold key is pressed", (_, _) => _controller.SetCursorHighlightActivationMode(LaserActivationMode.Hold), width: 44);
+        row.Children.Add(_highlightAlwaysButton);
+        row.Children.Add(_highlightHoldButton);
+        row.Children.Add(CreateSeparator());
+        AddColorSwatches(row, _highlightColorButtons, "Highlight color", _controller.SetCursorHighlightPresetColor);
+        row.Children.Add(CreateSeparator());
+        _highlightRadiusText = CreateStepper(row, "Size", () => _controller.AdjustCursorHighlightRadius(-2), () => _controller.AdjustCursorHighlightRadius(2));
+        row.Children.Add(CreateSeparator());
+        _highlightPulseButton = CreateButton("Pulse", "Toggle click pulse", (_, _) => _controller.SetCursorHighlightClickPulseEnabled(!_controller.Settings.CursorHighlightClickPulseEnabled), width: 44);
+        row.Children.Add(_highlightPulseButton);
         return row;
     }
 
@@ -834,6 +859,7 @@ internal sealed class OverlayToolbarWindow : Window
             var settings = _controller.Settings;
 
             SetButtonActive(_laserButton, _controller.ActivationMode == LaserActivationMode.Always);
+            SetButtonActive(_highlightButton, _controller.CursorHighlightEnabled);
             SetButtonActive(_drawButton, _controller.Mode == InteractionMode.Annotate);
             SetButtonActive(_spotButton, _controller.SpotlightEnabled);
             SetButtonActive(_zoomButton, _controller.MagnifierEnabled);
@@ -851,6 +877,12 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_glowButton, settings.GlowEnabled);
             _trailText.Text = $"{settings.TrailLengthMs:0}";
             UpdateColorSwatches(_laserColorButtons, settings.LaserColorPresets, settings.Color);
+
+            SetButtonActive(_highlightAlwaysButton, settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always);
+            SetButtonActive(_highlightHoldButton, settings.GetCursorHighlightActivationMode() == LaserActivationMode.Hold);
+            UpdateColorSwatches(_highlightColorButtons, settings.LaserColorPresets, settings.CursorHighlightColor);
+            SetButtonActive(_highlightPulseButton, settings.CursorHighlightClickPulseEnabled);
+            _highlightRadiusText.Text = $"{settings.CursorHighlightRadius:0}";
 
             foreach (var (tool, button) in _toolButtons)
             {
@@ -909,6 +941,7 @@ internal sealed class OverlayToolbarWindow : Window
     private bool AnyToolActive()
     {
         return _controller.ActivationMode == LaserActivationMode.Always
+            || _controller.CursorHighlightEnabled
             || _controller.SpotlightEnabled
             || _controller.MagnifierEnabled
             || _controller.PinnedLensActive

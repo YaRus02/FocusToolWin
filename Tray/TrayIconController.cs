@@ -16,6 +16,10 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _modeItem;
     private readonly ToolStripMenuItem _laserAlwaysModeItem;
     private readonly ToolStripMenuItem _laserHoldModeItem;
+    private readonly ToolStripMenuItem _cursorHighlightItem;
+    private readonly ToolStripMenuItem _cursorHighlightAlwaysModeItem;
+    private readonly ToolStripMenuItem _cursorHighlightHoldModeItem;
+    private readonly ToolStripMenuItem _cursorHighlightPulseItem;
     private readonly ToolStripMenuItem _spotlightItem;
     private readonly ToolStripMenuItem _magnifierItem;
     private readonly ToolStripMenuItem _pinnedLensItem;
@@ -74,6 +78,42 @@ internal sealed class TrayIconController : IDisposable
             if (!_updating)
             {
                 _controller.SetLaserActivationMode(LaserActivationMode.Hold);
+            }
+        };
+
+        _cursorHighlightItem = new ToolStripMenuItem("Enabled") { CheckOnClick = true };
+        _cursorHighlightItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.SetCursorHighlightEnabled(_cursorHighlightItem.Checked);
+            }
+        };
+
+        _cursorHighlightAlwaysModeItem = new ToolStripMenuItem("Always on") { CheckOnClick = true };
+        _cursorHighlightAlwaysModeItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.SetCursorHighlightActivationMode(LaserActivationMode.Always);
+            }
+        };
+
+        _cursorHighlightHoldModeItem = new ToolStripMenuItem("Hold key / mouse button") { CheckOnClick = true };
+        _cursorHighlightHoldModeItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.SetCursorHighlightActivationMode(LaserActivationMode.Hold);
+            }
+        };
+
+        _cursorHighlightPulseItem = new ToolStripMenuItem("Click pulse") { CheckOnClick = true };
+        _cursorHighlightPulseItem.Click += (_, _) =>
+        {
+            if (!_updating)
+            {
+                _controller.SetCursorHighlightClickPulseEnabled(_cursorHighlightPulseItem.Checked);
             }
         };
 
@@ -220,6 +260,14 @@ internal sealed class TrayIconController : IDisposable
         laserMenu.DropDownItems.Add(laserPresets);
         laserMenu.DropDownItems.Add(_glowItem);
 
+        var cursorHighlightMenu = new ToolStripMenuItem("Cursor highlight");
+        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightItem);
+        cursorHighlightMenu.DropDownItems.Add(new ToolStripSeparator());
+        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightAlwaysModeItem);
+        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightHoldModeItem);
+        cursorHighlightMenu.DropDownItems.Add(new ToolStripSeparator());
+        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightPulseItem);
+
         tools.Text = "Tool";
         annotationColors.Text = "Color";
         var drawMenu = new ToolStripMenuItem("Draw");
@@ -258,6 +306,7 @@ internal sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(_statusItem);
         _contextMenu.Items.Add(new ToolStripSeparator());
         _contextMenu.Items.Add(laserMenu);
+        _contextMenu.Items.Add(cursorHighlightMenu);
         _contextMenu.Items.Add(drawMenu);
         _contextMenu.Items.Add(_spotlightItem);
         _contextMenu.Items.Add(_magnifierItem);
@@ -335,6 +384,13 @@ internal sealed class TrayIconController : IDisposable
         _laserHoldModeItem.Checked = _controller.ActivationMode == LaserActivationMode.Hold;
         _laserAlwaysModeItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleLaserActivation;
         _laserHoldModeItem.ShortcutKeyDisplayString = _controller.Settings.LaserHoldShortcut;
+
+        _cursorHighlightItem.Checked = _controller.CursorHighlightEnabled;
+        _cursorHighlightItem.ShortcutKeyDisplayString = _controller.CursorHighlightShortcut;
+        _cursorHighlightAlwaysModeItem.Checked = _controller.Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always;
+        _cursorHighlightHoldModeItem.Checked = _controller.Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Hold;
+        _cursorHighlightHoldModeItem.ShortcutKeyDisplayString = _controller.Settings.CursorHighlightHoldShortcut;
+        _cursorHighlightPulseItem.Checked = _controller.Settings.CursorHighlightClickPulseEnabled;
 
         _spotlightItem.Checked = _controller.SpotlightEnabled;
         _spotlightItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleSpotlight;
@@ -420,6 +476,8 @@ internal sealed class TrayIconController : IDisposable
                 ? "FocusTool: White board"
             : _controller.SpotlightEnabled
                 ? "FocusTool: Spotlight"
+            : _controller.CursorHighlightEnabled
+                ? "FocusTool: Cursor highlight"
             : _controller.ActivationMode == LaserActivationMode.Always
                 ? "FocusTool: Always"
                 : $"FocusTool: Hold {_controller.Settings.LaserHoldShortcut}";

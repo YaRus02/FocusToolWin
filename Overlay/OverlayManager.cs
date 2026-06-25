@@ -14,6 +14,7 @@ internal sealed class OverlayManager : IDisposable
     private readonly Func<InteractionMode> _modeProvider;
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
+    private readonly Func<CursorHighlightFrame> _cursorHighlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
     private readonly Func<ScreenRect?> _rectSelectionProvider;
     private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
@@ -32,6 +33,7 @@ internal sealed class OverlayManager : IDisposable
         Func<InteractionMode> modeProvider,
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
+        Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
         Func<ScreenRect?> rectSelectionProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
@@ -45,6 +47,7 @@ internal sealed class OverlayManager : IDisposable
         _modeProvider = modeProvider;
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
+        _cursorHighlightProvider = cursorHighlightProvider;
         _screenBoardProvider = screenBoardProvider;
         _rectSelectionProvider = rectSelectionProvider;
         _regionMaskProvider = regionMaskProvider;
@@ -255,7 +258,7 @@ internal sealed class OverlayManager : IDisposable
 
         foreach (var screen in Screen.AllScreens)
         {
-            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _screenBoardProvider, _rectSelectionProvider, _regionMaskProvider, _inputHandler));
+            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _cursorHighlightProvider, _screenBoardProvider, _rectSelectionProvider, _regionMaskProvider, _inputHandler));
         }
     }
 

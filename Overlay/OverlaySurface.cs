@@ -34,12 +34,15 @@ internal sealed class OverlaySurface : FrameworkElement
     private const double LaserFastThicknessFactor = 0.8;
     private const double LaserSpeedEasing = 0.2;
     private const double RegionMaskHandleSize = 8;
+    private const double CursorPulseDurationMs = 360;
+    private const double CursorPulseExtraRadius = 26;
     private readonly TrailModel _trailModel;
     private readonly AnnotationDocument _annotations;
     private readonly Func<AppSettings> _settingsProvider;
     private readonly Func<InteractionMode> _modeProvider;
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
+    private readonly Func<CursorHighlightFrame> _cursorHighlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
     private readonly Func<ScreenRect?> _rectSelectionProvider;
     private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
@@ -76,6 +79,7 @@ internal sealed class OverlaySurface : FrameworkElement
         Func<InteractionMode> modeProvider,
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
+        Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
         Func<ScreenRect?> rectSelectionProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
@@ -87,6 +91,7 @@ internal sealed class OverlaySurface : FrameworkElement
         _modeProvider = modeProvider;
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
+        _cursorHighlightProvider = cursorHighlightProvider;
         _screenBoardProvider = screenBoardProvider;
         _rectSelectionProvider = rectSelectionProvider;
         _regionMaskProvider = regionMaskProvider;
@@ -181,6 +186,7 @@ internal sealed class OverlaySurface : FrameworkElement
         }
 
         DrawAnnotations(drawingContext);
+        DrawCursorHighlight(drawingContext, _cursorHighlightProvider());
         DrawLaserTrail(drawingContext);
         if (!blankScreen || magnifierActive)
         {
@@ -620,6 +626,107 @@ internal sealed class OverlaySurface : FrameworkElement
     {
         var luminance = (0.299 * background.R + 0.587 * background.G + 0.114 * background.B) / 255.0;
         return luminance > 0.58 ? Colors.Black : Colors.White;
+    }
+
+    private void DrawCursorHighlight(DrawingContext drawingContext, CursorHighlightFrame frame)
+    {
+        if (frame.Cursor is null && frame.Pulses.Count == 0)
+        {
+            return;
+        }
+
+        var settings = _settingsProvider();
+        var color = AppSettings.TryParseColor(settings.CursorHighlightColor, out var parsedColor)
+            ? parsedColor
+            : MediaColor.FromArgb(0xBF, 0xFF, 0xD4, 0x00);
+        var radius = settings.CursorHighlightRadius;
+        var thickness = settings.CursorHighlightThickness;
+
+        if (frame.Cursor is { } cursor
+            && CursorEffectTouchesScreen(cursor, radius + CursorPulseExtraRadius))
+        {
+            DrawCursorHighlightCore(
+                drawingContext,
+                ToLocal(cursor),
+                color,
+                radius,
+                thickness);
+        }
+
+        if (frame.Pulses.Count == 0)
+        {
+            return;
+        }
+
+        var nowMs = _clockProvider();
+        foreach (var pulse in frame.Pulses)
+        {
+            var progress = Math.Clamp((nowMs - pulse.StartedAtMs) / CursorPulseDurationMs, 0, 1);
+            if (progress >= 1 || !CursorEffectTouchesScreen(pulse.Point, radius + CursorPulseExtraRadius + 4))
+            {
+                continue;
+            }
+
+            DrawCursorClickPulse(
+                drawingContext,
+                pulse,
+                color,
+                radius,
+                thickness,
+                progress);
+        }
+    }
+
+    private void DrawCursorHighlightCore(
+        DrawingContext drawingContext,
+        WpfPoint center,
+        MediaColor color,
+        double radius,
+        double thickness)
+    {
+        var innerRadius = Math.Max(1, radius - thickness * 1.45);
+        DrawRadialGlow(drawingContext, center, color, 0.24, radius * 1.55);
+        drawingContext.DrawEllipse(GetBrush(color, 0.052), null, center, radius * 0.9, radius * 0.9);
+        drawingContext.DrawEllipse(null, CreatePen(Colors.Black, 0.30, thickness + 2.4), center, radius, radius);
+        drawingContext.DrawEllipse(null, CreatePen(color, 0.95, thickness), center, radius, radius);
+        drawingContext.DrawEllipse(null, CreatePen(Colors.White, 0.16, 1.0), center, innerRadius, innerRadius);
+    }
+
+    private void DrawCursorClickPulse(
+        DrawingContext drawingContext,
+        CursorClickPulse pulse,
+        MediaColor highlightColor,
+        double baseRadius,
+        double thickness,
+        double progress)
+    {
+        var eased = EaseOutCubic(progress);
+        var fade = Math.Pow(1 - progress, 1.65);
+        var radius = baseRadius * 0.82 + eased * (CursorPulseExtraRadius + baseRadius * 0.14);
+        var color = pulse.Button == CursorClickButton.Right
+            ? MediaColor.FromArgb(highlightColor.A, 0x66, 0xCC, 0xFF)
+            : highlightColor;
+        var center = ToLocal(pulse.Point);
+        var line = Math.Max(1.3, thickness * (0.78 + 0.25 * (1 - progress)));
+
+        DrawRadialGlow(drawingContext, center, color, 0.14 * fade, radius + 7);
+        drawingContext.DrawEllipse(null, CreatePen(Colors.Black, 0.18 * fade, line + 1.4), center, radius, radius);
+        drawingContext.DrawEllipse(null, CreatePen(color, 0.74 * fade, line), center, radius, radius);
+    }
+
+    private bool CursorEffectTouchesScreen(ScreenPoint point, double radius)
+    {
+        return new ScreenRect(
+            point.X - radius,
+            point.Y - radius,
+            point.X + radius,
+            point.Y + radius).Intersects(_screenBounds);
+    }
+
+    private static double EaseOutCubic(double value)
+    {
+        var inverse = 1 - Math.Clamp(value, 0, 1);
+        return 1 - inverse * inverse * inverse;
     }
 
     // FormattedText glyph layout is one of the most expensive WPF objects to build;
