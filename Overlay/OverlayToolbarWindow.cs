@@ -214,7 +214,7 @@ internal sealed class OverlayToolbarWindow : Window
         _spotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
         _zoomButton = AddSplitButton(primary, "Zoom", "Toggle magnifier", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
         _pinButton = AddSplitButton(primary, "Pin", "Select a live pinned lens area", 34, (_, _) => _controller.TogglePinnedLens(), "pin");
-        _maskButton = AddSplitButton(primary, "Mask", "Select a region to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
+        _maskButton = AddSplitButton(primary, "Mask", "Select regions to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
         primary.Children.Add(CreateSeparator());
         _boardButton = AddSplitButton(primary, "Board", "Screen board, black or white", 48, (_, _) => ShowContextualRow("board"), "board");
         AddSplitButton(primary, "Shot", "Screenshot current monitor", 40, (_, _) => _controller.TakeScreenshot(), "shot");

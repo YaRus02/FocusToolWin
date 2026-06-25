@@ -160,7 +160,7 @@ internal sealed class TrayIconController : IDisposable
 
         _closePinnedLensesItem = new ToolStripMenuItem("Close pinned lenses", null, (_, _) => _controller.ClosePinnedLenses());
 
-        _regionMaskItem = new ToolStripMenuItem("New region mask");
+        _regionMaskItem = new ToolStripMenuItem("Region mask");
         _regionMaskItem.Click += (_, _) =>
         {
             if (!_updating)
@@ -389,7 +389,7 @@ internal sealed class TrayIconController : IDisposable
         {
             InteractionMode.Annotate => "Mode: Annotate",
             InteractionMode.PinnedLensSelect => "Mode: Select lens area",
-            InteractionMode.RegionMaskSelect => "Mode: Select mask area",
+            InteractionMode.RegionMaskSelect => "Mode: Select mask areas",
             InteractionMode.ScreenshotRegionSelect => "Mode: Select screenshot area",
             InteractionMode.RegionSpotlightSelect => "Mode: Select spotlight area",
             InteractionMode.ScreenBoard => "Mode: Screen board",
@@ -440,10 +440,10 @@ internal sealed class TrayIconController : IDisposable
 
         _regionMaskItem.Checked = _controller.RegionMaskActive || _controller.RegionMaskSelectionActive;
         _regionMaskItem.Text = _controller.RegionMaskSelectionActive
-            ? "Region mask: select area"
+            ? "Region mask: select areas"
             : _controller.RegionMaskCount > 0
-                ? $"New region mask ({_controller.RegionMaskCount} active)"
-                : "New region mask";
+                ? $"Region masks ({_controller.RegionMaskCount} active)"
+                : "Region mask";
         _regionMaskItem.ShortcutKeyDisplayString = _controller.RegionMaskShortcut;
         _clearRegionMasksItem.Enabled = _controller.RegionMaskActive;
         _clearRegionMasksItem.ShortcutKeyDisplayString = _controller.ClearRegionMasksShortcut;
@@ -500,7 +500,7 @@ internal sealed class TrayIconController : IDisposable
             : _controller.PinnedLensActive
                 ? $"FocusTool: {_controller.PinnedLensCount} pinned lens"
             : _controller.RegionMaskSelectionActive
-                ? "FocusTool: Select mask area"
+                ? "FocusTool: Select mask areas"
             : _controller.RegionMaskActive
                 ? $"FocusTool: {_controller.RegionMaskCount} region masks"
             : _controller.ScreenshotRegionSelectionActive

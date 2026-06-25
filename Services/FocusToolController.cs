@@ -85,10 +85,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private RectResizeHandle _screenshotRegionResizeHandle;
     private ScreenPoint _screenshotRegionResizeAnchor;
     private int _selectedSpotlightRegionIndex = -1;
+    private int _selectedRegionMaskId = -1;
     private bool _movingSpotlightRegion;
     private RectResizeHandle _spotlightRegionResizeHandle;
     private ScreenPoint _spotlightRegionResizeAnchor;
     private Forms.ContextMenuStrip? _regionMaskContextMenu;
+    private readonly List<Forms.Timer> _toolStripTopmostTimers = [];
     private int _regionMaskContextMenuMaskId;
     private bool _regionMaskContextMenuActionTaken;
     private int _nextRegionMaskId = 1;
@@ -264,7 +266,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks, () => _spotlightRegions, () => _selectedSpotlightRegionIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks, () => _selectedRegionMaskId, () => _spotlightRegions, () => _selectedSpotlightRegionIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         _mouseHook = new MouseHook();
@@ -480,6 +482,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _rectSelection.Cancel();
         _movingRegionMask = null;
         _resizingRegionMask = null;
+        _selectedRegionMaskId = -1;
         if (wasSelecting)
         {
             SetInteractionMode(InteractionMode.Passthrough);
@@ -510,8 +513,33 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return false;
     }
 
+    private bool TryGetSelectedRegionMask(out RegionMask mask)
+    {
+        mask = _regionMasks.FirstOrDefault(item => item.Id == _selectedRegionMaskId)!;
+        if (mask is not null)
+        {
+            return true;
+        }
+
+        _selectedRegionMaskId = -1;
+        return false;
+    }
+
     private bool TryHitRegionMaskResizeHandle(ScreenPoint point, out RegionMask mask, out RectResizeHandle handle)
     {
+        if (TryGetSelectedRegionMask(out var selectedMask))
+        {
+            if (TryHitRectResizeHandle(selectedMask.Rect, point, out handle))
+            {
+                mask = selectedMask;
+                return true;
+            }
+
+            mask = null!;
+            handle = RectResizeHandle.None;
+            return false;
+        }
+
         for (var i = _regionMasks.Count - 1; i >= 0; i--)
         {
             if (TryHitRectResizeHandle(_regionMasks[i].Rect, point, out handle))
@@ -641,6 +669,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _regionMasks.RemoveAt(index);
         _movingRegionMask = null;
         _resizingRegionMask = null;
+        if (_selectedRegionMaskId == maskId)
+        {
+            _selectedRegionMaskId = -1;
+        }
+
         _rectSelection.Cancel();
         _overlayManager?.Invalidate();
 
@@ -656,6 +689,35 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
     }
 
+    private void DeleteSelectedRegionMask()
+    {
+        if (_selectedRegionMaskId < 0)
+        {
+            return;
+        }
+
+        DeleteRegionMask(_selectedRegionMaskId, exitMaskMode: false);
+    }
+
+    private void SetRegionMaskStyle(int maskId, RegionMaskStyle style)
+    {
+        if (!string.Equals(Settings.RegionMaskStyle, style.ToString(), StringComparison.Ordinal))
+        {
+            var updated = Settings.Clone();
+            updated.RegionMaskStyle = style.ToString();
+            ApplySettings(updated);
+        }
+
+        var mask = _regionMasks.FirstOrDefault(item => item.Id == maskId);
+        if (mask is null || mask.Style == style)
+        {
+            return;
+        }
+
+        mask.SetStyle(style);
+        _overlayManager?.Invalidate();
+    }
+
     private void ShowRegionMaskContextMenu(ScreenPoint point, int maskId)
     {
         var menu = GetRegionMaskContextMenu();
@@ -668,10 +730,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _regionMaskContextMenuMaskId = maskId;
         _regionMaskContextMenuActionTaken = false;
         menu.Show(new DrawingPoint((int)Math.Round(point.X), (int)Math.Round(point.Y)));
-        ReassertRegionMaskContextMenuTopmost(menu);
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            () => ReassertRegionMaskContextMenuTopmost(menu),
-            DispatcherPriority.ContextIdle);
+        ReassertToolStripDropDownTopmostRepeated(menu);
     }
 
     private Forms.ContextMenuStrip GetRegionMaskContextMenu()
@@ -682,13 +741,67 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         var menu = new Forms.ContextMenuStrip();
+        var styleMenu = new Forms.ToolStripMenuItem("Style");
+        AddRegionMaskStyleItem(styleMenu, "Solid", RegionMaskStyle.Solid);
+        AddRegionMaskStyleItem(styleMenu, "Stripes", RegionMaskStyle.Stripes);
+        AddRegionMaskStyleItem(styleMenu, "HIDE label", RegionMaskStyle.Label);
+        AddRegionMaskStyleItem(styleMenu, "Stripes + HIDE", RegionMaskStyle.StripesWithLabel);
+        styleMenu.DropDownOpened += (_, _) =>
+        {
+            ReassertToolStripDropDownTopmostRepeated(styleMenu.DropDown);
+        };
+        menu.Items.Add(styleMenu);
+        menu.Items.Add(new Forms.ToolStripSeparator());
+
         var deleteItem = menu.Items.Add("Delete mask");
         deleteItem.Click += (_, _) => DeleteRegionMaskFromContextMenu();
-        menu.Opened += (_, _) => ReassertRegionMaskContextMenuTopmost(menu);
+        menu.Opening += (_, _) => UpdateRegionMaskContextMenuState(menu);
+        menu.Opened += (_, _) => ReassertToolStripDropDownTopmostRepeated(menu);
         menu.Closed += (_, _) => _regionMaskContextMenuActionTaken = false;
 
         _regionMaskContextMenu = menu;
         return menu;
+    }
+
+    private void AddRegionMaskStyleItem(Forms.ToolStripMenuItem parent, string text, RegionMaskStyle style)
+    {
+        var item = new Forms.ToolStripMenuItem(text)
+        {
+            CheckOnClick = false,
+            Tag = style
+        };
+        item.Click += (_, _) => SetRegionMaskStyleFromContextMenu(style);
+        parent.DropDownItems.Add(item);
+    }
+
+    private void UpdateRegionMaskContextMenuState(Forms.ContextMenuStrip menu)
+    {
+        var currentStyle = _regionMasks.FirstOrDefault(mask => mask.Id == _regionMaskContextMenuMaskId)?.Style
+            ?? RegionMaskStyle.StripesWithLabel;
+        foreach (Forms.ToolStripItem item in menu.Items)
+        {
+            if (item is Forms.ToolStripMenuItem { Text: "Style" } styleMenu)
+            {
+                foreach (Forms.ToolStripItem child in styleMenu.DropDownItems)
+                {
+                    if (child is Forms.ToolStripMenuItem styleItem && styleItem.Tag is RegionMaskStyle style)
+                    {
+                        styleItem.Checked = style == currentStyle;
+                    }
+                }
+            }
+        }
+    }
+
+    private void SetRegionMaskStyleFromContextMenu(RegionMaskStyle style)
+    {
+        if (_regionMaskContextMenuActionTaken)
+        {
+            return;
+        }
+
+        _regionMaskContextMenuActionTaken = true;
+        SetRegionMaskStyle(_regionMaskContextMenuMaskId, style);
     }
 
     private void DeleteRegionMaskFromContextMenu()
@@ -702,7 +815,53 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         DeleteRegionMask(_regionMaskContextMenuMaskId, exitMaskMode: false);
     }
 
-    private static void ReassertRegionMaskContextMenuTopmost(Forms.ContextMenuStrip menu)
+    private void ReassertRegionMaskContextMenuTopmost(Forms.ContextMenuStrip menu)
+    {
+        ReassertToolStripDropDownTopmost(menu);
+    }
+
+    private void ReassertToolStripDropDownTopmostRepeated(Forms.ToolStripDropDown menu)
+    {
+        ReassertToolStripDropDownTopmost(menu);
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+            () => ReassertToolStripDropDownTopmost(menu),
+            DispatcherPriority.Send);
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+            () => ReassertToolStripDropDownTopmost(menu),
+            DispatcherPriority.ContextIdle);
+
+        _toolStripTopmostTimers.RemoveAll(timer =>
+        {
+            if (timer.Enabled)
+            {
+                return false;
+            }
+
+            timer.Dispose();
+            return true;
+        });
+
+        var timer = new Forms.Timer
+        {
+            Interval = 16
+        };
+        timer.Tick += (_, _) =>
+        {
+            if (menu.IsDisposed || !menu.Visible)
+            {
+                timer.Stop();
+                _toolStripTopmostTimers.Remove(timer);
+                timer.Dispose();
+                return;
+            }
+
+            ReassertToolStripDropDownTopmost(menu);
+        };
+        _toolStripTopmostTimers.Add(timer);
+        timer.Start();
+    }
+
+    private static void ReassertToolStripDropDownTopmost(Forms.ToolStripDropDown menu)
     {
         if (menu.IsDisposed || menu.Disposing)
         {
@@ -1139,6 +1298,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _movingRegionMask = null;
             _resizingRegionMask = null;
+            _selectedRegionMaskId = -1;
         }
 
         if (leavingScreenBoard)
@@ -1417,9 +1577,15 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void AdjustRegionMaskOpacity(double delta)
     {
+        var hasSelectedMask = TryGetSelectedRegionMask(out var mask);
         var updated = Settings.Clone();
-        updated.RegionMaskOpacity += delta;
+        updated.RegionMaskOpacity = (hasSelectedMask ? mask.Opacity : Settings.RegionMaskOpacity) + delta;
         ApplySettings(updated);
+        if (hasSelectedMask)
+        {
+            mask.SetOpacity(Settings.RegionMaskOpacity);
+            _overlayManager?.Invalidate();
+        }
     }
 
     public void SetRegionMaskColor(string color)
@@ -1427,6 +1593,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var updated = Settings.Clone();
         updated.RegionMaskColor = color;
         ApplySettings(updated);
+        if (TryGetSelectedRegionMask(out var mask))
+        {
+            mask.SetColor(Settings.RegionMaskColor);
+            _overlayManager?.Invalidate();
+        }
     }
 
     public void SetRegionMaskPresetColor(int index)
@@ -1652,6 +1823,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             {
                 if (TryHitRegionMask(point, out var mask))
                 {
+                    _selectedRegionMaskId = mask.Id;
+                    _overlayManager?.Invalidate();
                     ShowRegionMaskContextMenu(point, mask.Id);
                 }
 
@@ -1666,21 +1839,26 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if (TryHitRegionMaskResizeHandle(point, out var resizeMask, out var resizeHandle))
             {
                 _resizingRegionMask = resizeMask;
+                _selectedRegionMaskId = resizeMask.Id;
                 _regionMaskResizeAnchor = GetRectResizeAnchor(resizeMask.Rect, resizeHandle);
                 _movingRegionMask = null;
                 _rectSelection.Cancel();
+                _overlayManager?.Invalidate();
                 return;
             }
 
             if (TryHitRegionMask(point, out var existingMask))
             {
                 _movingRegionMask = existingMask;
+                _selectedRegionMaskId = existingMask.Id;
                 _resizingRegionMask = null;
                 _lastRegionMaskMovePoint = point;
                 _rectSelection.Cancel();
+                _overlayManager?.Invalidate();
                 return;
             }
 
+            _selectedRegionMaskId = -1;
             _rectSelection.Begin(point);
             _overlayManager?.Invalidate();
             return;
@@ -2004,11 +2182,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             var completedMaskRect = maskRect.Value;
             if (completedMaskRect.Width >= RegionMaskMinSizePixels && completedMaskRect.Height >= RegionMaskMinSizePixels)
             {
-                _regionMasks.Add(new RegionMask(_nextRegionMaskId++, completedMaskRect, Settings));
+                var mask = new RegionMask(_nextRegionMaskId++, completedMaskRect, Settings);
+                _regionMasks.Add(mask);
+                _selectedRegionMaskId = mask.Id;
             }
 
+            RestoreToolbarAfterRectSelection();
             _overlayManager?.Invalidate();
-            SetInteractionMode(InteractionMode.Passthrough);
+            StateChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -2051,6 +2232,41 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _annotations.CommitStroke();
         _drawing = false;
         TryCompletePushToAnnotateExit();
+    }
+
+    public bool HandleOverlayMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
+    {
+        if (_mode != InteractionMode.RegionMaskSelect
+            || delta == 0
+            || (modifiers & ModifierKeys.Control) == 0
+            || (modifiers & ~(ModifierKeys.Control | ModifierKeys.Shift)) != 0)
+        {
+            return false;
+        }
+
+        if (!TryGetSelectedRegionMask(out var mask))
+        {
+            if (!TryHitRegionMask(point, out mask))
+            {
+                return false;
+            }
+
+            _selectedRegionMaskId = mask.Id;
+        }
+
+        var step = (modifiers & ModifierKeys.Shift) != 0 ? 0.01 : 0.05;
+        var nextOpacity = Math.Clamp(mask.Opacity + Math.Sign(delta) * step, 0.1, 1.0);
+        if (Math.Abs(mask.Opacity - nextOpacity) < 0.001)
+        {
+            return true;
+        }
+
+        var updated = Settings.Clone();
+        updated.RegionMaskOpacity = nextOpacity;
+        ApplySettings(updated);
+        mask.SetOpacity(Settings.RegionMaskOpacity);
+        _overlayManager?.Invalidate();
+        return true;
     }
 
     public void HandleOverlayCaptureLost()
@@ -2139,6 +2355,17 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             {
                 SetInteractionMode(InteractionMode.Passthrough);
                 return true;
+            }
+
+            if (_mode == InteractionMode.RegionMaskSelect)
+            {
+                if ((key == Key.Back || key == Key.Delete) && modifiers == ModifierKeys.None)
+                {
+                    DeleteSelectedRegionMask();
+                    return true;
+                }
+
+                return false;
             }
 
             if (_mode == InteractionMode.ScreenshotRegionSelect)
@@ -2643,6 +2870,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _annotations.DraftProgressed -= OnAnnotationDraftProgressed;
         _regionMaskContextMenu?.Dispose();
         _regionMaskContextMenu = null;
+        foreach (var timer in _toolStripTopmostTimers)
+        {
+            timer.Stop();
+            timer.Dispose();
+        }
+
+        _toolStripTopmostTimers.Clear();
         _hotKeyManager?.Dispose();
         CloseMagnifierHost();
         ClosePinnedLenses();

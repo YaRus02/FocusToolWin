@@ -53,6 +53,7 @@ public sealed class AppSettings
     public string RegionMaskColor { get; set; } = "#FF000000";
     public List<string> RegionMaskColorPresets { get; set; } = [.. DefaultRegionMaskColorSlots];
     public double RegionMaskOpacity { get; set; } = 1.0;
+    public string RegionMaskStyle { get; set; } = FocusTool.Win.Models.RegionMaskStyle.StripesWithLabel.ToString();
     public string AnnotationColor { get; set; } = "#FFFF2020";
     public List<string> AnnotationColorPresets { get; set; } = [.. DefaultColorSlots];
     public double AnnotationThickness { get; set; } = 4;
@@ -92,6 +93,7 @@ public sealed class AppSettings
         RegionMaskColor = RegionMaskColor,
         RegionMaskColorPresets = [.. RegionMaskColorPresets],
         RegionMaskOpacity = RegionMaskOpacity,
+        RegionMaskStyle = RegionMaskStyle,
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
         AnnotationThickness = AnnotationThickness,
@@ -132,6 +134,7 @@ public sealed class AppSettings
         RegionMaskColor = other.RegionMaskColor;
         RegionMaskColorPresets = [.. other.RegionMaskColorPresets];
         RegionMaskOpacity = other.RegionMaskOpacity;
+        RegionMaskStyle = other.RegionMaskStyle;
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
         AnnotationThickness = other.AnnotationThickness;
@@ -217,6 +220,12 @@ public sealed class AppSettings
         EnsureColorInPresets(RegionMaskColor, RegionMaskColorPresets, fallbackIndex: 4);
 
         RegionMaskOpacity = Math.Clamp(RegionMaskOpacity, 0.1, 1.0);
+        if (!Enum.TryParse<RegionMaskStyle>(RegionMaskStyle, true, out var regionMaskStyle))
+        {
+            regionMaskStyle = FocusTool.Win.Models.RegionMaskStyle.StripesWithLabel;
+        }
+
+        RegionMaskStyle = regionMaskStyle.ToString();
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
         FadingAnnotationVisibleMs = Math.Clamp(FadingAnnotationVisibleMs, 500, 60000);

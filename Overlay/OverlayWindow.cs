@@ -34,6 +34,7 @@ internal sealed class OverlayWindow : Window
         Func<ScreenBoardFrame?> screenBoardProvider,
         Func<RectOverlayVisual?> rectOverlayProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
+        Func<int> regionMaskSelectionProvider,
         Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
         Func<int> spotlightRegionSelectionProvider,
         IOverlayInputHandler inputHandler)
@@ -52,6 +53,7 @@ internal sealed class OverlayWindow : Window
             screenBoardProvider,
             rectOverlayProvider,
             regionMaskProvider,
+            regionMaskSelectionProvider,
             spotlightRegionProvider,
             spotlightRegionSelectionProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
@@ -386,6 +388,9 @@ internal sealed class OverlayWindow : Window
                 _inputHandler.HandleOverlayMouseUp(ToScreenPoint(hwnd, lParam), MouseButton.Right, Keyboard.Modifiers);
                 handled = true;
                 break;
+            case NativeMethods.WmMouseWheel:
+                handled = _inputHandler.HandleOverlayMouseWheel(ToScreenPoint(lParam), GetMouseWheelDelta(wParam), Keyboard.Modifiers);
+                break;
             case NativeMethods.WmCancelMode:
             case NativeMethods.WmCaptureChanged:
                 if (_nativeMouseCaptured
@@ -402,6 +407,11 @@ internal sealed class OverlayWindow : Window
         return IntPtr.Zero;
     }
 
+    private static int GetMouseWheelDelta(IntPtr wParam)
+    {
+        return unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
+    }
+
     private static ScreenPoint ToScreenPoint(IntPtr hwnd, IntPtr lParam)
     {
         var raw = lParam.ToInt64();
@@ -413,5 +423,13 @@ internal sealed class OverlayWindow : Window
 
         NativeMethods.ClientToScreen(hwnd, ref point);
         return new ScreenPoint(point.X, point.Y);
+    }
+
+    private static ScreenPoint ToScreenPoint(IntPtr lParam)
+    {
+        var raw = lParam.ToInt64();
+        return new ScreenPoint(
+            unchecked((short)(raw & 0xFFFF)),
+            unchecked((short)((raw >> 16) & 0xFFFF)));
     }
 }

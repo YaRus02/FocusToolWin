@@ -36,6 +36,7 @@ internal static class NativeMethods
     public const int WmLButtonUp = 0x0202;
     public const int WmRButtonDown = 0x0204;
     public const int WmRButtonUp = 0x0205;
+    public const int WmMouseWheel = 0x020A;
     public const int WhMouseLl = 14;
     public const int WmCancelMode = 0x001F;
     public const int WmCaptureChanged = 0x0215;
