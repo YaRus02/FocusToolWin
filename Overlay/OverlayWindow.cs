@@ -31,7 +31,7 @@ internal sealed class OverlayWindow : Window
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<ScreenRect?> rectSelectionProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
         IOverlayInputHandler inputHandler)
     {
@@ -46,7 +46,7 @@ internal sealed class OverlayWindow : Window
             clockProvider,
             spotlightProvider,
             screenBoardProvider,
-            pinnedLensSelectionProvider,
+            rectSelectionProvider,
             regionMaskProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
 

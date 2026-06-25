@@ -48,20 +48,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private ScreenBoardFrame? _screenBoardFrame;
     private Shortcut _laserHoldShortcut;
     private ScreenPoint _lastCursor;
-    private ScreenPoint _pinnedLensSelectionStart;
-    private ScreenPoint _regionMaskSelectionStart;
     private ScreenPoint _lastSelectionMovePoint;
     private ScreenPoint _lastRegionMaskMovePoint;
-    // Shared rubber-band rect for the pinned-lens and region-mask select modes
-    // (only one is ever active, so reusing one field is safe).
-    private ScreenRect? _pinnedLensSelectionDraft;
+    private readonly RectSelectionSession _rectSelection = new();
     private bool _hasLastCursor;
     private bool _drawing;
     private bool _movingSelection;
-    private bool _selectingPinnedLens;
-    private bool _selectingRegionMask;
-    private bool _restoreToolbarAfterPinnedLensSelection;
-    private bool _restoreToolbarAfterRegionMaskSelection;
+    private bool _restoreToolbarAfterRectSelection;
     private RegionMask? _movingRegionMask;
     private RegionMask? _resizingRegionMask;
     private ScreenPoint _regionMaskResizeAnchor;
@@ -225,7 +218,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, () => _screenBoardFrame, () => _pinnedLensSelectionDraft, () => _regionMasks, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, () => _screenBoardFrame, () => _rectSelection.Draft, () => _regionMasks, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         RegisterHotKeys();
@@ -297,12 +290,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _regionMasks.Clear();
-        _selectingRegionMask = false;
+        _rectSelection.Cancel();
         _movingRegionMask = null;
         _resizingRegionMask = null;
         if (wasSelecting)
         {
-            _pinnedLensSelectionDraft = null;
             SetInteractionMode(InteractionMode.Passthrough);
         }
         else
@@ -419,8 +411,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _regionMasks.RemoveAt(index);
         _movingRegionMask = null;
         _resizingRegionMask = null;
-        _selectingRegionMask = false;
-        _pinnedLensSelectionDraft = null;
+        _rectSelection.Cancel();
         _overlayManager?.Invalidate();
 
         if (exitMaskMode && _mode == InteractionMode.RegionMaskSelect)
@@ -574,28 +565,36 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void BeginPinnedLensSelection()
     {
-        _pinnedLensSelectionDraft = null;
-        _selectingPinnedLens = false;
-        _restoreToolbarAfterPinnedLensSelection = ToolbarVisible;
-        if (_restoreToolbarAfterPinnedLensSelection)
-        {
-            _toolbarWindow?.Hide();
-        }
-
-        SetInteractionMode(InteractionMode.PinnedLensSelect);
+        BeginRectSelectionMode(InteractionMode.PinnedLensSelect);
     }
 
     private void BeginRegionMaskSelection()
     {
-        _pinnedLensSelectionDraft = null;
-        _selectingRegionMask = false;
-        _restoreToolbarAfterRegionMaskSelection = ToolbarVisible;
-        if (_restoreToolbarAfterRegionMaskSelection)
+        BeginRectSelectionMode(InteractionMode.RegionMaskSelect);
+    }
+
+    private void BeginRectSelectionMode(InteractionMode mode)
+    {
+        if (!IsRectSelectionMode(mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Mode is not a rectangle selection mode.");
+        }
+
+        if (IsRectSelectionMode(_mode) && _mode != mode)
+        {
+            SetInteractionMode(InteractionMode.Passthrough);
+        }
+
+        _rectSelection.Cancel();
+        _movingRegionMask = null;
+        _resizingRegionMask = null;
+        _restoreToolbarAfterRectSelection = ToolbarVisible;
+        if (_restoreToolbarAfterRectSelection)
         {
             _toolbarWindow?.Hide();
         }
 
-        SetInteractionMode(InteractionMode.RegionMaskSelect);
+        SetInteractionMode(mode);
     }
 
     private async Task TakeScreenshotAsync()
@@ -763,7 +762,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         var leavingAnnotationInput = IsAnnotationMode(_mode) && !IsAnnotationMode(mode);
         var enteringAnnotationInput = !IsAnnotationMode(_mode) && IsAnnotationMode(mode);
-        var leavingPinnedLensSelection = _mode == InteractionMode.PinnedLensSelect && mode != InteractionMode.PinnedLensSelect;
+        var leavingRectSelection = IsRectSelectionMode(_mode) && _mode != mode;
         var leavingRegionMaskSelection = _mode == InteractionMode.RegionMaskSelect && mode != InteractionMode.RegionMaskSelect;
         var leavingScreenBoard = _mode == InteractionMode.ScreenBoard && mode != InteractionMode.ScreenBoard;
         var leavingVisualBoard = IsVisualBoardMode(_mode);
@@ -801,20 +800,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _annotations.EndSelectionMove();
         }
 
-        if (leavingPinnedLensSelection)
+        if (leavingRectSelection)
         {
-            _selectingPinnedLens = false;
-            _pinnedLensSelectionDraft = null;
-            RestoreToolbarAfterPinnedLensSelection();
+            _rectSelection.Cancel();
+            RestoreToolbarAfterRectSelection();
         }
 
         if (leavingRegionMaskSelection)
         {
-            _selectingRegionMask = false;
             _movingRegionMask = null;
             _resizingRegionMask = null;
-            _pinnedLensSelectionDraft = null;
-            RestoreToolbarAfterRegionMaskSelection();
         }
 
         if (leavingScreenBoard)
@@ -1203,9 +1198,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 return;
             }
 
-            _selectingPinnedLens = true;
-            _pinnedLensSelectionStart = point;
-            _pinnedLensSelectionDraft = ScreenRect.FromPoints(point, point);
+            _rectSelection.Begin(point);
             _overlayManager?.Invalidate();
             return;
         }
@@ -1232,8 +1225,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 _resizingRegionMask = resizeMask;
                 _regionMaskResizeAnchor = GetRegionMaskResizeAnchor(resizeMask.Rect, resizeHandle);
                 _movingRegionMask = null;
-                _selectingRegionMask = false;
-                _pinnedLensSelectionDraft = null;
+                _rectSelection.Cancel();
                 return;
             }
 
@@ -1242,14 +1234,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 _movingRegionMask = existingMask;
                 _resizingRegionMask = null;
                 _lastRegionMaskMovePoint = point;
-                _selectingRegionMask = false;
-                _pinnedLensSelectionDraft = null;
+                _rectSelection.Cancel();
                 return;
             }
 
-            _selectingRegionMask = true;
-            _regionMaskSelectionStart = point;
-            _pinnedLensSelectionDraft = ScreenRect.FromPoints(point, point);
+            _rectSelection.Begin(point);
             _overlayManager?.Invalidate();
             return;
         }
@@ -1293,9 +1282,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         if (_mode == InteractionMode.PinnedLensSelect)
         {
-            if (_selectingPinnedLens)
+            if (_rectSelection.Update(point))
             {
-                _pinnedLensSelectionDraft = ScreenRect.FromPoints(_pinnedLensSelectionStart, point);
                 _overlayManager?.Invalidate();
             }
 
@@ -1319,9 +1307,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 return;
             }
 
-            if (_selectingRegionMask)
+            if (_rectSelection.Update(point))
             {
-                _pinnedLensSelectionDraft = ScreenRect.FromPoints(_regionMaskSelectionStart, point);
                 _overlayManager?.Invalidate();
             }
 
@@ -1358,18 +1345,22 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         if (_mode == InteractionMode.PinnedLensSelect)
         {
-            if (!_selectingPinnedLens || button != MouseButton.Left)
+            if (button != MouseButton.Left)
             {
                 return;
             }
 
-            _selectingPinnedLens = false;
-            var sourceRect = ScreenRect.FromPoints(_pinnedLensSelectionStart, point);
-            _pinnedLensSelectionDraft = null;
-            if (sourceRect.Width >= 16 && sourceRect.Height >= 16)
+            var sourceRect = _rectSelection.Complete(point);
+            if (sourceRect is null)
+            {
+                return;
+            }
+
+            var completedSourceRect = sourceRect.Value;
+            if (completedSourceRect.Width >= 16 && completedSourceRect.Height >= 16)
             {
                 SetInteractionMode(InteractionMode.Passthrough);
-                OpenPinnedLens(sourceRect);
+                OpenPinnedLens(completedSourceRect);
             }
             else
             {
@@ -1395,17 +1386,21 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 return;
             }
 
-            if (!_selectingRegionMask || button != MouseButton.Left)
+            if (button != MouseButton.Left)
             {
                 return;
             }
 
-            _selectingRegionMask = false;
-            var maskRect = ScreenRect.FromPoints(_regionMaskSelectionStart, point);
-            _pinnedLensSelectionDraft = null;
-            if (maskRect.Width >= RegionMaskMinSizePixels && maskRect.Height >= RegionMaskMinSizePixels)
+            var maskRect = _rectSelection.Complete(point);
+            if (maskRect is null)
             {
-                _regionMasks.Add(new RegionMask(_nextRegionMaskId++, maskRect, Settings));
+                return;
+            }
+
+            var completedMaskRect = maskRect.Value;
+            if (completedMaskRect.Width >= RegionMaskMinSizePixels && completedMaskRect.Height >= RegionMaskMinSizePixels)
+            {
+                _regionMasks.Add(new RegionMask(_nextRegionMaskId++, completedMaskRect, Settings));
             }
 
             _overlayManager?.Invalidate();
@@ -1465,10 +1460,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 _overlayManager?.Invalidate();
             }
 
-            if (_selectingRegionMask)
+            if (_rectSelection.IsActive)
             {
-                _selectingRegionMask = false;
-                _pinnedLensSelectionDraft = null;
+                _rectSelection.Cancel();
                 _overlayManager?.Invalidate();
             }
 
@@ -1490,18 +1484,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public bool HandleOverlayKeyDown(Key key, ModifierKeys modifiers)
     {
-        if (_mode == InteractionMode.PinnedLensSelect)
-        {
-            if (Matches(key, modifiers, ExitVisualShortcut) || Matches(key, modifiers, Settings.Shortcuts.ExitAnnotate))
-            {
-                SetInteractionMode(InteractionMode.Passthrough);
-                return true;
-            }
-
-            return false;
-        }
-
-        if (_mode == InteractionMode.RegionMaskSelect)
+        if (IsRectSelectionMode(_mode))
         {
             if (Matches(key, modifiers, ExitVisualShortcut) || Matches(key, modifiers, Settings.Shortcuts.ExitAnnotate))
             {
@@ -2155,28 +2138,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _pinnedLensRefreshTimer.Start();
     }
 
-    private void RestoreToolbarAfterPinnedLensSelection()
+    private void RestoreToolbarAfterRectSelection()
     {
-        if (!_restoreToolbarAfterPinnedLensSelection)
+        if (!_restoreToolbarAfterRectSelection)
         {
             return;
         }
 
-        _restoreToolbarAfterPinnedLensSelection = false;
-        if (!_disposed)
-        {
-            ShowToolbar();
-        }
-    }
-
-    private void RestoreToolbarAfterRegionMaskSelection()
-    {
-        if (!_restoreToolbarAfterRegionMaskSelection)
-        {
-            return;
-        }
-
-        _restoreToolbarAfterRegionMaskSelection = false;
+        _restoreToolbarAfterRectSelection = false;
         if (!_disposed)
         {
             ShowToolbar();
@@ -2451,6 +2420,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private static bool IsAnnotationMode(InteractionMode mode)
     {
         return mode is InteractionMode.Annotate or InteractionMode.ScreenBoard or InteractionMode.BlackScreen or InteractionMode.WhiteScreen;
+    }
+
+    private static bool IsRectSelectionMode(InteractionMode mode)
+    {
+        return mode is InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect;
     }
 
     private bool IsSpotlightVisibleInMode(InteractionMode mode)

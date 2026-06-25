@@ -41,8 +41,7 @@ internal sealed class OverlaySurface : FrameworkElement
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
-    // Shared rubber-band rect for both the pinned-lens and region-mask select modes.
-    private readonly Func<ScreenRect?> _pinnedLensSelectionProvider;
+    private readonly Func<ScreenRect?> _rectSelectionProvider;
     private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
     private readonly ScreenRect _screenBounds;
     // Cached frozen polyline geometry per pencil/highlighter shape, so we don't
@@ -78,7 +77,7 @@ internal sealed class OverlaySurface : FrameworkElement
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<ScreenRect?> rectSelectionProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
         ScreenRect screenBounds)
     {
@@ -89,7 +88,7 @@ internal sealed class OverlaySurface : FrameworkElement
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
         _screenBoardProvider = screenBoardProvider;
-        _pinnedLensSelectionProvider = pinnedLensSelectionProvider;
+        _rectSelectionProvider = rectSelectionProvider;
         _regionMaskProvider = regionMaskProvider;
         _screenBounds = screenBounds;
         _annotations.Changed += OnAnnotationsChanged;
@@ -190,7 +189,7 @@ internal sealed class OverlaySurface : FrameworkElement
 
         if (mode is InteractionMode.PinnedLensSelect or InteractionMode.RegionMaskSelect)
         {
-            DrawPinnedLensSelection(drawingContext);
+            DrawRectSelection(drawingContext);
         }
 
         if (IsAnnotationMode(mode))
@@ -343,9 +342,9 @@ internal sealed class OverlaySurface : FrameworkElement
         drawingContext.DrawRectangle(null, SelectionDashPen, rect);
     }
 
-    private void DrawPinnedLensSelection(DrawingContext drawingContext)
+    private void DrawRectSelection(DrawingContext drawingContext)
     {
-        if (_pinnedLensSelectionProvider() is not { } selection || !selection.Intersects(_screenBounds))
+        if (_rectSelectionProvider() is not { } selection || !selection.Intersects(_screenBounds))
         {
             return;
         }
