@@ -398,7 +398,9 @@ internal sealed class TrayIconController : IDisposable
             _ => "Mode: Passthrough"
         };
         _modeItem.Checked = _controller.Mode == InteractionMode.Annotate;
-        _modeItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleAnnotate;
+        _modeItem.ShortcutKeyDisplayString = ShortcutSettings.IsShortcutDisabled(_controller.PushToAnnotateShortcut)
+            ? _controller.Settings.Shortcuts.ToggleAnnotate
+            : $"{_controller.Settings.Shortcuts.ToggleAnnotate} / hold {_controller.PushToAnnotateShortcut}";
 
         _laserAlwaysModeItem.Checked = _controller.ActivationMode == LaserActivationMode.Always;
         _laserHoldModeItem.Checked = _controller.ActivationMode == LaserActivationMode.Hold;

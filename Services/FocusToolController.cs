@@ -53,6 +53,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private ScreenBoardFrame? _screenBoardFrame;
     private Shortcut _laserHoldShortcut;
     private Shortcut _cursorHighlightHoldShortcut;
+    private Shortcut _pushToAnnotateShortcut;
     private ScreenPoint _lastCursor;
     private ScreenPoint _cursorHighlightPoint;
     private ScreenPoint _lastSelectionMovePoint;
@@ -72,6 +73,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _drawing;
     private bool _movingSelection;
     private bool _draggingAnnotationEditHandle;
+    private bool _pushToAnnotateActive;
+    private bool _pushToAnnotateExitPending;
     private bool _restoreToolbarAfterRectSelection;
     private ScreenRect? _pendingScreenshotRegion;
     private bool _screenshotRegionToolbarRestorePending;
@@ -131,6 +134,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool ScreenshotRegionSelectionActive => _mode == InteractionMode.ScreenshotRegionSelect;
     public bool FadingAnnotationsEnabled => Settings.FadingAnnotationsEnabled;
     public string MagnifierShortcut => Settings.Shortcuts.ToggleMagnifier;
+    public string PushToAnnotateShortcut => Settings.Shortcuts.PushToAnnotate;
     public string CursorHighlightShortcut => Settings.Shortcuts.ToggleCursorHighlight;
     public string PinnedLensShortcut => Settings.Shortcuts.TogglePinnedLens;
     public string RegionMaskShortcut => Settings.Shortcuts.ToggleRegionMask;
@@ -284,6 +288,23 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public void ToggleAnnotateMode()
     {
         SetInteractionMode(IsAnnotationMode(_mode) ? InteractionMode.Passthrough : InteractionMode.Annotate);
+    }
+
+    public void StartPushToAnnotate()
+    {
+        if (_disposed
+            || _pushToAnnotateActive
+            || IsAnnotationMode(_mode)
+            || _mode != InteractionMode.Passthrough
+            || ShortcutSettings.IsShortcutDisabled(Settings.Shortcuts.PushToAnnotate))
+        {
+            return;
+        }
+
+        _pushToAnnotateActive = true;
+        _pushToAnnotateExitPending = false;
+        _timer.Interval = ActiveInterval;
+        SetInteractionMode(InteractionMode.Annotate);
     }
 
     public void ToggleLaserActivationMode()
@@ -1052,6 +1073,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        if (_pushToAnnotateActive && mode != InteractionMode.Annotate)
+        {
+            _pushToAnnotateActive = false;
+            _pushToAnnotateExitPending = false;
+        }
+
         var leavingAnnotationInput = IsAnnotationMode(_mode) && !IsAnnotationMode(mode);
         var enteringAnnotationInput = !IsAnnotationMode(_mode) && IsAnnotationMode(mode);
         var leavingRectSelection = IsRectSelectionMode(_mode) && _mode != mode;
@@ -1685,6 +1712,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if (_annotations.HasDraftText)
             {
                 _annotations.CommitTextDraft();
+                TryCompletePushToAnnotateExit();
                 return;
             }
 
@@ -1993,6 +2021,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _annotations.EndObjectEditHandleDrag();
             _draggingAnnotationEditHandle = false;
+            TryCompletePushToAnnotateExit();
             return;
         }
 
@@ -2000,6 +2029,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _annotations.EndSelectionMove();
             _movingSelection = false;
+            TryCompletePushToAnnotateExit();
             return;
         }
 
@@ -2013,12 +2043,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _annotations.UpdateSelection(point);
             _annotations.CommitSelection();
             _drawing = false;
+            TryCompletePushToAnnotateExit();
             return;
         }
 
         _annotations.UpdateStroke(point, (modifiers & ModifierKeys.Shift) != 0);
         _annotations.CommitStroke();
         _drawing = false;
+        TryCompletePushToAnnotateExit();
     }
 
     public void HandleOverlayCaptureLost()
@@ -2095,6 +2127,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _annotations.CancelDraft();
             _drawing = false;
         }
+
+        TryCompletePushToAnnotateExit();
     }
 
     public bool HandleOverlayKeyDown(Key key, ModifierKeys modifiers)
@@ -2160,37 +2194,41 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return TryPasteClipboardAnnotation();
         }
 
+        var annotationModifiers = GetAnnotationShortcutModifiers(modifiers);
+
         if (_annotations.HasTextInput)
         {
-            if (key == Key.Enter && modifiers == ModifierKeys.Shift)
+            if (key == Key.Enter && annotationModifiers == ModifierKeys.Shift)
             {
                 _annotations.AppendText("\n");
                 return true;
             }
 
-            if (Matches(key, modifiers, "Enter"))
+            if (MatchesAnnotationShortcut(key, modifiers, "Enter"))
             {
                 _annotations.CommitTextInput();
+                TryCompletePushToAnnotateExit();
                 return true;
             }
 
-            if (Matches(key, modifiers, "Back"))
+            if (MatchesAnnotationShortcut(key, modifiers, "Back"))
             {
                 _annotations.BackspaceText();
                 return true;
             }
 
-            if (key == Key.Delete && modifiers == ModifierKeys.None)
+            if (key == Key.Delete && annotationModifiers == ModifierKeys.None)
             {
                 _annotations.DeleteText();
                 return true;
             }
 
-            if (Matches(key, modifiers, shortcuts.ExitAnnotate))
+            if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ExitAnnotate))
             {
                 if (_annotations.IsEditingText)
                 {
                     _annotations.CancelTextEdit();
+                    TryCompletePushToAnnotateExit();
                 }
                 else
                 {
@@ -2203,11 +2241,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return false;
         }
 
-        if (Matches(key, modifiers, shortcuts.ExitAnnotate))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ExitAnnotate))
         {
             if (_annotations.IsObjectEditing)
             {
                 _annotations.EndObjectEdit();
+                TryCompletePushToAnnotateExit();
                 return true;
             }
 
@@ -2215,37 +2254,38 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Undo))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Undo))
         {
             UndoAnnotation();
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Redo))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Redo))
         {
             RedoAnnotation();
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.DeleteSelection))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.DeleteSelection))
         {
             DeleteSelectedAnnotations();
+            TryCompletePushToAnnotateExit();
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Clear) || Matches(key, modifiers, shortcuts.ClearAlternate))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Clear) || MatchesAnnotationShortcut(key, modifiers, shortcuts.ClearAlternate))
         {
             ClearAnnotations();
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ThicknessDown))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ThicknessDown))
         {
             AdjustAnnotationThickness(-1);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ThicknessUp))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ThicknessUp))
         {
             AdjustAnnotationThickness(1);
             return true;
@@ -2622,6 +2662,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         TrackExternalForegroundWindow();
+        UpdatePushToAnnotate();
 
         var fadingAnnotationsAnimating = UpdateFadingAnnotations();
         var cursorHighlightAnimating = UpdateCursorHighlight(force: false);
@@ -2652,7 +2693,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         FadeLaserAfterRelease();
-        if (magnifierActive && !_magnifierRenderingSubscribed)
+        if (_pushToAnnotateActive)
+        {
+            _timer.Interval = ActiveInterval;
+        }
+        else if (magnifierActive && !_magnifierRenderingSubscribed)
         {
             _timer.Interval = ActiveInterval;
         }
@@ -2668,6 +2713,51 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _timer.Interval = FadeInterval;
         }
+    }
+
+    private void UpdatePushToAnnotate()
+    {
+        if (!_pushToAnnotateActive)
+        {
+            return;
+        }
+
+        if (!_pushToAnnotateExitPending && _pushToAnnotateShortcut.IsPressed())
+        {
+            _timer.Interval = ActiveInterval;
+            return;
+        }
+
+        _pushToAnnotateExitPending = true;
+        TryCompletePushToAnnotateExit();
+        if (_pushToAnnotateActive)
+        {
+            _timer.Interval = ActiveInterval;
+        }
+    }
+
+    private void TryCompletePushToAnnotateExit()
+    {
+        if (!_pushToAnnotateActive || !_pushToAnnotateExitPending || !CanExitPushToAnnotate())
+        {
+            return;
+        }
+
+        _pushToAnnotateActive = false;
+        _pushToAnnotateExitPending = false;
+        if (_mode == InteractionMode.Annotate)
+        {
+            SetInteractionMode(InteractionMode.Passthrough);
+        }
+    }
+
+    private bool CanExitPushToAnnotate()
+    {
+        return _mode == InteractionMode.Annotate
+            && !_drawing
+            && !_movingSelection
+            && !_draggingAnnotationEditHandle
+            && !_annotations.HasTextInput;
     }
 
     private bool UpdateFadingAnnotations()
@@ -3383,6 +3473,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var registrations = new List<HotKeyRegistration>();
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleLaserActivation, ToggleLaserActivationMode);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleAnnotate, ToggleAnnotateMode);
+        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.PushToAnnotate, StartPushToAnnotate);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleCursorHighlight, ToggleCursorHighlight);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleSpotlight, ToggleSpotlight);
         AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleMagnifier, ToggleMagnifierMode);
@@ -3429,6 +3520,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         return string.Equals(left.ToggleLaserActivation, right.ToggleLaserActivation, StringComparison.Ordinal)
             && string.Equals(left.ToggleAnnotate, right.ToggleAnnotate, StringComparison.Ordinal)
+            && string.Equals(left.PushToAnnotate, right.PushToAnnotate, StringComparison.Ordinal)
             && string.Equals(left.ToggleCursorHighlight, right.ToggleCursorHighlight, StringComparison.Ordinal)
             && string.Equals(left.ToggleSpotlight, right.ToggleSpotlight, StringComparison.Ordinal)
             && string.Equals(left.ToggleMagnifier, right.ToggleMagnifier, StringComparison.Ordinal)
@@ -3555,60 +3647,71 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             Settings.CursorHighlightHoldShortcut = "XButton1";
             Shortcut.TryParse(Settings.CursorHighlightHoldShortcut, out _cursorHighlightHoldShortcut);
         }
+
+        if (ShortcutSettings.IsShortcutDisabled(Settings.Shortcuts.PushToAnnotate))
+        {
+            _pushToAnnotateShortcut = default;
+        }
+        else if (!Shortcut.TryParse(Settings.Shortcuts.PushToAnnotate, out _pushToAnnotateShortcut)
+            || _pushToAnnotateShortcut.IsMouseButton)
+        {
+            Settings.Shortcuts.PushToAnnotate = "Ctrl+Space";
+            Shortcut.TryParse(Settings.Shortcuts.PushToAnnotate, out _pushToAnnotateShortcut);
+        }
     }
 
     private bool TrySelectTool(Key key, ModifierKeys modifiers)
     {
         var shortcuts = Settings.Shortcuts;
-        if (Matches(key, modifiers, shortcuts.ToolArrow))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolArrow))
         {
             SetAnnotationTool(AnnotationTool.Arrow);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolRectangle))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolRectangle))
         {
             SetAnnotationTool(AnnotationTool.Rectangle);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolEllipse))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolEllipse))
         {
             SetAnnotationTool(AnnotationTool.Ellipse);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolLine))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolLine))
         {
             SetAnnotationTool(AnnotationTool.Line);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolPencil))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolPencil))
         {
             SetAnnotationTool(AnnotationTool.Pencil);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolHighlighter))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolHighlighter))
         {
             SetAnnotationTool(AnnotationTool.Highlighter);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolText))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolText))
         {
             SetAnnotationTool(AnnotationTool.Text);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolMove))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolMove))
         {
             SetAnnotationTool(AnnotationTool.Move);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.ToolStep))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolStep))
         {
             SelectStepTool();
             return true;
@@ -3620,31 +3723,31 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool TrySelectColor(Key key, ModifierKeys modifiers)
     {
         var shortcuts = Settings.Shortcuts;
-        if (Matches(key, modifiers, shortcuts.Color1))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color1))
         {
             SetAnnotationPresetColor(0);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Color2))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color2))
         {
             SetAnnotationPresetColor(1);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Color3))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color3))
         {
             SetAnnotationPresetColor(2);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Color4))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color4))
         {
             SetAnnotationPresetColor(3);
             return true;
         }
 
-        if (Matches(key, modifiers, shortcuts.Color5))
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color5))
         {
             SetAnnotationPresetColor(4);
             return true;
@@ -3656,6 +3759,29 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private static bool Matches(Key key, ModifierKeys modifiers, string shortcutText)
     {
         return Shortcut.TryParse(shortcutText, out var shortcut) && shortcut.Matches(key, modifiers);
+    }
+
+    private bool MatchesAnnotationShortcut(Key key, ModifierKeys modifiers, string shortcutText)
+    {
+        if (Matches(key, modifiers, shortcutText))
+        {
+            return true;
+        }
+
+        if (!_pushToAnnotateActive || _pushToAnnotateShortcut.Modifiers == ModifierKeys.None)
+        {
+            return false;
+        }
+
+        var strippedModifiers = GetAnnotationShortcutModifiers(modifiers);
+        return strippedModifiers != modifiers && Matches(key, strippedModifiers, shortcutText);
+    }
+
+    private ModifierKeys GetAnnotationShortcutModifiers(ModifierKeys modifiers)
+    {
+        return _pushToAnnotateActive
+            ? modifiers & ~_pushToAnnotateShortcut.Modifiers
+            : modifiers;
     }
 
     private static bool IsAnnotationMode(InteractionMode mode)

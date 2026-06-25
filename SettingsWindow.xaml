@@ -359,6 +359,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Toggle annotate" VerticalAlignment="Center" Margin="0,4" />
@@ -403,6 +404,8 @@
                                 <TextBox Grid.Row="19" Grid.Column="1" x:Name="ToggleRegionSpotlightBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="20" Text="Clear spot regions" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="20" Grid.Column="1" x:Name="ClearRegionSpotlightsBox" Margin="8,3,0,3" />
+                                <TextBlock Grid.Row="21" Text="Push annotate" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBox Grid.Row="21" Grid.Column="1" x:Name="PushToAnnotateBox" Margin="8,3,0,3" />
                             </Grid>
                         </GroupBox>
 

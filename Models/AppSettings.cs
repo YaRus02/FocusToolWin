@@ -375,6 +375,7 @@ public sealed class ShortcutSettings
 
     public string ToggleLaserActivation { get; set; } = "Ctrl+Alt+L";
     public string ToggleAnnotate { get; set; } = "Ctrl+Alt+D";
+    public string PushToAnnotate { get; set; } = "Ctrl+Space";
     public string ToggleCursorHighlight { get; set; } = "Ctrl+Alt+U";
     public string ToggleSpotlight { get; set; } = "Ctrl+Alt+S";
     public string ToggleMagnifier { get; set; } = "Ctrl+Alt+M";
@@ -419,6 +420,7 @@ public sealed class ShortcutSettings
     {
         ToggleLaserActivation = ToggleLaserActivation,
         ToggleAnnotate = ToggleAnnotate,
+        PushToAnnotate = PushToAnnotate,
         ToggleCursorHighlight = ToggleCursorHighlight,
         ToggleSpotlight = ToggleSpotlight,
         ToggleMagnifier = ToggleMagnifier,
@@ -464,6 +466,7 @@ public sealed class ShortcutSettings
     {
         ToggleLaserActivation = NormalizeShortcut(ToggleLaserActivation, "Ctrl+Alt+L");
         ToggleAnnotate = NormalizeShortcut(ToggleAnnotate, "Ctrl+Alt+D");
+        PushToAnnotate = NormalizeShortcut(PushToAnnotate, "Ctrl+Space");
         ToggleCursorHighlight = NormalizeShortcut(ToggleCursorHighlight, "Ctrl+Alt+U");
         ToggleSpotlight = NormalizeShortcut(ToggleSpotlight, "Ctrl+Alt+S");
         ToggleMagnifier = NormalizeShortcut(ToggleMagnifier, "Ctrl+Alt+M");

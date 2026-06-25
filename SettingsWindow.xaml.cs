@@ -352,6 +352,7 @@ public partial class SettingsWindow : Window
         CursorHighlightHoldBox.Text = settings.CursorHighlightHoldShortcut;
 
         ToggleAnnotateBox.Text = settings.Shortcuts.ToggleAnnotate;
+        PushToAnnotateBox.Text = settings.Shortcuts.PushToAnnotate;
         ToggleLaserActivationBox.Text = settings.Shortcuts.ToggleLaserActivation;
         ToggleCursorHighlightBox.Text = settings.Shortcuts.ToggleCursorHighlight;
         ToggleSpotlightBox.Text = settings.Shortcuts.ToggleSpotlight;
@@ -401,6 +402,7 @@ public partial class SettingsWindow : Window
         updated.LaserHoldShortcut = ReadShortcutText(LaserHoldBox);
         updated.CursorHighlightHoldShortcut = ReadShortcutText(CursorHighlightHoldBox);
         shortcuts.ToggleAnnotate = ReadShortcutText(ToggleAnnotateBox);
+        shortcuts.PushToAnnotate = ReadShortcutText(PushToAnnotateBox);
         shortcuts.ToggleLaserActivation = ReadShortcutText(ToggleLaserActivationBox);
         shortcuts.ToggleCursorHighlight = ReadShortcutText(ToggleCursorHighlightBox);
         shortcuts.ToggleSpotlight = ReadShortcutText(ToggleSpotlightBox);
@@ -445,6 +447,7 @@ public partial class SettingsWindow : Window
         if ((updated.GetLaserActivationMode() == LaserActivationMode.Hold && !ValidateShortcut("Hold laser", updated.LaserHoldShortcut, allowMouseButton: true, allowDisabled: false))
             || (updated.GetCursorHighlightActivationMode() == LaserActivationMode.Hold && !ValidateShortcut("Hold cursor highlight", updated.CursorHighlightHoldShortcut, allowMouseButton: true, allowDisabled: false))
             || !ValidateShortcut("Toggle annotate mode", shortcuts.ToggleAnnotate)
+            || !ValidateShortcut("Push annotate", shortcuts.PushToAnnotate)
             || !ValidateShortcut("Toggle laser mode", shortcuts.ToggleLaserActivation)
             || !ValidateShortcut("Cursor highlight", shortcuts.ToggleCursorHighlight)
             || !ValidateShortcut("Toggle spotlight", shortcuts.ToggleSpotlight)
@@ -531,6 +534,7 @@ public partial class SettingsWindow : Window
         var globalEntries = new List<(string Label, string Text)>
         {
             ("Toggle annotate mode", shortcuts.ToggleAnnotate),
+            ("Push annotate", shortcuts.PushToAnnotate),
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
             ("Cursor highlight", shortcuts.ToggleCursorHighlight),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
@@ -578,6 +582,7 @@ public partial class SettingsWindow : Window
         var entries = new List<(string Label, string Text)>
         {
             ("Toggle annotate mode", shortcuts.ToggleAnnotate),
+            ("Push annotate", shortcuts.PushToAnnotate),
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
             ("Cursor highlight", shortcuts.ToggleCursorHighlight),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
