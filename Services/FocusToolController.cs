@@ -41,8 +41,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private OverlayManager? _overlayManager;
     private MagnifierHostWindow? _magnifierHost;
     private readonly List<PinnedLensHostWindow> _pinnedLensHosts = [];
-    private readonly List<RegionMask> _regionMasks = [];
-    private readonly List<ScreenRect> _spotlightRegions = [];
+    private readonly RegionMaskController _regionMasks = new();
+    private readonly RegionSpotlightController _regionSpotlights = new();
     private TimerController? _timerController;
     private TrayIconController? _trayIcon;
     private HotKeyManager? _hotKeyManager;
@@ -76,17 +76,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _restoreToolbarAfterRectSelection;
     private ScreenRect? _pendingScreenshotRegion;
     private bool _screenshotRegionToolbarRestorePending;
-    private RegionMask? _editingRegionMask;
-    private readonly RectEditSession _regionMaskEdit = new();
     private readonly RectEditSession _screenshotRegionEdit = new();
-    private readonly RectEditSession _spotlightRegionEdit = new();
-    private int _selectedSpotlightRegionIndex = -1;
-    private int _selectedRegionMaskId = -1;
-    private Forms.ContextMenuStrip? _regionMaskContextMenu;
-    private readonly List<Forms.Timer> _toolStripTopmostTimers = [];
-    private int _regionMaskContextMenuMaskId;
-    private bool _regionMaskContextMenuActionTaken;
-    private int _nextRegionMaskId = 1;
+    private readonly RegionMaskContextMenuController _regionMaskContextMenu;
     private bool _captureInProgress;
     private bool _disposed;
     private bool _laserVisuallyActive;
@@ -121,11 +112,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool PinnedLensActive => _pinnedLensHosts.Count > 0;
     public int PinnedLensCount => _pinnedLensHosts.Count;
     public bool PinnedLensSelectionActive => _mode == InteractionMode.PinnedLensSelect;
-    public bool RegionMaskActive => _regionMasks.Count > 0;
+    public bool RegionMaskActive => _regionMasks.HasMasks;
     public int RegionMaskCount => _regionMasks.Count;
     public bool RegionMaskSelectionActive => _mode == InteractionMode.RegionMaskSelect;
-    public bool RegionSpotlightActive => _spotlightRegions.Count > 0;
-    public int RegionSpotlightCount => _spotlightRegions.Count;
+    public bool RegionSpotlightActive => _regionSpotlights.HasRegions;
+    public int RegionSpotlightCount => _regionSpotlights.Count;
     public bool RegionSpotlightSelectionActive => _mode == InteractionMode.RegionSpotlightSelect;
     public bool ScreenshotRegionSelectionActive => _mode == InteractionMode.ScreenshotRegionSelect;
     public bool FadingAnnotationsEnabled => Settings.FadingAnnotationsEnabled;
@@ -149,6 +140,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public FocusToolController()
     {
         _annotations = new AnnotationDocument(NowMs);
+        _regionMaskContextMenu = new RegionMaskContextMenuController(
+            _regionMasks.GetStyle,
+            SetRegionMaskStyle,
+            maskId => DeleteRegionMask(maskId, exitMaskMode: false));
         Settings = _settingsStore.Load();
         CacheParsedSettings();
         if (IsStepTool(CurrentTool))
@@ -260,7 +255,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks, () => _selectedRegionMaskId, () => _spotlightRegions, () => _selectedSpotlightRegionIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         _mouseHook = new MouseHook();
@@ -434,15 +429,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ClearRegionSpotlights()
     {
-        var hadRegions = _spotlightRegions.Count > 0;
+        var hadRegions = _regionSpotlights.HasRegions;
         var wasSelecting = _mode == InteractionMode.RegionSpotlightSelect;
         if (!hadRegions && !wasSelecting)
         {
             return;
         }
 
-        _spotlightRegions.Clear();
-        ResetSpotlightRegionEditState();
+        _regionSpotlights.Clear();
         _rectSelection.Cancel();
         if (hadRegions)
         {
@@ -466,7 +460,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ClearRegionMasks()
     {
-        var hadMasks = _regionMasks.Count > 0;
+        var hadMasks = _regionMasks.HasMasks;
         var wasSelecting = _mode == InteractionMode.RegionMaskSelect;
         if (!hadMasks && !wasSelecting)
         {
@@ -475,9 +469,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _regionMasks.Clear();
         _rectSelection.Cancel();
-        _editingRegionMask = null;
-        _regionMaskEdit.Cancel();
-        _selectedRegionMaskId = -1;
         if (wasSelecting)
         {
             SetInteractionMode(InteractionMode.Passthrough);
@@ -495,110 +486,34 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private bool TryHitRegionMask(ScreenPoint point, out RegionMask mask)
     {
-        for (var i = _regionMasks.Count - 1; i >= 0; i--)
-        {
-            if (_regionMasks[i].Contains(point))
-            {
-                mask = _regionMasks[i];
-                return true;
-            }
-        }
-
-        mask = null!;
-        return false;
+        return _regionMasks.TryHit(point, out mask);
     }
 
     private bool TryGetSelectedRegionMask(out RegionMask mask)
     {
-        mask = _regionMasks.FirstOrDefault(item => item.Id == _selectedRegionMaskId)!;
-        if (mask is not null)
-        {
-            return true;
-        }
-
-        _selectedRegionMaskId = -1;
-        return false;
+        return _regionMasks.TryGetSelected(out mask);
     }
 
     private bool TryHitRegionMaskResizeHandle(ScreenPoint point, out RegionMask mask, out RectResizeHandle handle)
     {
-        if (TryGetSelectedRegionMask(out var selectedMask))
-        {
-            if (RectGeometry.TryHitResizeHandle(selectedMask.Rect, point, out handle))
-            {
-                mask = selectedMask;
-                return true;
-            }
-
-            mask = null!;
-            handle = RectResizeHandle.None;
-            return false;
-        }
-
-        for (var i = _regionMasks.Count - 1; i >= 0; i--)
-        {
-            if (RectGeometry.TryHitResizeHandle(_regionMasks[i].Rect, point, out handle))
-            {
-                mask = _regionMasks[i];
-                return true;
-            }
-        }
-
-        mask = null!;
-        handle = RectResizeHandle.None;
-        return false;
+        return _regionMasks.TryHitResizeHandle(point, out mask, out handle);
     }
 
     private bool TryHitSpotlightRegionResizeHandle(ScreenPoint point, out int index, out RectResizeHandle handle)
     {
-        for (var i = _spotlightRegions.Count - 1; i >= 0; i--)
-        {
-            if (RectGeometry.TryHitResizeHandle(_spotlightRegions[i], point, out handle))
-            {
-                index = i;
-                return true;
-            }
-        }
-
-        index = -1;
-        handle = RectResizeHandle.None;
-        return false;
+        return _regionSpotlights.TryHitResizeHandle(point, out index, out handle);
     }
 
     private bool TryHitSpotlightRegion(ScreenPoint point, out int index)
     {
-        for (var i = _spotlightRegions.Count - 1; i >= 0; i--)
-        {
-            if (_spotlightRegions[i].Contains(point))
-            {
-                index = i;
-                return true;
-            }
-        }
-
-        index = -1;
-        return false;
-    }
-
-    private bool IsValidSpotlightRegionIndex(int index)
-    {
-        return index >= 0 && index < _spotlightRegions.Count;
+        return _regionSpotlights.TryHit(point, out index);
     }
 
     private void DeleteRegionMask(int maskId, bool exitMaskMode)
     {
-        var index = _regionMasks.FindIndex(mask => mask.Id == maskId);
-        if (index < 0)
+        if (!_regionMasks.Delete(maskId))
         {
             return;
-        }
-
-        _regionMasks.RemoveAt(index);
-        _editingRegionMask = null;
-        _regionMaskEdit.Cancel();
-        if (_selectedRegionMaskId == maskId)
-        {
-            _selectedRegionMaskId = -1;
         }
 
         _rectSelection.Cancel();
@@ -618,12 +533,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void DeleteSelectedRegionMask()
     {
-        if (_selectedRegionMaskId < 0)
+        if (_regionMasks.SelectedMaskId < 0)
         {
             return;
         }
 
-        DeleteRegionMask(_selectedRegionMaskId, exitMaskMode: false);
+        DeleteRegionMask(_regionMasks.SelectedMaskId, exitMaskMode: false);
     }
 
     private void SetRegionMaskStyle(int maskId, RegionMaskStyle style)
@@ -635,179 +550,15 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ApplySettings(updated);
         }
 
-        var mask = _regionMasks.FirstOrDefault(item => item.Id == maskId);
-        if (mask is null || mask.Style == style)
+        if (_regionMasks.SetStyle(maskId, style))
         {
-            return;
+            _overlayManager?.Invalidate();
         }
-
-        mask.SetStyle(style);
-        _overlayManager?.Invalidate();
     }
 
     private void ShowRegionMaskContextMenu(ScreenPoint point, int maskId)
     {
-        var menu = GetRegionMaskContextMenu();
-        if (menu.Visible)
-        {
-            _regionMaskContextMenuActionTaken = true;
-            menu.Close(Forms.ToolStripDropDownCloseReason.CloseCalled);
-        }
-
-        _regionMaskContextMenuMaskId = maskId;
-        _regionMaskContextMenuActionTaken = false;
-        menu.Show(new DrawingPoint((int)Math.Round(point.X), (int)Math.Round(point.Y)));
-        ReassertToolStripDropDownTopmostRepeated(menu);
-    }
-
-    private Forms.ContextMenuStrip GetRegionMaskContextMenu()
-    {
-        if (_regionMaskContextMenu is not null)
-        {
-            return _regionMaskContextMenu;
-        }
-
-        var menu = new Forms.ContextMenuStrip();
-        var styleMenu = new Forms.ToolStripMenuItem("Style");
-        AddRegionMaskStyleItem(styleMenu, "Solid", RegionMaskStyle.Solid);
-        AddRegionMaskStyleItem(styleMenu, "Stripes", RegionMaskStyle.Stripes);
-        AddRegionMaskStyleItem(styleMenu, "HIDE label", RegionMaskStyle.Label);
-        AddRegionMaskStyleItem(styleMenu, "Stripes + HIDE", RegionMaskStyle.StripesWithLabel);
-        styleMenu.DropDownOpened += (_, _) =>
-        {
-            ReassertToolStripDropDownTopmostRepeated(styleMenu.DropDown);
-        };
-        menu.Items.Add(styleMenu);
-        menu.Items.Add(new Forms.ToolStripSeparator());
-
-        var deleteItem = menu.Items.Add("Delete mask");
-        deleteItem.Click += (_, _) => DeleteRegionMaskFromContextMenu();
-        menu.Opening += (_, _) => UpdateRegionMaskContextMenuState(menu);
-        menu.Opened += (_, _) => ReassertToolStripDropDownTopmostRepeated(menu);
-        menu.Closed += (_, _) => _regionMaskContextMenuActionTaken = false;
-
-        _regionMaskContextMenu = menu;
-        return menu;
-    }
-
-    private void AddRegionMaskStyleItem(Forms.ToolStripMenuItem parent, string text, RegionMaskStyle style)
-    {
-        var item = new Forms.ToolStripMenuItem(text)
-        {
-            CheckOnClick = false,
-            Tag = style
-        };
-        item.Click += (_, _) => SetRegionMaskStyleFromContextMenu(style);
-        parent.DropDownItems.Add(item);
-    }
-
-    private void UpdateRegionMaskContextMenuState(Forms.ContextMenuStrip menu)
-    {
-        var currentStyle = _regionMasks.FirstOrDefault(mask => mask.Id == _regionMaskContextMenuMaskId)?.Style
-            ?? RegionMaskStyle.StripesWithLabel;
-        foreach (Forms.ToolStripItem item in menu.Items)
-        {
-            if (item is Forms.ToolStripMenuItem { Text: "Style" } styleMenu)
-            {
-                foreach (Forms.ToolStripItem child in styleMenu.DropDownItems)
-                {
-                    if (child is Forms.ToolStripMenuItem styleItem && styleItem.Tag is RegionMaskStyle style)
-                    {
-                        styleItem.Checked = style == currentStyle;
-                    }
-                }
-            }
-        }
-    }
-
-    private void SetRegionMaskStyleFromContextMenu(RegionMaskStyle style)
-    {
-        if (_regionMaskContextMenuActionTaken)
-        {
-            return;
-        }
-
-        _regionMaskContextMenuActionTaken = true;
-        SetRegionMaskStyle(_regionMaskContextMenuMaskId, style);
-    }
-
-    private void DeleteRegionMaskFromContextMenu()
-    {
-        if (_regionMaskContextMenuActionTaken)
-        {
-            return;
-        }
-
-        _regionMaskContextMenuActionTaken = true;
-        DeleteRegionMask(_regionMaskContextMenuMaskId, exitMaskMode: false);
-    }
-
-    private void ReassertRegionMaskContextMenuTopmost(Forms.ContextMenuStrip menu)
-    {
-        ReassertToolStripDropDownTopmost(menu);
-    }
-
-    private void ReassertToolStripDropDownTopmostRepeated(Forms.ToolStripDropDown menu)
-    {
-        ReassertToolStripDropDownTopmost(menu);
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            () => ReassertToolStripDropDownTopmost(menu),
-            DispatcherPriority.Send);
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            () => ReassertToolStripDropDownTopmost(menu),
-            DispatcherPriority.ContextIdle);
-
-        _toolStripTopmostTimers.RemoveAll(timer =>
-        {
-            if (timer.Enabled)
-            {
-                return false;
-            }
-
-            timer.Dispose();
-            return true;
-        });
-
-        var timer = new Forms.Timer
-        {
-            Interval = 16
-        };
-        timer.Tick += (_, _) =>
-        {
-            if (menu.IsDisposed || !menu.Visible)
-            {
-                timer.Stop();
-                _toolStripTopmostTimers.Remove(timer);
-                timer.Dispose();
-                return;
-            }
-
-            ReassertToolStripDropDownTopmost(menu);
-        };
-        _toolStripTopmostTimers.Add(timer);
-        timer.Start();
-    }
-
-    private static void ReassertToolStripDropDownTopmost(Forms.ToolStripDropDown menu)
-    {
-        if (menu.IsDisposed || menu.Disposing)
-        {
-            return;
-        }
-
-        if (menu.Handle == IntPtr.Zero)
-        {
-            return;
-        }
-
-        NativeMethods.SetWindowPos(
-            menu.Handle,
-            NativeMethods.HwndTopmost,
-            0,
-            0,
-            0,
-            0,
-            NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+        _regionMaskContextMenu.Show(point, maskId);
     }
 
     public void TakeScreenshot()
@@ -906,10 +657,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ApplySettings(updated);
         }
 
-        _selectedSpotlightRegionIndex = _spotlightRegions.Count - 1;
-        _spotlightRegionEdit.Cancel();
+        _regionSpotlights.SelectLast();
         BeginRectSelectionMode(InteractionMode.RegionSpotlightSelect);
-        if (_spotlightRegions.Count > 0)
+        if (_regionSpotlights.HasRegions)
         {
             RestoreToolbarAfterRectSelection();
         }
@@ -928,10 +678,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _rectSelection.Cancel();
-        _editingRegionMask = null;
-        _regionMaskEdit.Cancel();
+        _regionMasks.CancelEdit();
         _screenshotRegionEdit.Cancel();
-        _spotlightRegionEdit.Cancel();
+        _regionSpotlights.CancelEdit();
         _restoreToolbarAfterRectSelection = ToolbarVisible;
         if (_restoreToolbarAfterRectSelection)
         {
@@ -1219,9 +968,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (leavingRegionMaskSelection)
         {
-            _editingRegionMask = null;
-            _regionMaskEdit.Cancel();
-            _selectedRegionMaskId = -1;
+            _regionMasks.CancelEdit();
+            _regionMasks.ClearSelection();
         }
 
         if (leavingScreenBoard)
@@ -1713,8 +1461,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
             if (TryHitSpotlightRegionResizeHandle(point, out var resizeIndex, out var resizeHandle))
             {
-                _selectedSpotlightRegionIndex = resizeIndex;
-                _spotlightRegionEdit.BeginResize(_spotlightRegions[resizeIndex], resizeHandle);
+                _regionSpotlights.BeginResize(resizeIndex, resizeHandle);
                 _rectSelection.Cancel();
                 _overlayManager?.Invalidate();
                 return;
@@ -1722,15 +1469,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
             if (TryHitSpotlightRegion(point, out var moveIndex))
             {
-                _selectedSpotlightRegionIndex = moveIndex;
-                _spotlightRegionEdit.BeginMove(point);
+                _regionSpotlights.BeginMove(moveIndex, point);
                 _rectSelection.Cancel();
                 _overlayManager?.Invalidate();
                 return;
             }
 
-            _selectedSpotlightRegionIndex = -1;
-            _spotlightRegionEdit.Cancel();
+            _regionSpotlights.ClearSelection();
             _rectSelection.Begin(point);
             _overlayManager?.Invalidate();
             return;
@@ -1742,7 +1487,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             {
                 if (TryHitRegionMask(point, out var mask))
                 {
-                    _selectedRegionMaskId = mask.Id;
+                    _regionMasks.Select(mask.Id);
                     _overlayManager?.Invalidate();
                     ShowRegionMaskContextMenu(point, mask.Id);
                 }
@@ -1757,9 +1502,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
             if (TryHitRegionMaskResizeHandle(point, out var resizeMask, out var resizeHandle))
             {
-                _editingRegionMask = resizeMask;
-                _selectedRegionMaskId = resizeMask.Id;
-                _regionMaskEdit.BeginResize(resizeMask.Rect, resizeHandle);
+                _regionMasks.BeginResize(resizeMask, resizeHandle);
                 _rectSelection.Cancel();
                 _overlayManager?.Invalidate();
                 return;
@@ -1767,17 +1510,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
             if (TryHitRegionMask(point, out var existingMask))
             {
-                _editingRegionMask = existingMask;
-                _selectedRegionMaskId = existingMask.Id;
-                _regionMaskEdit.BeginMove(point);
+                _regionMasks.BeginMove(existingMask, point);
                 _rectSelection.Cancel();
                 _overlayManager?.Invalidate();
                 return;
             }
 
-            _selectedRegionMaskId = -1;
-            _editingRegionMask = null;
-            _regionMaskEdit.Cancel();
+            _regionMasks.ClearSelection();
+            _regionMasks.CancelEdit();
             _rectSelection.Begin(point);
             _overlayManager?.Invalidate();
             return;
@@ -1878,17 +1618,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (_mode == InteractionMode.RegionSpotlightSelect)
         {
-            if (IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex)
-                && _spotlightRegionEdit.IsResizing)
+            if (_regionSpotlights.UpdateEdit(point))
             {
-                _spotlightRegions[_selectedSpotlightRegionIndex] = _spotlightRegionEdit.Resize(point);
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex) && _spotlightRegionEdit.IsMoving)
-            {
-                _spotlightRegions[_selectedSpotlightRegionIndex] = _spotlightRegionEdit.Move(_spotlightRegions[_selectedSpotlightRegionIndex], point);
                 _overlayManager?.Invalidate();
                 return;
             }
@@ -1903,16 +1634,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (_mode == InteractionMode.RegionMaskSelect)
         {
-            if (_editingRegionMask is not null && _regionMaskEdit.IsResizing)
+            if (_regionMasks.UpdateEdit(point))
             {
-                _editingRegionMask.SetRect(_regionMaskEdit.Resize(point));
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_editingRegionMask is not null && _regionMaskEdit.IsMoving)
-            {
-                _editingRegionMask.SetRect(_regionMaskEdit.Move(_editingRegionMask.Rect, point));
                 _overlayManager?.Invalidate();
                 return;
             }
@@ -2053,16 +1776,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 return;
             }
 
-            if (_spotlightRegionEdit.IsResizing)
+            if (_regionSpotlights.IsResizing)
             {
-                _spotlightRegionEdit.EndPointerAction();
+                _regionSpotlights.EndPointerAction();
                 _overlayManager?.Invalidate();
                 return;
             }
 
-            if (_spotlightRegionEdit.IsMoving)
+            if (_regionSpotlights.IsMoving)
             {
-                _spotlightRegionEdit.EndPointerAction();
+                _regionSpotlights.EndPointerAction();
                 _overlayManager?.Invalidate();
                 return;
             }
@@ -2076,9 +1799,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             var completedSourceRect = sourceRect.Value;
             if (RectGeometry.IsLargeEnough(completedSourceRect))
             {
-                var hadSpotlightRegions = _spotlightRegions.Count > 0;
-                _spotlightRegions.Add(completedSourceRect);
-                _selectedSpotlightRegionIndex = _spotlightRegions.Count - 1;
+                var hadSpotlightRegions = _regionSpotlights.HasRegions;
+                _regionSpotlights.Add(completedSourceRect);
                 if (!hadSpotlightRegions)
                 {
                     RegisterHotKeys();
@@ -2093,18 +1815,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (_mode == InteractionMode.RegionMaskSelect)
         {
-            if (_editingRegionMask is not null && _regionMaskEdit.IsResizing && button == MouseButton.Left)
+            if (_regionMasks.IsResizing && button == MouseButton.Left)
             {
-                _editingRegionMask = null;
-                _regionMaskEdit.EndPointerAction();
+                _regionMasks.EndPointerAction();
                 _overlayManager?.Invalidate();
                 return;
             }
 
-            if (_editingRegionMask is not null && _regionMaskEdit.IsMoving && button == MouseButton.Left)
+            if (_regionMasks.IsMoving && button == MouseButton.Left)
             {
-                _editingRegionMask = null;
-                _regionMaskEdit.EndPointerAction();
+                _regionMasks.EndPointerAction();
                 _overlayManager?.Invalidate();
                 return;
             }
@@ -2123,9 +1843,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             var completedMaskRect = maskRect.Value;
             if (RectGeometry.IsLargeEnough(completedMaskRect))
             {
-                var mask = new RegionMask(_nextRegionMaskId++, completedMaskRect, Settings);
-                _regionMasks.Add(mask);
-                _selectedRegionMaskId = mask.Id;
+                _regionMasks.Add(completedMaskRect, Settings);
             }
 
             RestoreToolbarAfterRectSelection();
@@ -2191,14 +1909,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return false;
         }
 
-        if (!TryGetSelectedRegionMask(out var mask))
+        if (!_regionMasks.TryGetSelectedOrHit(point, out var mask))
         {
-            if (!TryHitRegionMask(point, out mask))
-            {
-                return false;
-            }
-
-            _selectedRegionMaskId = mask.Id;
+            return false;
         }
 
         var step = (modifiers & ModifierKeys.Shift) != 0 ? 0.01 : 0.05;
@@ -2238,7 +1951,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (_mode == InteractionMode.RegionSpotlightSelect)
         {
-            _spotlightRegionEdit.Cancel();
+            _regionSpotlights.CancelEdit();
             if (_rectSelection.IsActive)
             {
                 _rectSelection.Cancel();
@@ -2250,10 +1963,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (_mode == InteractionMode.RegionMaskSelect)
         {
-            if (_editingRegionMask is not null)
+            if (_regionMasks.IsMoving || _regionMasks.IsResizing)
             {
-                _editingRegionMask = null;
-                _regionMaskEdit.Cancel();
+                _regionMasks.CancelEdit();
                 _overlayManager?.Invalidate();
             }
 
@@ -2470,21 +2182,15 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void DeleteSelectedSpotlightRegion()
     {
-        if (!IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex))
+        var hadRegions = _regionSpotlights.HasRegions;
+        if (!_regionSpotlights.DeleteSelected())
         {
             return;
         }
 
-        _spotlightRegions.RemoveAt(_selectedSpotlightRegionIndex);
-        if (_spotlightRegions.Count == 0)
+        if (hadRegions && !_regionSpotlights.HasRegions)
         {
-            ResetSpotlightRegionEditState();
             RegisterHotKeys();
-        }
-        else
-        {
-            _selectedSpotlightRegionIndex = Math.Min(_selectedSpotlightRegionIndex, _spotlightRegions.Count - 1);
-            _spotlightRegionEdit.Cancel();
         }
 
         _overlayManager?.Invalidate();
@@ -2741,13 +2447,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private bool TryNudgeSelectedSpotlightRegion(Key key, ModifierKeys modifiers)
     {
-        if (!IsValidSpotlightRegionIndex(_selectedSpotlightRegionIndex)
-            || !TryGetNudgeDelta(key, modifiers, out var dx, out var dy))
+        if (!TryGetNudgeDelta(key, modifiers, out var dx, out var dy))
         {
             return false;
         }
 
-        _spotlightRegions[_selectedSpotlightRegionIndex] = _spotlightRegions[_selectedSpotlightRegionIndex].Offset(dx, dy);
+        if (!_regionSpotlights.NudgeSelected(dx, dy))
+        {
+            return false;
+        }
+
         _overlayManager?.Invalidate();
         return true;
     }
@@ -2814,15 +2523,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         UnsubscribeMagnifierRendering();
         _annotations.Changed -= OnAnnotationsChanged;
         _annotations.DraftProgressed -= OnAnnotationDraftProgressed;
-        _regionMaskContextMenu?.Dispose();
-        _regionMaskContextMenu = null;
-        foreach (var timer in _toolStripTopmostTimers)
-        {
-            timer.Stop();
-            timer.Dispose();
-        }
-
-        _toolStripTopmostTimers.Clear();
+        _regionMaskContextMenu.Dispose();
         _hotKeyManager?.Dispose();
         CloseMagnifierHost();
         ClosePinnedLenses();
@@ -3663,8 +3364,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ResetSpotlightRegionEditState()
     {
-        _selectedSpotlightRegionIndex = -1;
-        _spotlightRegionEdit.Cancel();
+        _regionSpotlights.ResetEditState();
     }
 
     private RectOverlayVisual? GetRectOverlayVisual()
@@ -3789,10 +3489,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             host.ReassertContextMenuTopmost();
         }
 
-        if (_regionMaskContextMenu is { Visible: true } menu)
-        {
-            ReassertRegionMaskContextMenuTopmost(menu);
-        }
+        _regionMaskContextMenu.ReassertTopmostIfVisible();
     }
 
     private void ReassertPinnedLensTopmost()
