@@ -6,7 +6,6 @@ using FocusTool.Win.Models;
 using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
 using FocusTool.Win.Tray;
-using Shortcut = FocusTool.Win.Native.Shortcut;
 
 namespace FocusTool.Win.Services;
 
@@ -26,12 +25,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly SettingsPersistenceController _settingsPersistence;
     private readonly AnnotationDocument _annotations;
     private readonly DispatcherTimer _timer;
-    private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
     private readonly AnnotationInputController _annotationInput;
     private readonly AnnotationMouseController _annotationMouse;
+    private readonly PushToAnnotateController _pushToAnnotate;
     private readonly PointerVisualController _pointerVisuals;
+    private readonly VisualEffectsController _visualEffects;
     private readonly OverlayToolbarController _toolbar;
     private readonly CaptureController _capture;
     private readonly PinnedLensController _pinnedLenses;
@@ -40,20 +40,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
     private readonly RectSelectionController _rectSelection;
+    private readonly RectToolsInputController _rectTools;
+    private readonly InteractionModeTransitionController _modeTransitions;
     private TimerController? _timerController;
     private TrayIconController? _trayIcon;
     private SettingsWindow? _settingsWindow;
     private ScreenBoardFrame? _screenBoardFrame;
-    private Shortcut _pushToAnnotateShortcut;
-    private bool _pushToAnnotateActive;
-    private bool _pushToAnnotateExitPending;
     private readonly RegionMaskContextMenuController _regionMaskContextMenu;
     private bool _disposed;
-    private bool _spotlightEnabled;
-    private bool _hasSpotlightCursor;
-    private ScreenPoint _spotlightCursor;
-    private IntPtr _previousForegroundWindow = IntPtr.Zero;
-    private IntPtr _lastExternalForegroundWindow = IntPtr.Zero;
     private InteractionMode _mode = InteractionMode.Passthrough;
     private AnnotationTool _lastStepTool = AnnotationTool.StepOval;
 
@@ -68,7 +62,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool LaserVisuallyActive => _pointerVisuals.LaserVisuallyActive;
     public bool CursorHighlightEnabled => Settings.CursorHighlightEnabled;
     public bool ClickPulseEnabled => Settings.ClickPulseEnabled;
-    public bool SpotlightEnabled => _spotlightEnabled;
+    public bool SpotlightEnabled => _visualEffects.SpotlightEnabled;
     public bool MagnifierEnabled => Settings.MagnifierEnabled;
     public bool ToolbarVisible => _toolbar.IsVisible;
     public bool ScreenBoardEnabled => _mode == InteractionMode.ScreenBoard;
@@ -111,11 +105,27 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             SetRegionMaskStyle,
             maskId => DeleteRegionMask(maskId, exitMaskMode: false));
         Settings = _settingsPersistence.Load();
+        _timer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = IdleInterval
+        };
+        _timer.Tick += OnTimerTick;
+        _pushToAnnotate = new PushToAnnotateController(
+            () => Settings,
+            () => _mode,
+            SetInteractionMode,
+            interval => _timer.Interval = interval,
+            () => _annotations.HasTextInput,
+            ActiveInterval,
+            ClearAnnotations,
+            SetAnnotationTool,
+            SelectStepTool,
+            SetAnnotationPresetColor);
         _annotationInput = new AnnotationInputController(
             _annotations,
             () => Settings,
-            () => _pushToAnnotateActive,
-            () => _pushToAnnotateShortcut,
+            () => _pushToAnnotate.Active,
+            () => _pushToAnnotate.Shortcut,
             TryGetCursor,
             () => SetInteractionMode(InteractionMode.Passthrough),
             TryCompletePushToAnnotateExit,
@@ -134,11 +144,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             NowMs,
             TryCompletePushToAnnotateExit,
             MovementThresholdPixels);
-        _timer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = IdleInterval
-        };
-        _timer.Tick += OnTimerTick;
         _pointerVisuals = new PointerVisualController(
             () => Settings,
             NowMs,
@@ -152,6 +157,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ActiveInterval,
             FadeInterval,
             IdleInterval);
+        _visualEffects = new VisualEffectsController(
+            GetCursorOrNull,
+            () => _overlayManager?.Invalidate(),
+            (current, previous) => _overlayManager?.InvalidateForCursor(current, previous),
+            MovementThresholdPixels);
         _pinnedLenses = new PinnedLensController(
             () => Settings,
             GetPinnedLensExcludedWindows,
@@ -171,6 +181,20 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => ToolbarVisible,
             _toolbar.HideTransient,
             ShowToolbar);
+        _rectTools = new RectToolsInputController(
+            _rectSelection,
+            _regionMasks,
+            _regionSpotlights,
+            () => _mode,
+            () => Settings,
+            ApplySettings,
+            SetInteractionMode,
+            () => _overlayManager?.Invalidate(),
+            () => StateChanged?.Invoke(this, EventArgs.Empty),
+            RegisterHotKeys,
+            _pinnedLenses.Open,
+            (rect, restoreToolbar) => _ = TakeRegionScreenshotAsync(rect, restoreToolbar),
+            ShowRegionMaskContextMenu);
         _capture = new CaptureController(
             () => _disposed,
             () => ToolbarVisible,
@@ -196,6 +220,34 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             TryGetCursor,
             ApplyMagnifierCursor,
             () => _overlayManager?.ReassertTopmost());
+        _modeTransitions = new InteractionModeTransitionController(
+            () => _mode,
+            mode => _mode = mode,
+            () => ActivationMode,
+            mode => VisualEffectsController.ShouldRegisterExitVisualHotKey(mode, Settings.MagnifierEnabled, _visualEffects.SpotlightEnabled),
+            _pushToAnnotate.CancelIfLeavingAnnotate,
+            _annotationMouse.OnLeavingAnnotationInput,
+            _rectSelection.ResetRectStateForMode,
+            _rectSelection.RestoreToolbarAfterRectSelection,
+            ResetSpotlightRegionEditState,
+            () =>
+            {
+                _regionMasks.CancelEdit();
+                _regionMasks.ClearSelection();
+            },
+            SaveScreenBoardSnapshot,
+            () => _screenBoardFrame = null,
+            () => _overlayManager?.Show(),
+            mode => _overlayManager?.SetInteractionMode(mode),
+            () => _overlayManager?.Invalidate(),
+            () => Settings.MagnifierEnabled,
+            CloseMagnifierHost,
+            () => _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels),
+            _pinnedLenses.HideForBoard,
+            _pinnedLenses.RestoreAfterBoard,
+            _pointerVisuals.SetLaserVisualActive,
+            RegisterHotKeys,
+            () => StateChanged?.Invoke(this, EventArgs.Empty));
         _hotKeys = new GlobalHotKeyController(
             (title, text) => _trayIcon?.ShowMessage(title, text),
             ToggleLaserActivationMode,
@@ -227,7 +279,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         Settings.SpotlightEnabled = false;
         Settings.MagnifierEnabled = false;
-        _spotlightEnabled = false;
+        _visualEffects.SpotlightEnabled = false;
 
         _annotations.Changed += OnAnnotationsChanged;
         _annotations.DraftProgressed += OnAnnotationDraftProgressed;
@@ -314,20 +366,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void StartPushToAnnotate()
     {
-        if (_disposed
-            || _pushToAnnotateActive
-            || IsAnnotationMode(_mode)
-            || _mode != InteractionMode.Passthrough
-            || ShortcutSettings.IsShortcutDisabled(Settings.Shortcuts.PushToAnnotate))
-        {
-            return;
-        }
-
-        _pushToAnnotateActive = true;
-        _pushToAnnotateExitPending = false;
-        _pushToAnnotatePolledShortcutDown.Clear();
-        _timer.Interval = ActiveInterval;
-        SetInteractionMode(InteractionMode.Annotate);
+        _pushToAnnotate.Start(_disposed);
     }
 
     public void ToggleLaserActivationMode()
@@ -339,7 +378,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ToggleSpotlight()
     {
-        SetSpotlightEnabled(!_spotlightEnabled);
+        SetSpotlightEnabled(!_visualEffects.SpotlightEnabled);
     }
 
     public void ToggleMagnifierMode()
@@ -515,31 +554,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
     }
 
-    private bool TryHitRegionMask(ScreenPoint point, out RegionMask mask)
-    {
-        return _regionMasks.TryHit(point, out mask);
-    }
-
-    private bool TryGetSelectedRegionMask(out RegionMask mask)
-    {
-        return _regionMasks.TryGetSelected(out mask);
-    }
-
-    private bool TryHitRegionMaskResizeHandle(ScreenPoint point, out RegionMask mask, out RectResizeHandle handle)
-    {
-        return _regionMasks.TryHitResizeHandle(point, out mask, out handle);
-    }
-
-    private bool TryHitSpotlightRegionResizeHandle(ScreenPoint point, out int index, out RectResizeHandle handle)
-    {
-        return _regionSpotlights.TryHitResizeHandle(point, out index, out handle);
-    }
-
-    private bool TryHitSpotlightRegion(ScreenPoint point, out int index)
-    {
-        return _regionSpotlights.TryHit(point, out index);
-    }
-
     private void DeleteRegionMask(int maskId, bool exitMaskMode)
     {
         if (!_regionMasks.Delete(maskId))
@@ -560,16 +574,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
-    }
-
-    private void DeleteSelectedRegionMask()
-    {
-        if (_regionMasks.SelectedMaskId < 0)
-        {
-            return;
-        }
-
-        DeleteRegionMask(_regionMasks.SelectedMaskId, exitMaskMode: false);
     }
 
     private void SetRegionMaskStyle(int maskId, RegionMaskStyle style)
@@ -650,7 +654,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void BeginRegionSpotlightSelection()
     {
-        if (_spotlightEnabled)
+        if (_visualEffects.SpotlightEnabled)
         {
             var updated = Settings.Clone();
             updated.SpotlightEnabled = false;
@@ -732,118 +736,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetInteractionMode(InteractionMode mode)
     {
-        if (_mode == mode)
-        {
-            return;
-        }
-
-        if (_pushToAnnotateActive && mode != InteractionMode.Annotate)
-        {
-            _pushToAnnotateActive = false;
-            _pushToAnnotateExitPending = false;
-        }
-
-        var leavingAnnotationInput = IsAnnotationMode(_mode) && !IsAnnotationMode(mode);
-        var enteringAnnotationInput = !IsAnnotationMode(_mode) && IsAnnotationMode(mode);
-        var leavingRectSelection = IsRectSelectionMode(_mode) && _mode != mode;
-        var leavingRegionMaskSelection = _mode == InteractionMode.RegionMaskSelect && mode != InteractionMode.RegionMaskSelect;
-        var leavingScreenBoard = _mode == InteractionMode.ScreenBoard && mode != InteractionMode.ScreenBoard;
-        var leavingVisualBoard = IsVisualBoardMode(_mode);
-        var enteringVisualBoard = IsVisualBoardMode(mode);
-        var exitVisualHotKeyWasNeeded = ShouldRegisterExitVisualHotKey(
-            _mode,
-            Settings.MagnifierEnabled,
-            HasExitVisualSpotlightEffect());
-
-        if (enteringAnnotationInput)
-        {
-            // At this instant the foreground may already be our own toolbar/overlay
-            // (e.g. annotate was toggled by a toolbar-button click), so fall back to
-            // the last tracked external window to restore focus correctly on exit.
-            var foreground = NativeMethods.GetForegroundWindow();
-            _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
-            _previousForegroundWindow = processId != 0 && processId != (uint)Environment.ProcessId
-                ? foreground
-                : _lastExternalForegroundWindow;
-        }
-
-        if (leavingAnnotationInput)
-        {
-            _annotationMouse.OnLeavingAnnotationInput();
-        }
-
-        if (leavingRectSelection)
-        {
-            _rectSelection.ResetRectStateForMode(_mode);
-            if (_mode == InteractionMode.RegionSpotlightSelect)
-            {
-                ResetSpotlightRegionEditState();
-            }
-
-            _rectSelection.RestoreToolbarAfterRectSelection();
-        }
-
-        if (leavingRegionMaskSelection)
-        {
-            _regionMasks.CancelEdit();
-            _regionMasks.ClearSelection();
-        }
-
-        if (leavingScreenBoard)
-        {
-            SaveScreenBoardSnapshot();
-        }
-
-        _mode = mode;
-        if (_mode != InteractionMode.ScreenBoard)
-        {
-            _screenBoardFrame = null;
-        }
-
-        _overlayManager?.Show();
-        _overlayManager?.SetInteractionMode(_mode);
-        if (Settings.MagnifierEnabled)
-        {
-            if (enteringVisualBoard)
-            {
-                CloseMagnifierHost();
-            }
-            else if (leavingVisualBoard)
-            {
-                _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels);
-            }
-        }
-
-        // Boards are a clean canvas: hide pinned lenses while a board is shown and
-        // restore them on the way out. Timers intentionally stay visible.
-        if (enteringVisualBoard)
-        {
-            _pinnedLenses.HideForBoard();
-        }
-        else if (leavingVisualBoard)
-        {
-            _pinnedLenses.RestoreAfterBoard();
-        }
-
-        _overlayManager?.Invalidate();
-
-        if (leavingAnnotationInput && _previousForegroundWindow != IntPtr.Zero)
-        {
-            NativeMethods.SetForegroundWindow(_previousForegroundWindow);
-            _previousForegroundWindow = IntPtr.Zero;
-        }
-
-        _pointerVisuals.SetLaserVisualActive(ActivationMode == LaserActivationMode.Always || IsAnnotationMode(_mode));
-        var exitVisualHotKeyIsNeeded = ShouldRegisterExitVisualHotKey(
-            _mode,
-            Settings.MagnifierEnabled,
-            HasExitVisualSpotlightEffect());
-        if (exitVisualHotKeyWasNeeded != exitVisualHotKeyIsNeeded)
-        {
-            RegisterHotKeys();
-        }
-
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        _modeTransitions.SetMode(mode);
     }
 
     public void ApplySettings(AppSettings settings)
@@ -853,16 +746,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var clickPulseWasEnabled = Settings.ClickPulseEnabled;
         var magnifierWasEnabled = Settings.MagnifierEnabled;
         var globalHotKeysChanged = !GlobalHotKeyController.HaveSameGlobalHotKeys(Settings.Shortcuts, settings.Shortcuts);
-        var exitVisualHotKeyWasNeeded = ShouldRegisterExitVisualHotKey(
+        var exitVisualHotKeyWasNeeded = VisualEffectsController.ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
-            HasExitVisualSpotlightEffect());
+            _visualEffects.SpotlightEnabled);
         var magnifierVisualChanged = Math.Abs(Settings.MagnifierRadius - settings.MagnifierRadius) > 0.001
             || Math.Abs(Settings.MagnifierZoom - settings.MagnifierZoom) > 0.001;
         Settings.CopyFrom(settings);
         CacheParsedSettings();
         _pinnedLenses.UpdateRefreshInterval();
-        _spotlightEnabled = Settings.SpotlightEnabled;
+        _visualEffects.SpotlightEnabled = Settings.SpotlightEnabled;
         _pointerVisuals.UpdateMouseHook();
 
         if (Settings.CursorHighlightEnabled)
@@ -883,7 +776,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         if (Settings.MagnifierEnabled)
         {
             SubscribeMagnifierRendering();
-            UpdateSpotlightCursor(force: true);
+            _visualEffects.UpdateSpotlightCursor(force: true);
             if (!magnifierWasEnabled || magnifierVisualChanged)
             {
                 _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels);
@@ -895,27 +788,27 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             UnsubscribeMagnifierRendering();
             CloseMagnifierHost();
-            if (!_spotlightEnabled)
+            if (!_visualEffects.SpotlightEnabled)
             {
-                _hasSpotlightCursor = false;
+                _visualEffects.ClearSpotlightCursor();
             }
         }
 
-        if (IsSpotlightVisibleInMode(_mode) || Settings.MagnifierEnabled)
+        if (_visualEffects.IsSpotlightVisibleInMode(_mode) || Settings.MagnifierEnabled)
         {
-            UpdateSpotlightCursor(force: true);
+            _visualEffects.UpdateSpotlightCursor(force: true);
             _timer.Interval = ActiveInterval;
         }
-        else if (_hasSpotlightCursor)
+        else if (_visualEffects.HasSpotlightCursor)
         {
-            _hasSpotlightCursor = false;
+            _visualEffects.ClearSpotlightCursor();
         }
 
         _settingsPersistence.SaveDebounced();
-        var exitVisualHotKeyIsNeeded = ShouldRegisterExitVisualHotKey(
+        var exitVisualHotKeyIsNeeded = VisualEffectsController.ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
-            HasExitVisualSpotlightEffect());
+            _visualEffects.SpotlightEnabled);
         if (globalHotKeysChanged || exitVisualHotKeyWasNeeded != exitVisualHotKeyIsNeeded)
         {
             RegisterHotKeys();
@@ -1060,7 +953,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void AdjustRegionMaskOpacity(double delta)
     {
-        var hasSelectedMask = TryGetSelectedRegionMask(out var mask);
+        var hasSelectedMask = _regionMasks.TryGetSelected(out var mask);
         var updated = Settings.Clone();
         updated.RegionMaskOpacity = (hasSelectedMask ? mask.Opacity : Settings.RegionMaskOpacity) + delta;
         ApplySettings(updated);
@@ -1076,7 +969,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var updated = Settings.Clone();
         updated.RegionMaskColor = color;
         ApplySettings(updated);
-        if (TryGetSelectedRegionMask(out var mask))
+        if (_regionMasks.TryGetSelected(out var mask))
         {
             mask.SetColor(Settings.RegionMaskColor);
             _overlayManager?.Invalidate();
@@ -1145,7 +1038,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetSpotlightEnabled(bool enabled)
     {
-        if (_spotlightEnabled == enabled)
+        if (_visualEffects.SpotlightEnabled == enabled)
         {
             return;
         }
@@ -1202,7 +1095,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private void ApplyPersistentSettings(AppSettings settings)
     {
         settings.CursorHighlightEnabled = Settings.CursorHighlightEnabled;
-        settings.SpotlightEnabled = _spotlightEnabled;
+        settings.SpotlightEnabled = _visualEffects.SpotlightEnabled;
         settings.MagnifierEnabled = Settings.MagnifierEnabled;
         ApplySettings(settings);
     }
@@ -1214,106 +1107,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void HandleOverlayMouseDown(ScreenPoint point, MouseButton button, ModifierKeys modifiers)
     {
-        if (_mode == InteractionMode.PinnedLensSelect)
+        if (IsRectSelectionMode(_mode))
         {
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            _rectSelection.BeginDraft(point);
-            _overlayManager?.Invalidate();
-            return;
-        }
-
-        if (_mode == InteractionMode.ScreenshotRegionSelect)
-        {
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            if (_rectSelection.PendingScreenshotRegion is not null)
-            {
-                if (_rectSelection.TryBeginScreenshotEdit(point))
-                {
-                    return;
-                }
-            }
-
-            _rectSelection.BeginDraft(point);
-            _overlayManager?.Invalidate();
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionSpotlightSelect)
-        {
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            if (TryHitSpotlightRegionResizeHandle(point, out var resizeIndex, out var resizeHandle))
-            {
-                _regionSpotlights.BeginResize(resizeIndex, resizeHandle);
-                _rectSelection.CancelDraft();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (TryHitSpotlightRegion(point, out var moveIndex))
-            {
-                _regionSpotlights.BeginMove(moveIndex, point);
-                _rectSelection.CancelDraft();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            _regionSpotlights.ClearSelection();
-            _rectSelection.BeginDraft(point);
-            _overlayManager?.Invalidate();
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionMaskSelect)
-        {
-            if (button == MouseButton.Right)
-            {
-                if (TryHitRegionMask(point, out var mask))
-                {
-                    _regionMasks.Select(mask.Id);
-                    _overlayManager?.Invalidate();
-                    ShowRegionMaskContextMenu(point, mask.Id);
-                }
-
-                return;
-            }
-
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            if (TryHitRegionMaskResizeHandle(point, out var resizeMask, out var resizeHandle))
-            {
-                _regionMasks.BeginResize(resizeMask, resizeHandle);
-                _rectSelection.CancelDraft();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (TryHitRegionMask(point, out var existingMask))
-            {
-                _regionMasks.BeginMove(existingMask, point);
-                _rectSelection.CancelDraft();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            _regionMasks.ClearSelection();
-            _regionMasks.CancelEdit();
-            _rectSelection.BeginDraft(point);
-            _overlayManager?.Invalidate();
+            _rectTools.HandleMouseDown(point, button);
             return;
         }
 
@@ -1327,61 +1123,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void HandleOverlayMouseMove(ScreenPoint point, ModifierKeys modifiers)
     {
-        if (_mode == InteractionMode.PinnedLensSelect)
+        if (IsRectSelectionMode(_mode))
         {
-            if (_rectSelection.UpdateDraft(point))
-            {
-                _overlayManager?.Invalidate();
-            }
-
-            return;
-        }
-
-        if (_mode == InteractionMode.ScreenshotRegionSelect)
-        {
-            if (_rectSelection.UpdateScreenshotEdit(point))
-            {
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_rectSelection.UpdateDraft(point))
-            {
-                _overlayManager?.Invalidate();
-            }
-
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionSpotlightSelect)
-        {
-            if (_regionSpotlights.UpdateEdit(point))
-            {
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_rectSelection.UpdateDraft(point))
-            {
-                _overlayManager?.Invalidate();
-            }
-
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionMaskSelect)
-        {
-            if (_regionMasks.UpdateEdit(point))
-            {
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_rectSelection.UpdateDraft(point))
-            {
-                _overlayManager?.Invalidate();
-            }
-
+            _rectTools.HandleMouseMove(point);
             return;
         }
 
@@ -1395,151 +1139,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void HandleOverlayMouseUp(ScreenPoint point, MouseButton button, ModifierKeys modifiers)
     {
-        if (_mode == InteractionMode.PinnedLensSelect)
+        if (IsRectSelectionMode(_mode))
         {
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            var sourceRect = _rectSelection.CompleteDraft(point);
-            if (sourceRect is null)
-            {
-                return;
-            }
-
-            var completedSourceRect = sourceRect.Value;
-            if (completedSourceRect.Width >= 16 && completedSourceRect.Height >= 16)
-            {
-                SetInteractionMode(InteractionMode.Passthrough);
-                _pinnedLenses.Open(completedSourceRect);
-            }
-            else
-            {
-                SetInteractionMode(InteractionMode.Passthrough);
-            }
-
-            return;
-        }
-
-        if (_mode == InteractionMode.ScreenshotRegionSelect)
-        {
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            if (_rectSelection.IsScreenshotRegionResizing)
-            {
-                _rectSelection.EndScreenshotPointerAction();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_rectSelection.IsScreenshotRegionMoving)
-            {
-                _rectSelection.EndScreenshotPointerAction();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            var sourceRect = _rectSelection.CompleteDraft(point);
-            if (sourceRect is null)
-            {
-                return;
-            }
-
-            var completedSourceRect = sourceRect.Value;
-            if (RectGeometry.IsLargeEnough(completedSourceRect))
-            {
-                _rectSelection.SetPendingScreenshotRegion(completedSourceRect);
-                StateChanged?.Invoke(this, EventArgs.Empty);
-            }
-
-            _overlayManager?.Invalidate();
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionSpotlightSelect)
-        {
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            if (_regionSpotlights.IsResizing)
-            {
-                _regionSpotlights.EndPointerAction();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_regionSpotlights.IsMoving)
-            {
-                _regionSpotlights.EndPointerAction();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            var sourceRect = _rectSelection.CompleteDraft(point);
-            if (sourceRect is null)
-            {
-                return;
-            }
-
-            var completedSourceRect = sourceRect.Value;
-            if (RectGeometry.IsLargeEnough(completedSourceRect))
-            {
-                var hadSpotlightRegions = _regionSpotlights.HasRegions;
-                _regionSpotlights.Add(completedSourceRect);
-                if (!hadSpotlightRegions)
-                {
-                    RegisterHotKeys();
-                }
-            }
-
-            _rectSelection.RestoreToolbarAfterRectSelection();
-            _overlayManager?.Invalidate();
-            StateChanged?.Invoke(this, EventArgs.Empty);
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionMaskSelect)
-        {
-            if (_regionMasks.IsResizing && button == MouseButton.Left)
-            {
-                _regionMasks.EndPointerAction();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (_regionMasks.IsMoving && button == MouseButton.Left)
-            {
-                _regionMasks.EndPointerAction();
-                _overlayManager?.Invalidate();
-                return;
-            }
-
-            if (button != MouseButton.Left)
-            {
-                return;
-            }
-
-            var maskRect = _rectSelection.CompleteDraft(point);
-            if (maskRect is null)
-            {
-                return;
-            }
-
-            var completedMaskRect = maskRect.Value;
-            if (RectGeometry.IsLargeEnough(completedMaskRect))
-            {
-                _regionMasks.Add(completedMaskRect, Settings);
-            }
-
-            _rectSelection.RestoreToolbarAfterRectSelection();
-            _overlayManager?.Invalidate();
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            _rectTools.HandleMouseUp(point, button);
             return;
         }
 
@@ -1553,75 +1155,19 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public bool HandleOverlayMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
     {
-        if (_mode != InteractionMode.RegionMaskSelect
-            || delta == 0
-            || (modifiers & ModifierKeys.Control) == 0
-            || (modifiers & ~(ModifierKeys.Control | ModifierKeys.Shift)) != 0)
+        if (IsRectSelectionMode(_mode))
         {
-            return false;
+            return _rectTools.HandleMouseWheel(point, delta, modifiers);
         }
 
-        if (!_regionMasks.TryGetSelectedOrHit(point, out var mask))
-        {
-            return false;
-        }
-
-        var step = (modifiers & ModifierKeys.Shift) != 0 ? 0.01 : 0.05;
-        var nextOpacity = Math.Clamp(mask.Opacity + Math.Sign(delta) * step, 0.1, 1.0);
-        if (Math.Abs(mask.Opacity - nextOpacity) < 0.001)
-        {
-            return true;
-        }
-
-        var updated = Settings.Clone();
-        updated.RegionMaskOpacity = nextOpacity;
-        ApplySettings(updated);
-        mask.SetOpacity(Settings.RegionMaskOpacity);
-        _overlayManager?.Invalidate();
-        return true;
+        return false;
     }
 
     public void HandleOverlayCaptureLost()
     {
-        if (_mode == InteractionMode.PinnedLensSelect)
+        if (IsRectSelectionMode(_mode))
         {
-            SetInteractionMode(InteractionMode.Passthrough);
-            return;
-        }
-
-        if (_mode == InteractionMode.ScreenshotRegionSelect)
-        {
-            _rectSelection.CancelScreenshotPointerState();
-            _overlayManager?.Invalidate();
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionSpotlightSelect)
-        {
-            _regionSpotlights.CancelEdit();
-            if (_rectSelection.IsDraftActive)
-            {
-                _rectSelection.CancelDraft();
-            }
-
-            _overlayManager?.Invalidate();
-            return;
-        }
-
-        if (_mode == InteractionMode.RegionMaskSelect)
-        {
-            if (_regionMasks.IsMoving || _regionMasks.IsResizing)
-            {
-                _regionMasks.CancelEdit();
-                _overlayManager?.Invalidate();
-            }
-
-            if (_rectSelection.IsDraftActive)
-            {
-                _rectSelection.CancelDraft();
-                _overlayManager?.Invalidate();
-            }
-
+            _rectTools.HandleCaptureLost();
             return;
         }
 
@@ -1632,62 +1178,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         if (IsRectSelectionMode(_mode))
         {
-            if (Matches(key, modifiers, ExitVisualShortcut) || Matches(key, modifiers, Settings.Shortcuts.ExitAnnotate))
-            {
-                SetInteractionMode(InteractionMode.Passthrough);
-                return true;
-            }
-
-            if (_mode == InteractionMode.RegionMaskSelect)
-            {
-                if ((key == Key.Back || key == Key.Delete) && modifiers == ModifierKeys.None)
-                {
-                    DeleteSelectedRegionMask();
-                    return true;
-                }
-
-                return false;
-            }
-
-            if (_mode == InteractionMode.ScreenshotRegionSelect)
-            {
-                if (key == Key.Enter && modifiers == ModifierKeys.None)
-                {
-                    CommitPendingScreenshotRegion();
-                    return true;
-                }
-
-                if (TryNudgeScreenshotRegion(key, modifiers))
-                {
-                    return true;
-                }
-
-                return false;
-            }
-
-            if (_mode == InteractionMode.RegionSpotlightSelect)
-            {
-                if (key == Key.Back && modifiers == ModifierKeys.None)
-                {
-                    DeleteSelectedSpotlightRegion();
-                    return true;
-                }
-
-                if (key == Key.Enter && modifiers == ModifierKeys.None)
-                {
-                    SetInteractionMode(InteractionMode.Passthrough);
-                    return true;
-                }
-
-                if (TryNudgeSelectedSpotlightRegion(key, modifiers))
-                {
-                    return true;
-                }
-
-                return false;
-            }
-
-            return false;
+            return _rectTools.HandleKeyDown(key, modifiers);
         }
 
         if (!IsAnnotationMode(_mode))
@@ -1696,92 +1187,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         return _annotationInput.HandleKeyDown(key, modifiers);
-    }
-
-    private void DeleteSelectedSpotlightRegion()
-    {
-        var hadRegions = _regionSpotlights.HasRegions;
-        if (!_regionSpotlights.DeleteSelected())
-        {
-            return;
-        }
-
-        if (hadRegions && !_regionSpotlights.HasRegions)
-        {
-            RegisterHotKeys();
-        }
-
-        _overlayManager?.Invalidate();
-        StateChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void CommitPendingScreenshotRegion()
-    {
-        if (!_rectSelection.TryTakePendingScreenshotRegion(out var rect, out var restoreToolbar))
-        {
-            return;
-        }
-
-        SetInteractionMode(InteractionMode.Passthrough);
-        _ = TakeRegionScreenshotAsync(rect, restoreToolbar);
-    }
-
-    private bool TryNudgeScreenshotRegion(Key key, ModifierKeys modifiers)
-    {
-        if (!TryGetNudgeDelta(key, modifiers, out var dx, out var dy)
-            || !_rectSelection.TryNudgePendingScreenshotRegion(dx, dy))
-        {
-            return false;
-        }
-
-        _overlayManager?.Invalidate();
-        return true;
-    }
-
-    private bool TryNudgeSelectedSpotlightRegion(Key key, ModifierKeys modifiers)
-    {
-        if (!TryGetNudgeDelta(key, modifiers, out var dx, out var dy))
-        {
-            return false;
-        }
-
-        if (!_regionSpotlights.NudgeSelected(dx, dy))
-        {
-            return false;
-        }
-
-        _overlayManager?.Invalidate();
-        return true;
-    }
-
-    private static bool TryGetNudgeDelta(Key key, ModifierKeys modifiers, out double dx, out double dy)
-    {
-        dx = 0;
-        dy = 0;
-
-        if ((modifiers & ~ModifierKeys.Shift) != 0)
-        {
-            return false;
-        }
-
-        var step = (modifiers & ModifierKeys.Shift) != 0 ? 10 : 1;
-        switch (key)
-        {
-            case Key.Left:
-                dx = -step;
-                return true;
-            case Key.Right:
-                dx = step;
-                return true;
-            case Key.Up:
-                dy = -step;
-                return true;
-            case Key.Down:
-                dy = step;
-                return true;
-            default:
-                return false;
-        }
     }
 
     public void HandleOverlayTextInput(string text)
@@ -1828,13 +1233,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
-        TrackExternalForegroundWindow();
-        UpdatePushToAnnotate();
+        _modeTransitions.TrackExternalForegroundWindow();
+        _pushToAnnotate.Update(CanExitPushToAnnotate());
 
         var fadingAnnotationsAnimating = UpdateFadingAnnotations();
         var cursorHighlightAnimating = _pointerVisuals.UpdateCursorHighlight(force: false);
         var magnifierActive = Settings.MagnifierEnabled;
-        var spotlightActive = IsSpotlightVisibleInMode(_mode);
+        var spotlightActive = _visualEffects.IsSpotlightVisibleInMode(_mode);
         var holdActive = _pointerVisuals.IsLaserHoldActive(ActivationMode);
 
         _pointerVisuals.SetLaserVisualActive(holdActive || IsAnnotationMode(_mode));
@@ -1848,7 +1253,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
         else if (spotlightActive)
         {
-            UpdateSpotlightCursor(force: false);
+            _visualEffects.UpdateSpotlightCursor(force: false);
         }
 
         if (holdActive)
@@ -1858,7 +1263,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _pointerVisuals.FadeLaserAfterRelease();
-        if (_pushToAnnotateActive)
+        if (_pushToAnnotate.Active)
         {
             _timer.Interval = ActiveInterval;
         }
@@ -1880,47 +1285,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
     }
 
-    private void UpdatePushToAnnotate()
-    {
-        if (!_pushToAnnotateActive)
-        {
-            return;
-        }
-
-        if (!_pushToAnnotateExitPending)
-        {
-            PollPushToAnnotateShortcuts();
-        }
-
-        if (!_pushToAnnotateExitPending && _pushToAnnotateShortcut.IsPressed())
-        {
-            _timer.Interval = ActiveInterval;
-            return;
-        }
-
-        _pushToAnnotatePolledShortcutDown.Clear();
-        _pushToAnnotateExitPending = true;
-        TryCompletePushToAnnotateExit();
-        if (_pushToAnnotateActive)
-        {
-            _timer.Interval = ActiveInterval;
-        }
-    }
-
     private void TryCompletePushToAnnotateExit()
     {
-        if (!_pushToAnnotateActive || !_pushToAnnotateExitPending || !CanExitPushToAnnotate())
-        {
-            return;
-        }
-
-        _pushToAnnotateActive = false;
-        _pushToAnnotateExitPending = false;
-        _pushToAnnotatePolledShortcutDown.Clear();
-        if (_mode == InteractionMode.Annotate)
-        {
-            SetInteractionMode(InteractionMode.Passthrough);
-        }
+        _pushToAnnotate.TryCompleteExit(CanExitPushToAnnotate());
     }
 
     private bool CanExitPushToAnnotate()
@@ -1928,52 +1295,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return _mode == InteractionMode.Annotate
             && !_annotationMouse.HasActiveOperation
             && !_annotations.HasTextInput;
-    }
-
-    private void PollPushToAnnotateShortcuts()
-    {
-        if (_mode != InteractionMode.Annotate || _annotations.HasTextInput)
-        {
-            _pushToAnnotatePolledShortcutDown.Clear();
-            return;
-        }
-
-        var shortcuts = Settings.Shortcuts;
-        PollPushToAnnotateShortcut("clear-alt", shortcuts.ClearAlternate, ClearAnnotations);
-        PollPushToAnnotateShortcut("tool-arrow", shortcuts.ToolArrow, () => SetAnnotationTool(AnnotationTool.Arrow));
-        PollPushToAnnotateShortcut("tool-rectangle", shortcuts.ToolRectangle, () => SetAnnotationTool(AnnotationTool.Rectangle));
-        PollPushToAnnotateShortcut("tool-ellipse", shortcuts.ToolEllipse, () => SetAnnotationTool(AnnotationTool.Ellipse));
-        PollPushToAnnotateShortcut("tool-line", shortcuts.ToolLine, () => SetAnnotationTool(AnnotationTool.Line));
-        PollPushToAnnotateShortcut("tool-pencil", shortcuts.ToolPencil, () => SetAnnotationTool(AnnotationTool.Pencil));
-        PollPushToAnnotateShortcut("tool-highlighter", shortcuts.ToolHighlighter, () => SetAnnotationTool(AnnotationTool.Highlighter));
-        PollPushToAnnotateShortcut("tool-text", shortcuts.ToolText, () => SetAnnotationTool(AnnotationTool.Text));
-        PollPushToAnnotateShortcut("tool-move", shortcuts.ToolMove, () => SetAnnotationTool(AnnotationTool.Move));
-        PollPushToAnnotateShortcut("tool-step", shortcuts.ToolStep, SelectStepTool);
-        PollPushToAnnotateShortcut("color-1", shortcuts.Color1, () => SetAnnotationPresetColor(0));
-        PollPushToAnnotateShortcut("color-2", shortcuts.Color2, () => SetAnnotationPresetColor(1));
-        PollPushToAnnotateShortcut("color-3", shortcuts.Color3, () => SetAnnotationPresetColor(2));
-        PollPushToAnnotateShortcut("color-4", shortcuts.Color4, () => SetAnnotationPresetColor(3));
-        PollPushToAnnotateShortcut("color-5", shortcuts.Color5, () => SetAnnotationPresetColor(4));
-    }
-
-    private void PollPushToAnnotateShortcut(string id, string shortcutText, Action action)
-    {
-        if (ShortcutSettings.IsShortcutDisabled(shortcutText) || !Shortcut.TryParse(shortcutText, out var shortcut))
-        {
-            _pushToAnnotatePolledShortcutDown.Remove(id);
-            return;
-        }
-
-        if (!shortcut.IsPressed())
-        {
-            _pushToAnnotatePolledShortcutDown.Remove(id);
-            return;
-        }
-
-        if (_pushToAnnotatePolledShortcutDown.Add(id))
-        {
-            action();
-        }
     }
 
     private bool UpdateFadingAnnotations()
@@ -2010,9 +1331,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void UpdateMagnifierHost()
     {
-        if (_hasSpotlightCursor)
+        if (_visualEffects.TryGetSpotlightCursor(out var cursor))
         {
-            _magnifier.UpdateHost(_spotlightCursor);
+            _magnifier.UpdateHost(cursor);
         }
     }
 
@@ -2075,16 +1396,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private void ApplyMagnifierCursor(ScreenPoint cursor, ScreenPoint? previous, bool force)
     {
         var previousPoint = previous ?? cursor;
-        _spotlightCursor = cursor;
-        _hasSpotlightCursor = true;
-        if (force)
-        {
-            _overlayManager?.Invalidate();
-        }
-        else
-        {
-            _overlayManager?.InvalidateForCursor(cursor, previousPoint);
-        }
+        _visualEffects.SetSpotlightCursor(cursor, previousPoint, force);
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -2125,7 +1437,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ExitVisualEffects()
     {
-        if (!Settings.MagnifierEnabled && !_spotlightEnabled)
+        if (!Settings.MagnifierEnabled && !_visualEffects.SpotlightEnabled)
         {
             return;
         }
@@ -2140,7 +1452,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         _hotKeys.Register(
             Settings.Shortcuts,
-            ShouldRegisterExitVisualHotKey(_mode, Settings.MagnifierEnabled, HasExitVisualSpotlightEffect()),
+            VisualEffectsController.ShouldRegisterExitVisualHotKey(_mode, Settings.MagnifierEnabled, _visualEffects.SpotlightEnabled),
             ExitVisualShortcut);
     }
 
@@ -2158,70 +1470,15 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _pinnedLenses.ReassertTopmost();
     }
 
-    private bool HasExitVisualSpotlightEffect()
-    {
-        return _spotlightEnabled;
-    }
-
-    private static bool ShouldRegisterExitVisualHotKey(
-        InteractionMode mode,
-        bool magnifierEnabled,
-        bool spotlightEnabled)
-    {
-        return !IsAnnotationMode(mode) && (magnifierEnabled || spotlightEnabled);
-    }
-
     private ScreenPoint? GetSpotlightPoint()
     {
-        return (IsSpotlightVisibleInMode(_mode) || Settings.MagnifierEnabled && !IsVisualBoardMode(_mode)) && _hasSpotlightCursor
-            ? _spotlightCursor
-            : null;
-    }
-
-    private void UpdateSpotlightCursor(bool force)
-    {
-        if (!TryGetCursor(out var cursor))
-        {
-            return;
-        }
-
-        if (!force && _hasSpotlightCursor && cursor.DistanceTo(_spotlightCursor) < MovementThresholdPixels)
-        {
-            return;
-        }
-
-        var previous = _hasSpotlightCursor ? _spotlightCursor : cursor;
-        _spotlightCursor = cursor;
-        _hasSpotlightCursor = true;
-        if (force)
-        {
-            _overlayManager?.Invalidate();
-        }
-        else
-        {
-            _overlayManager?.InvalidateForCursor(cursor, previous);
-        }
+        return _visualEffects.GetSpotlightPoint(_mode, Settings.MagnifierEnabled);
     }
 
     private void CacheParsedSettings()
     {
         _pointerVisuals.CacheParsedSettings();
-
-        if (ShortcutSettings.IsShortcutDisabled(Settings.Shortcuts.PushToAnnotate))
-        {
-            _pushToAnnotateShortcut = default;
-        }
-        else if (!Shortcut.TryParse(Settings.Shortcuts.PushToAnnotate, out _pushToAnnotateShortcut)
-            || _pushToAnnotateShortcut.IsMouseButton)
-        {
-            Settings.Shortcuts.PushToAnnotate = "Ctrl+Space";
-            Shortcut.TryParse(Settings.Shortcuts.PushToAnnotate, out _pushToAnnotateShortcut);
-        }
-    }
-
-    private static bool Matches(Key key, ModifierKeys modifiers, string shortcutText)
-    {
-        return Shortcut.TryParse(shortcutText, out var shortcut) && shortcut.Matches(key, modifiers);
+        _pushToAnnotate.ConfigureShortcut();
     }
 
     private static bool IsAnnotationMode(InteractionMode mode)
@@ -2242,35 +1499,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
     }
 
-    private bool IsSpotlightVisibleInMode(InteractionMode mode)
-    {
-        return _spotlightEnabled && !IsVisualBoardMode(mode);
-    }
-
     private static bool IsVisualBoardMode(InteractionMode mode)
     {
         return mode is InteractionMode.ScreenBoard or InteractionMode.BlackScreen or InteractionMode.WhiteScreen;
     }
 
     private double NowMs() => _clock.Elapsed.TotalMilliseconds;
-
-    // Continuously remember the last foreground window that is not one of ours, so
-    // entering Annotate via a toolbar-button click (where our own window is briefly
-    // foreground) can still restore focus to the real underlying app on exit.
-    private void TrackExternalForegroundWindow()
-    {
-        var foreground = NativeMethods.GetForegroundWindow();
-        if (foreground == IntPtr.Zero)
-        {
-            return;
-        }
-
-        _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
-        if (processId != 0 && processId != (uint)Environment.ProcessId)
-        {
-            _lastExternalForegroundWindow = foreground;
-        }
-    }
 
     private static bool TryGetCursor(out ScreenPoint point)
     {
@@ -2283,6 +1517,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         point = default;
         _ = Marshal.GetLastWin32Error();
         return false;
+    }
+
+    private static ScreenPoint? GetCursorOrNull()
+    {
+        return TryGetCursor(out var point) ? point : null;
     }
 
 }
