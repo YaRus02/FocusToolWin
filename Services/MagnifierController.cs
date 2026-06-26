@@ -4,8 +4,6 @@ using FocusTool.Win.Overlay;
 
 namespace FocusTool.Win.Services;
 
-internal delegate bool TryGetScreenPoint(out ScreenPoint point);
-
 internal sealed class MagnifierController : IDisposable
 {
     private const double RenderCursorMovementThresholdPixels = 0.5;

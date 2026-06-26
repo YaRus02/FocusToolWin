@@ -23,18 +23,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     // Worst case it adds ~120 ms before a held laser appears: imperceptible.
     private static readonly TimeSpan IdleInterval = TimeSpan.FromMilliseconds(120);
     private const double MovementThresholdPixels = 0.75;
-    private const double CursorPulseDurationMs = 360;
-    private const int MaximumCursorClickPulses = 4;
     private const string ExitVisualShortcut = "Esc";
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly SettingsPersistenceController _settingsPersistence;
-    private readonly TrailModel _trail = new();
     private readonly AnnotationDocument _annotations;
     private readonly DispatcherTimer _timer;
     private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
+    private readonly PointerVisualController _pointerVisuals;
     private readonly OverlayToolbarController _toolbar;
     private readonly CaptureController _capture;
     private readonly PinnedLensController _pinnedLenses;
@@ -44,22 +42,14 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly RegionSpotlightController _regionSpotlights = new();
     private TimerController? _timerController;
     private TrayIconController? _trayIcon;
-    private MouseHook? _mouseHook;
     private SettingsWindow? _settingsWindow;
     private ScreenBoardFrame? _screenBoardFrame;
-    private Shortcut _laserHoldShortcut;
-    private Shortcut _cursorHighlightHoldShortcut;
     private Shortcut _pushToAnnotateShortcut;
-    private ScreenPoint _lastCursor;
-    private ScreenPoint _cursorHighlightPoint;
     private ScreenPoint _lastSelectionMovePoint;
     private ScreenPoint _lastTextClickPoint;
     private ScreenPoint _lastObjectClickPoint;
     private ScreenPoint _pendingTextEditMovePoint;
-    private readonly List<CursorClickPulse> _cursorClickPulses = [];
     private readonly RectSelectionSession _rectSelection = new();
-    private bool _hasLastCursor;
-    private bool _hasCursorHighlightPoint;
     private bool _hasLastTextClick;
     private bool _hasLastObjectClick;
     private double _lastTextClickMs = double.NegativeInfinity;
@@ -76,7 +66,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly RectEditSession _screenshotRegionEdit = new();
     private readonly RegionMaskContextMenuController _regionMaskContextMenu;
     private bool _disposed;
-    private bool _laserVisuallyActive;
     private bool _spotlightEnabled;
     private bool _hasSpotlightCursor;
     private ScreenPoint _spotlightCursor;
@@ -87,13 +76,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public event EventHandler? StateChanged;
 
-    public AppSettings Settings { get; private set; }
+    public AppSettings Settings { get; private set; } = new();
     public string SettingsFilePath => _settingsPersistence.SettingsFilePath;
     public InteractionMode Mode => _mode;
     public LaserActivationMode ActivationMode => Settings.GetLaserActivationMode();
     public AnnotationTool CurrentTool => Settings.GetAnnotationTool();
     public AnnotationDocument Annotations => _annotations;
-    public bool LaserVisuallyActive => _laserVisuallyActive;
+    public bool LaserVisuallyActive => _pointerVisuals.LaserVisuallyActive;
     public bool CursorHighlightEnabled => Settings.CursorHighlightEnabled;
     public bool ClickPulseEnabled => Settings.ClickPulseEnabled;
     public bool SpotlightEnabled => _spotlightEnabled;
@@ -139,6 +128,24 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             SetRegionMaskStyle,
             maskId => DeleteRegionMask(maskId, exitMaskMode: false));
         Settings = _settingsPersistence.Load();
+        _timer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = IdleInterval
+        };
+        _timer.Tick += OnTimerTick;
+        _pointerVisuals = new PointerVisualController(
+            () => Settings,
+            NowMs,
+            () => _disposed,
+            TryGetCursor,
+            interval => _timer.Interval = interval,
+            () => _overlayManager?.Invalidate(),
+            (current, previous) => _overlayManager?.InvalidateForCursor(current, previous),
+            () => StateChanged?.Invoke(this, EventArgs.Empty),
+            MovementThresholdPixels,
+            ActiveInterval,
+            FadeInterval,
+            IdleInterval);
         _pinnedLenses = new PinnedLensController(
             () => Settings,
             GetPinnedLensExcludedWindows,
@@ -210,12 +217,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         Settings.MagnifierEnabled = false;
         _spotlightEnabled = false;
 
-        _timer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = IdleInterval
-        };
-        _timer.Tick += OnTimerTick;
-
         _annotations.Changed += OnAnnotationsChanged;
         _annotations.DraftProgressed += OnAnnotationDraftProgressed;
     }
@@ -275,13 +276,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_pointerVisuals.Trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, _pointerVisuals.GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
-        _mouseHook = new MouseHook();
-        _mouseHook.Clicked += OnMouseHookClicked;
         RegisterHotKeys();
-        UpdateMouseHook();
+        _pointerVisuals.StartMouseHook();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _overlayManager.Show();
@@ -840,7 +839,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _previousForegroundWindow = IntPtr.Zero;
         }
 
-        SetLaserVisualActive(ActivationMode == LaserActivationMode.Always || IsAnnotationMode(_mode));
+        _pointerVisuals.SetLaserVisualActive(ActivationMode == LaserActivationMode.Always || IsAnnotationMode(_mode));
         var exitVisualHotKeyIsNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
@@ -870,21 +869,21 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         CacheParsedSettings();
         _pinnedLenses.UpdateRefreshInterval();
         _spotlightEnabled = Settings.SpotlightEnabled;
-        UpdateMouseHook();
+        _pointerVisuals.UpdateMouseHook();
 
         if (Settings.CursorHighlightEnabled)
         {
             _timer.Interval = ActiveInterval;
-            UpdateCursorHighlight(force: true);
+            _pointerVisuals.UpdateCursorHighlight(force: true);
         }
-        else if (cursorHighlightWasEnabled || _hasCursorHighlightPoint)
+        else if (cursorHighlightWasEnabled || _pointerVisuals.HasCursorHighlightPoint)
         {
-            ClearCursorHighlightPoint();
+            _pointerVisuals.ClearCursorHighlightPoint();
         }
 
-        if (!Settings.ClickPulseEnabled && (clickPulseWasEnabled || _cursorClickPulses.Count > 0))
+        if (!Settings.ClickPulseEnabled && (clickPulseWasEnabled || _pointerVisuals.HasCursorClickPulses))
         {
-            ClearCursorClickPulses();
+            _pointerVisuals.ClearCursorClickPulses();
         }
 
         if (Settings.MagnifierEnabled)
@@ -928,15 +927,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             RegisterHotKeys();
         }
 
-        if (previousActivationMode != ActivationMode)
-        {
-            _trail.Clear();
-            _hasLastCursor = false;
-        }
-        else
-        {
-            _trail.TrimWhileMoving(NowMs(), RetainedTrailLengthMs);
-        }
+        _pointerVisuals.RefreshLaserAfterSettingsApplied(previousActivationMode);
 
         _overlayManager?.Invalidate();
         StateChanged?.Invoke(this, EventArgs.Empty);
@@ -2331,12 +2322,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _timer.Stop();
         _timer.Tick -= OnTimerTick;
-        if (_mouseHook is not null)
-        {
-            _mouseHook.Clicked -= OnMouseHookClicked;
-            _mouseHook.Dispose();
-        }
 
+        _pointerVisuals.Dispose();
         UnsubscribeMagnifierRendering();
         _annotations.Changed -= OnAnnotationsChanged;
         _annotations.DraftProgressed -= OnAnnotationDraftProgressed;
@@ -2364,13 +2351,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         UpdatePushToAnnotate();
 
         var fadingAnnotationsAnimating = UpdateFadingAnnotations();
-        var cursorHighlightAnimating = UpdateCursorHighlight(force: false);
+        var cursorHighlightAnimating = _pointerVisuals.UpdateCursorHighlight(force: false);
         var magnifierActive = Settings.MagnifierEnabled;
         var spotlightActive = IsSpotlightVisibleInMode(_mode);
-        var holdActive = ActivationMode == LaserActivationMode.Always
-            || _laserHoldShortcut.IsPressed();
+        var holdActive = _pointerVisuals.IsLaserHoldActive(ActivationMode);
 
-        SetLaserVisualActive(holdActive || IsAnnotationMode(_mode));
+        _pointerVisuals.SetLaserVisualActive(holdActive || IsAnnotationMode(_mode));
         if (magnifierActive)
         {
             if (!_magnifier.IsRenderingSubscribed)
@@ -2386,11 +2372,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (holdActive)
         {
-            TrackLaserWhileHeld();
+            _pointerVisuals.TrackLaserWhileHeld(ActivationMode);
             return;
         }
 
-        FadeLaserAfterRelease();
+        _pointerVisuals.FadeLaserAfterRelease();
         if (_pushToAnnotateActive)
         {
             _timer.Interval = ActiveInterval;
@@ -2522,228 +2508,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         return _annotations.HasFadingTemporaryAnnotations(nowMs);
-    }
-
-    private bool UpdateCursorHighlight(bool force)
-    {
-        var nowMs = NowMs();
-        var removedExpiredPulses = RemoveExpiredCursorClickPulses(nowMs);
-        var active = IsCursorHighlightVisuallyActive();
-
-        if (active && TryGetCursor(out var cursor))
-        {
-            var previous = _hasCursorHighlightPoint ? _cursorHighlightPoint : cursor;
-            var moved = force
-                || !_hasCursorHighlightPoint
-                || cursor.DistanceTo(_cursorHighlightPoint) >= 0.5;
-            _cursorHighlightPoint = cursor;
-            _hasCursorHighlightPoint = true;
-
-            if (moved)
-            {
-                if (force)
-                {
-                    _overlayManager?.Invalidate();
-                }
-                else
-                {
-                    _overlayManager?.InvalidateForCursor(cursor, previous);
-                }
-
-                _timer.Interval = ActiveInterval;
-            }
-            else
-            {
-                _timer.Interval = FadeInterval;
-            }
-        }
-        else if (_hasCursorHighlightPoint)
-        {
-            var previous = _cursorHighlightPoint;
-            _hasCursorHighlightPoint = false;
-            _overlayManager?.InvalidateForCursor(previous, previous);
-        }
-
-        if (removedExpiredPulses || _cursorClickPulses.Count > 0)
-        {
-            _overlayManager?.Invalidate();
-        }
-
-        return active || _cursorClickPulses.Count > 0;
-    }
-
-    private bool RemoveExpiredCursorClickPulses(double nowMs)
-    {
-        var removed = false;
-        for (var i = _cursorClickPulses.Count - 1; i >= 0; i--)
-        {
-            if (nowMs - _cursorClickPulses[i].StartedAtMs >= CursorPulseDurationMs)
-            {
-                _cursorClickPulses.RemoveAt(i);
-                removed = true;
-            }
-        }
-
-        return removed;
-    }
-
-    private CursorHighlightFrame GetCursorHighlightFrame()
-    {
-        if (!_hasCursorHighlightPoint && _cursorClickPulses.Count == 0)
-        {
-            return CursorHighlightFrame.Empty;
-        }
-
-        return new CursorHighlightFrame(
-            _hasCursorHighlightPoint ? _cursorHighlightPoint : null,
-            _cursorClickPulses.ToArray());
-    }
-
-    private void ClearCursorHighlightPoint()
-    {
-        var hadVisual = _hasCursorHighlightPoint;
-        _hasCursorHighlightPoint = false;
-        if (hadVisual)
-        {
-            _overlayManager?.Invalidate();
-        }
-    }
-
-    private void ClearCursorClickPulses()
-    {
-        if (_cursorClickPulses.Count == 0)
-        {
-            return;
-        }
-
-        _cursorClickPulses.Clear();
-        _overlayManager?.Invalidate();
-    }
-
-    private bool IsCursorHighlightVisuallyActive()
-    {
-        if (!Settings.CursorHighlightEnabled)
-        {
-            return false;
-        }
-
-        return Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always
-            || _cursorHighlightHoldShortcut.IsPressed();
-    }
-
-    private void UpdateMouseHook()
-    {
-        if (_mouseHook is null)
-        {
-            return;
-        }
-
-        if (Settings.ClickPulseEnabled)
-        {
-            if (!_mouseHook.Install())
-            {
-                AppLog.Error("Could not install low-level mouse hook for cursor click pulse.");
-            }
-
-            return;
-        }
-
-        _mouseHook.Uninstall();
-        ClearCursorClickPulses();
-    }
-
-    private void OnMouseHookClicked(object? sender, MouseHookClickEventArgs e)
-    {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
-        {
-            dispatcher.BeginInvoke(() => OnMouseHookClicked(sender, e));
-            return;
-        }
-
-        if (_disposed
-            || !Settings.ClickPulseEnabled)
-        {
-            return;
-        }
-
-        _cursorClickPulses.Add(new CursorClickPulse(e.Point, e.Button, NowMs()));
-        while (_cursorClickPulses.Count > MaximumCursorClickPulses)
-        {
-            _cursorClickPulses.RemoveAt(0);
-        }
-
-        _timer.Interval = FadeInterval;
-        _overlayManager?.Invalidate();
-    }
-
-    private void TrackLaserWhileHeld()
-    {
-        if (!TryGetCursor(out var cursor))
-        {
-            _timer.Interval = IdleInterval;
-            return;
-        }
-
-        var nowMs = NowMs();
-        if (!_hasLastCursor)
-        {
-            if (ActivationMode == LaserActivationMode.Hold)
-            {
-                _trail.Clear();
-            }
-
-            _lastCursor = cursor;
-            _hasLastCursor = true;
-            _trail.AddPoint(cursor, nowMs);
-        }
-        else if (cursor.DistanceTo(_lastCursor) >= MovementThresholdPixels)
-        {
-            _lastCursor = cursor;
-            _trail.AddPoint(cursor, nowMs);
-        }
-        else
-        {
-            var hadVisibleTrail = _trail.Points.Count > 1;
-            _trail.TouchLastPoint(cursor, nowMs);
-            _trail.TrimWhileMoving(nowMs, RetainedTrailLengthMs);
-            _timer.Interval = hadVisibleTrail ? FadeInterval : IdleInterval;
-            if (hadVisibleTrail)
-            {
-                _overlayManager?.Invalidate();
-            }
-
-            return;
-        }
-
-        _trail.TrimWhileMoving(nowMs, RetainedTrailLengthMs);
-        _timer.Interval = ActiveInterval;
-        _overlayManager?.Invalidate();
-    }
-
-    private void FadeLaserAfterRelease()
-    {
-        _hasLastCursor = false;
-
-        if (_trail.Points.Count == 0 || _trail.LastMovementMs < 0)
-        {
-            _timer.Interval = IdleInterval;
-            return;
-        }
-
-        var nowMs = NowMs();
-        var stationaryMs = nowMs - _trail.LastMovementMs;
-        if (stationaryMs > Settings.FadeDurationMs + 64)
-        {
-            _trail.Clear();
-            _overlayManager?.Invalidate();
-            _timer.Interval = IdleInterval;
-            return;
-        }
-
-        _trail.TrimWhileStationary(RetainedTrailLengthMs);
-        _timer.Interval = FadeInterval;
-        _overlayManager?.Invalidate();
     }
 
     private void OnAnnotationsChanged(object? sender, EventArgs e)
@@ -2988,17 +2752,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return !IsAnnotationMode(mode) && (magnifierEnabled || spotlightEnabled);
     }
 
-    private void SetLaserVisualActive(bool active)
-    {
-        if (_laserVisuallyActive == active)
-        {
-            return;
-        }
-
-        _laserVisuallyActive = active;
-        StateChanged?.Invoke(this, EventArgs.Empty);
-    }
-
     private ScreenPoint? GetSpotlightPoint()
     {
         return (IsSpotlightVisibleInMode(_mode) || Settings.MagnifierEnabled && !IsVisualBoardMode(_mode)) && _hasSpotlightCursor
@@ -3033,27 +2786,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void CacheParsedSettings()
     {
-        if (ActivationMode == LaserActivationMode.Always)
-        {
-            _laserHoldShortcut = default;
-        }
-        else if (AppSettings.IsLaserHoldShortcutDisabled(Settings.LaserHoldShortcut)
-            || !Shortcut.TryParse(Settings.LaserHoldShortcut, out _laserHoldShortcut))
-        {
-            Settings.LaserHoldShortcut = "XButton2";
-            Shortcut.TryParse(Settings.LaserHoldShortcut, out _laserHoldShortcut);
-        }
-
-        if (Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always)
-        {
-            _cursorHighlightHoldShortcut = default;
-        }
-        else if (AppSettings.IsLaserHoldShortcutDisabled(Settings.CursorHighlightHoldShortcut)
-            || !Shortcut.TryParse(Settings.CursorHighlightHoldShortcut, out _cursorHighlightHoldShortcut))
-        {
-            Settings.CursorHighlightHoldShortcut = "XButton1";
-            Shortcut.TryParse(Settings.CursorHighlightHoldShortcut, out _cursorHighlightHoldShortcut);
-        }
+        _pointerVisuals.CacheParsedSettings();
 
         if (ShortcutSettings.IsShortcutDisabled(Settings.Shortcuts.PushToAnnotate))
         {
@@ -3220,10 +2953,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     }
 
     private double NowMs() => _clock.Elapsed.TotalMilliseconds;
-
-    // Retain exactly the trail length: a point that ages out of the window is
-    // trimmed at the same instant, so it can never be revealed again as a phantom.
-    private int RetainedTrailLengthMs => Settings.TrailLengthMs;
 
     // Continuously remember the last foreground window that is not one of ours, so
     // entering Annotate via a toolbar-button click (where our own window is briefly
