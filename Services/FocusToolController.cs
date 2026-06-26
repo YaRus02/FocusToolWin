@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FocusTool.Win.Models;
@@ -35,12 +34,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly AnnotationDocument _annotations;
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _settingsSaveTimer;
-    private readonly DispatcherTimer _pinnedLensRefreshTimer;
     private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
-    private MagnifierHostWindow? _magnifierHost;
-    private readonly List<PinnedLensHostWindow> _pinnedLensHosts = [];
+    private readonly PinnedLensController _pinnedLenses;
+    private readonly MagnifierController _magnifier;
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
     private TimerController? _timerController;
@@ -83,12 +81,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _laserVisuallyActive;
     private bool _spotlightEnabled;
     private bool _hasSpotlightCursor;
-    private bool _magnifierRenderingSubscribed;
     private ScreenPoint _spotlightCursor;
     private IntPtr _previousForegroundWindow = IntPtr.Zero;
     private IntPtr _lastExternalForegroundWindow = IntPtr.Zero;
-    private ScreenPoint _lastMagnifierCursor;
-    private bool _hasLastMagnifierCursor;
     private InteractionMode _mode = InteractionMode.Passthrough;
     private AnnotationTool _lastStepTool = AnnotationTool.StepOval;
 
@@ -109,8 +104,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool ScreenBoardEnabled => _mode == InteractionMode.ScreenBoard;
     public bool BlackScreenEnabled => _mode == InteractionMode.BlackScreen;
     public bool WhiteScreenEnabled => _mode == InteractionMode.WhiteScreen;
-    public bool PinnedLensActive => _pinnedLensHosts.Count > 0;
-    public int PinnedLensCount => _pinnedLensHosts.Count;
+    public bool PinnedLensActive => _pinnedLenses.HasLenses;
+    public int PinnedLensCount => _pinnedLenses.Count;
     public bool PinnedLensSelectionActive => _mode == InteractionMode.PinnedLensSelect;
     public bool RegionMaskActive => _regionMasks.HasMasks;
     public int RegionMaskCount => _regionMasks.Count;
@@ -145,6 +140,24 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             SetRegionMaskStyle,
             maskId => DeleteRegionMask(maskId, exitMaskMode: false));
         Settings = _settingsStore.Load();
+        _pinnedLenses = new PinnedLensController(
+            () => Settings,
+            GetPinnedLensExcludedWindows,
+            () => _disposed,
+            WaitForScreenRefreshAsync,
+            () => _overlayManager?.ReassertTopmost(),
+            (title, text) => _trayIcon?.ShowMessage(title, text),
+            () => StateChanged?.Invoke(this, EventArgs.Empty));
+        _magnifier = new MagnifierController(
+            () => Settings,
+            () => _disposed,
+            () => _captureInProgress,
+            () => IsVisualBoardMode(_mode),
+            point => _overlayManager?.GetDpiScaleForPoint(point),
+            GetMagnifierExcludedWindows,
+            TryGetCursor,
+            ApplyMagnifierCursor,
+            () => _overlayManager?.ReassertTopmost());
         CacheParsedSettings();
         if (IsStepTool(CurrentTool))
         {
@@ -169,10 +182,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             Interval = TimeSpan.FromMilliseconds(700)
         };
         _settingsSaveTimer.Tick += OnSettingsSaveTick;
-
-        _pinnedLensRefreshTimer = new DispatcherTimer(DispatcherPriority.Render);
-        _pinnedLensRefreshTimer.Tick += OnPinnedLensRefreshTick;
-        UpdatePinnedLensRefreshInterval();
 
         _annotations.Changed += OnAnnotationsChanged;
         _annotations.DraftProgressed += OnAnnotationDraftProgressed;
@@ -812,7 +821,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _overlayManager?.Hide();
         CloseMagnifierHost();
-        HidePinnedLensesForBoard();
+        _pinnedLenses.HideForBoard();
         await WaitForScreenRefreshAsync();
 
         try
@@ -843,7 +852,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             // hidden until the board is dismissed, which restores them via SetInteractionMode).
             if (!IsVisualBoardMode(_mode) && !_disposed)
             {
-                RestorePinnedLensesAfterBoard();
+                _pinnedLenses.RestoreAfterBoard();
             }
 
             _captureInProgress = false;
@@ -993,9 +1002,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             }
             else if (leavingVisualBoard)
             {
-                _hasLastMagnifierCursor = false;
-                UpdateSpotlightCursor(force: true);
-                UpdateMagnifierHost();
+                _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels);
             }
         }
 
@@ -1003,11 +1010,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         // restore them on the way out. Timers intentionally stay visible.
         if (enteringVisualBoard)
         {
-            HidePinnedLensesForBoard();
+            _pinnedLenses.HideForBoard();
         }
         else if (leavingVisualBoard)
         {
-            RestorePinnedLensesAfterBoard();
+            _pinnedLenses.RestoreAfterBoard();
         }
 
         _overlayManager?.Invalidate();
@@ -1046,7 +1053,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             || Math.Abs(Settings.MagnifierZoom - settings.MagnifierZoom) > 0.001;
         Settings.CopyFrom(settings);
         CacheParsedSettings();
-        UpdatePinnedLensRefreshInterval();
+        _pinnedLenses.UpdateRefreshInterval();
         _spotlightEnabled = Settings.SpotlightEnabled;
         UpdateMouseHook();
 
@@ -1071,8 +1078,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             UpdateSpotlightCursor(force: true);
             if (!magnifierWasEnabled || magnifierVisualChanged)
             {
-                _hasLastMagnifierCursor = false;
-                UpdateMagnifierHost();
+                _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels);
             }
 
             _timer.Interval = ActiveInterval;
@@ -1719,7 +1725,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if (completedSourceRect.Width >= 16 && completedSourceRect.Height >= 16)
             {
                 SetInteractionMode(InteractionMode.Passthrough);
-                OpenPinnedLens(completedSourceRect);
+                _pinnedLenses.Open(completedSourceRect);
             }
             else
             {
@@ -2518,15 +2524,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _mouseHook.Dispose();
         }
 
-        _pinnedLensRefreshTimer.Stop();
-        _pinnedLensRefreshTimer.Tick -= OnPinnedLensRefreshTick;
         UnsubscribeMagnifierRendering();
         _annotations.Changed -= OnAnnotationsChanged;
         _annotations.DraftProgressed -= OnAnnotationDraftProgressed;
         _regionMaskContextMenu.Dispose();
         _hotKeyManager?.Dispose();
         CloseMagnifierHost();
-        ClosePinnedLenses();
+        _pinnedLenses.Dispose();
         _timerController?.Dispose();
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
@@ -2555,10 +2559,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         SetLaserVisualActive(holdActive || IsAnnotationMode(_mode));
         if (magnifierActive)
         {
-            if (!_magnifierRenderingSubscribed)
+            if (!_magnifier.IsRenderingSubscribed)
             {
-                UpdateSpotlightCursor(force: false);
-                UpdateMagnifierHost();
+                _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: false, MovementThresholdPixels);
                 _overlayManager?.Invalidate();
             }
         }
@@ -2578,7 +2581,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _timer.Interval = ActiveInterval;
         }
-        else if (magnifierActive && !_magnifierRenderingSubscribed)
+        else if (magnifierActive && !_magnifier.IsRenderingSubscribed)
         {
             _timer.Interval = ActiveInterval;
         }
@@ -2950,49 +2953,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void UpdateMagnifierHost()
     {
-        if (_captureInProgress)
+        if (_hasSpotlightCursor)
         {
-            // The cursor-following magnifier lens must not appear in a screenshot or
-            // screen-board frame; the render loop recreates it once capture ends.
-            CloseMagnifierHost();
-            return;
-        }
-
-        if (!Settings.MagnifierEnabled || IsVisualBoardMode(_mode) || !_hasSpotlightCursor || _overlayManager is null)
-        {
-            if (IsVisualBoardMode(_mode))
-            {
-                CloseMagnifierHost();
-            }
-
-            return;
-        }
-
-        var hostCreated = false;
-        if (_magnifierHost is null)
-        {
-            var host = new MagnifierHostWindow();
-            if (!host.IsAvailable)
-            {
-                host.Dispose();
-                return;
-            }
-
-            _magnifierHost = host;
-            hostCreated = true;
-        }
-
-        var dpiScale = _overlayManager.GetDpiScaleForPoint(_spotlightCursor);
-        _magnifierHost.UpdateLens(_spotlightCursor, Settings, dpiScale, GetMagnifierExcludedWindows());
-        if (!_magnifierHost.IsAvailable)
-        {
-            CloseMagnifierHost();
-            return;
-        }
-
-        if (hostCreated)
-        {
-            _overlayManager.ReassertTopmost();
+            _magnifier.UpdateHost(_spotlightCursor);
         }
     }
 
@@ -3007,7 +2970,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             handles.Add(_toolbarWindow.Handle);
         }
 
-        foreach (var pinnedLensHost in _pinnedLensHosts)
+        foreach (var pinnedLensHost in _pinnedLenses.Hosts)
         {
             if (pinnedLensHost.Handle != IntPtr.Zero)
             {
@@ -3026,7 +2989,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             handles.Add(_toolbarWindow.Handle);
         }
 
-        foreach (var pinnedLensHost in _pinnedLensHosts)
+        foreach (var pinnedLensHost in _pinnedLenses.Hosts)
         {
             if (pinnedLensHost.Handle != IntPtr.Zero)
             {
@@ -3039,153 +3002,31 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void SubscribeMagnifierRendering()
     {
-        if (_magnifierRenderingSubscribed)
-        {
-            return;
-        }
-
-        _hasLastMagnifierCursor = false;
-        CompositionTarget.Rendering += OnMagnifierRendering;
-        _magnifierRenderingSubscribed = true;
+        _magnifier.SubscribeRendering();
     }
 
     private void UnsubscribeMagnifierRendering()
     {
-        if (!_magnifierRenderingSubscribed)
-        {
-            return;
-        }
-
-        CompositionTarget.Rendering -= OnMagnifierRendering;
-        _magnifierRenderingSubscribed = false;
-        _hasLastMagnifierCursor = false;
-    }
-
-    private void OnMagnifierRendering(object? sender, EventArgs e)
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        if (!Settings.MagnifierEnabled || IsVisualBoardMode(_mode) || !TryGetCursor(out var cursor))
-        {
-            if (IsVisualBoardMode(_mode))
-            {
-                CloseMagnifierHost();
-            }
-
-            return;
-        }
-
-        // Follow the raw cursor at display rate; only move when it actually moved.
-        // Follow cursor movement at display rate. Source refresh is performed every
-        // frame below because dynamic content may not repaint while the lens is still.
-        var cursorMoved = !_hasLastMagnifierCursor
-            || cursor.DistanceTo(_lastMagnifierCursor) >= 0.5;
-        if (cursorMoved)
-        {
-            var previous = _hasLastMagnifierCursor ? _lastMagnifierCursor : cursor;
-            _lastMagnifierCursor = cursor;
-            _hasLastMagnifierCursor = true;
-            _spotlightCursor = cursor;
-            _hasSpotlightCursor = true;
-            _overlayManager?.InvalidateForCursor(cursor, previous);
-        }
-
-        // Refresh the magnified source even while the cursor is stationary so
-        // video and other dynamic content continue to animate inside the lens.
-        UpdateMagnifierHost();
+        _magnifier.UnsubscribeRendering();
     }
 
     private void CloseMagnifierHost()
     {
-        _magnifierHost?.Dispose();
-        _magnifierHost = null;
+        _magnifier.CloseHost();
     }
 
-    private void OpenPinnedLens(ScreenRect sourceRect)
+    private void ApplyMagnifierCursor(ScreenPoint cursor, ScreenPoint? previous, bool force)
     {
-        var host = new PinnedLensHostWindow(sourceRect, Settings, ClosePinnedLenses, CapturePinnedLensFreezeFrameAsync);
-        if (!host.IsAvailable)
+        var previousPoint = previous ?? cursor;
+        _spotlightCursor = cursor;
+        _hasSpotlightCursor = true;
+        if (force)
         {
-            host.Dispose();
-            _trayIcon?.ShowMessage("Pinned lens failed", "Could not create the pinned lens window.");
-            return;
+            _overlayManager?.Invalidate();
         }
-
-        _pinnedLensHosts.Add(host);
-        host.Closed += OnPinnedLensClosed;
-        host.FreezeStateChanged += OnPinnedLensFreezeStateChanged;
-        host.Show();
-        UpdatePinnedLensHost();
-        UpdatePinnedLensRefreshTimer();
-        _overlayManager?.ReassertTopmost();
-        StateChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private async Task<bool> CapturePinnedLensFreezeFrameAsync(PinnedLensHostWindow target, Func<bool> capture)
-    {
-        if (_disposed || !_pinnedLensHosts.Contains(target))
+        else
         {
-            return false;
-        }
-
-        var hiddenHosts = new List<PinnedLensHostWindow>();
-        foreach (var host in _pinnedLensHosts.ToArray())
-        {
-            if (host.HideForDesktopCapture())
-            {
-                hiddenHosts.Add(host);
-            }
-        }
-
-        await WaitForScreenRefreshAsync();
-
-        try
-        {
-            return !_disposed && _pinnedLensHosts.Contains(target) && capture();
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Could not freeze the pinned lens frame.", ex);
-            return false;
-        }
-        finally
-        {
-            foreach (var host in hiddenHosts)
-            {
-                if (_pinnedLensHosts.Contains(host))
-                {
-                    host.RestoreAfterDesktopCapture();
-                }
-            }
-
-            _overlayManager?.ReassertTopmost();
-        }
-    }
-
-    // Boards present a clean canvas, so pinned lenses are hidden for the board's
-    // duration (they would otherwise float over it and get baked into a screen-board
-    // capture). Reuses the same hide/restore path as the freeze-frame desktop capture.
-    private void HidePinnedLensesForBoard()
-    {
-        foreach (var host in _pinnedLensHosts)
-        {
-            host.HideForDesktopCapture();
-        }
-    }
-
-    private void RestorePinnedLensesAfterBoard()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        foreach (var host in _pinnedLensHosts)
-        {
-            host.RestoreAfterDesktopCapture();
+            _overlayManager?.InvalidateForCursor(cursor, previousPoint);
         }
     }
 
@@ -3206,118 +3047,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         // OverlayManager rebuilds the per-monitor overlays itself; here we rescue the
         // floating windows a removed/rearranged monitor would otherwise strand
         // off-screen, by clamping them back onto the nearest surviving monitor.
-        foreach (var host in _pinnedLensHosts.ToArray())
-        {
-            host.ReconcileToWorkingArea();
-        }
-
+        _pinnedLenses.ReconcileToWorkingArea();
         _timerController?.ReconcileToWorkingArea();
     }
 
     public void ClosePinnedLenses()
     {
-        _pinnedLensRefreshTimer.Stop();
-        if (_pinnedLensHosts.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var host in _pinnedLensHosts.ToArray())
-        {
-            RemovePinnedLensHost(host);
-        }
-
-        if (!_disposed)
-        {
-            StateChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    private void OnPinnedLensClosed(object? sender, EventArgs e)
-    {
-        if (sender is PinnedLensHostWindow host)
-        {
-            RemovePinnedLensHost(host);
-            if (!_disposed)
-            {
-                StateChanged?.Invoke(this, EventArgs.Empty);
-            }
-        }
-    }
-
-    private void OnPinnedLensFreezeStateChanged(object? sender, EventArgs e)
-    {
-        UpdatePinnedLensRefreshTimer();
-        if (!_disposed)
-        {
-            StateChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
-
-    private void OnPinnedLensRefreshTick(object? sender, EventArgs e)
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        UpdatePinnedLensHost();
-    }
-
-    private void UpdatePinnedLensHost()
-    {
-        if (_pinnedLensHosts.Count == 0)
-        {
-            _pinnedLensRefreshTimer.Stop();
-            return;
-        }
-
-        if (!_pinnedLensHosts.Any(host => !host.IsFrozen))
-        {
-            _pinnedLensRefreshTimer.Stop();
-            return;
-        }
-
-        var excludedWindows = GetPinnedLensExcludedWindows();
-        foreach (var host in _pinnedLensHosts.ToArray())
-        {
-            if (host.IsFrozen)
-            {
-                continue;
-            }
-
-            host.UpdateLens(excludedWindows);
-        }
-    }
-
-    private void RemovePinnedLensHost(PinnedLensHostWindow host)
-    {
-        if (!_pinnedLensHosts.Remove(host))
-        {
-            return;
-        }
-
-        host.Closed -= OnPinnedLensClosed;
-        host.FreezeStateChanged -= OnPinnedLensFreezeStateChanged;
-        host.Dispose();
-        UpdatePinnedLensRefreshTimer();
-    }
-
-    private void UpdatePinnedLensRefreshInterval()
-    {
-        var fps = Math.Clamp(Settings.PinnedLensRefreshFps, 10, 60);
-        _pinnedLensRefreshTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / fps);
-    }
-
-    private void UpdatePinnedLensRefreshTimer()
-    {
-        if (_disposed || !_pinnedLensHosts.Any(host => !host.IsFrozen))
-        {
-            _pinnedLensRefreshTimer.Stop();
-            return;
-        }
-
-        _pinnedLensRefreshTimer.Start();
+        _pinnedLenses.CloseAll();
     }
 
     private void RestoreToolbarAfterRectSelection()
@@ -3484,20 +3220,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _timerController?.ReassertTopmost();
 
-        foreach (var host in _pinnedLensHosts)
-        {
-            host.ReassertContextMenuTopmost();
-        }
-
+        _pinnedLenses.ReassertContextMenuTopmost();
         _regionMaskContextMenu.ReassertTopmostIfVisible();
     }
 
     private void ReassertPinnedLensTopmost()
     {
-        foreach (var host in _pinnedLensHosts)
-        {
-            host.ReassertTopmost();
-        }
+        _pinnedLenses.ReassertTopmost();
     }
 
     private bool HasExitVisualSpotlightEffect()
