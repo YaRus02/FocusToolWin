@@ -29,7 +29,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly SettingsStore _settingsStore = new();
-    private readonly ScreenshotService _screenshotService = new();
     private readonly TrailModel _trail = new();
     private readonly AnnotationDocument _annotations;
     private readonly DispatcherTimer _timer;
@@ -37,6 +36,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
+    private readonly CaptureController _capture;
     private readonly PinnedLensController _pinnedLenses;
     private readonly MagnifierController _magnifier;
     private readonly RegionMaskController _regionMasks = new();
@@ -76,7 +76,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private bool _screenshotRegionToolbarRestorePending;
     private readonly RectEditSession _screenshotRegionEdit = new();
     private readonly RegionMaskContextMenuController _regionMaskContextMenu;
-    private bool _captureInProgress;
     private bool _disposed;
     private bool _laserVisuallyActive;
     private bool _spotlightEnabled;
@@ -144,14 +143,29 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => Settings,
             GetPinnedLensExcludedWindows,
             () => _disposed,
-            WaitForScreenRefreshAsync,
+            CaptureController.WaitForScreenRefreshAsync,
             () => _overlayManager?.ReassertTopmost(),
             (title, text) => _trayIcon?.ShowMessage(title, text),
             () => StateChanged?.Invoke(this, EventArgs.Empty));
+        _capture = new CaptureController(
+            () => _disposed,
+            () => ToolbarVisible,
+            HideToolbar,
+            ShowToolbar,
+            () => Settings.MagnifierEnabled,
+            CloseMagnifierHost,
+            UpdateMagnifierHost,
+            () => _overlayManager?.Hide(),
+            () => _overlayManager?.Show(),
+            _pinnedLenses.HideForBoard,
+            _pinnedLenses.RestoreAfterBoard,
+            () => IsVisualBoardMode(_mode),
+            frame => _overlayManager?.CaptureScreenBoardFrame(frame),
+            (title, text) => _trayIcon?.ShowMessage(title, text));
         _magnifier = new MagnifierController(
             () => Settings,
             () => _disposed,
-            () => _captureInProgress,
+            () => _capture.IsCaptureInProgress,
             () => IsVisualBoardMode(_mode),
             point => _overlayManager?.GetDpiScaleForPoint(point),
             GetMagnifierExcludedWindows,
@@ -701,197 +715,29 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private async Task TakeScreenshotAsync()
     {
-        if (_disposed || _captureInProgress)
-        {
-            return;
-        }
-
-        _captureInProgress = true;
-        var toolbarWasVisible = ToolbarVisible;
-        var magnifierWasActive = Settings.MagnifierEnabled;
-
-        // Keep the screen overlay (region masks are a privacy layer that must be in the
-        // shot), pinned lenses and timers visible. Only the toolbar and the cursor-
-        // following magnifier lens are excluded from the capture.
-        if (toolbarWasVisible)
-        {
-            _toolbarWindow?.Hide();
-        }
-
-        // UpdateMagnifierHost stays a no-op while _captureInProgress, so the render
-        // loop will not bring the lens back before the capture completes.
-        CloseMagnifierHost();
-
-        if (toolbarWasVisible || magnifierWasActive)
-        {
-            await WaitForScreenRefreshAsync();
-        }
-
-        try
-        {
-            await _screenshotService.CaptureCurrentMonitorAsync(copyToClipboard: true);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Could not capture screenshot.", ex);
-            _trayIcon?.ShowMessage("Screenshot failed", ex.Message);
-        }
-        finally
-        {
-            if (toolbarWasVisible && !_disposed)
-            {
-                ShowToolbar();
-            }
-
-            _captureInProgress = false;
-
-            if (magnifierWasActive && !_disposed)
-            {
-                UpdateMagnifierHost();
-            }
-        }
+        await _capture.TakeScreenshotAsync();
     }
 
     private async Task TakeRegionScreenshotAsync(ScreenRect sourceRect, bool restoreToolbar)
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        if (_captureInProgress)
-        {
-            if (restoreToolbar && !_disposed)
-            {
-                ShowToolbar();
-            }
-
-            return;
-        }
-
-        _captureInProgress = true;
-        var magnifierWasActive = Settings.MagnifierEnabled;
-
-        // The toolbar is already hidden by BeginRectSelectionMode and is restored
-        // only after capture. Keep overlays visible so annotations and masks are
-        // captured exactly like the full-monitor screenshot path.
-        CloseMagnifierHost();
-        await WaitForScreenRefreshAsync();
-
-        try
-        {
-            await _screenshotService.CaptureRegionAsync(sourceRect, copyToClipboard: true);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Could not capture region screenshot.", ex);
-            _trayIcon?.ShowMessage("Region screenshot failed", ex.Message);
-        }
-        finally
-        {
-            if (restoreToolbar && !_disposed)
-            {
-                ShowToolbar();
-            }
-
-            _captureInProgress = false;
-
-            if (magnifierWasActive && !_disposed)
-            {
-                UpdateMagnifierHost();
-            }
-        }
+        await _capture.TakeRegionScreenshotAsync(sourceRect, restoreToolbar);
     }
 
     private async Task EnterScreenBoardAsync()
     {
-        if (_disposed || _captureInProgress)
-        {
-            return;
-        }
-
-        _captureInProgress = true;
-        var toolbarWasVisible = ToolbarVisible;
         var previousMode = _mode;
-        var magnifierWasEnabled = Settings.MagnifierEnabled;
-        if (toolbarWasVisible)
-        {
-            _toolbarWindow?.Hide();
-        }
-
-        _overlayManager?.Hide();
-        CloseMagnifierHost();
-        _pinnedLenses.HideForBoard();
-        await WaitForScreenRefreshAsync();
-
-        try
-        {
-            _screenBoardFrame = await _screenshotService.CaptureCurrentMonitorFrameAsync();
-            SetInteractionMode(InteractionMode.ScreenBoard);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Could not capture screen board.", ex);
-            _trayIcon?.ShowMessage("Screen board failed", ex.Message);
-            _overlayManager?.Show();
-            SetInteractionMode(previousMode);
-        }
-        finally
-        {
-            if (toolbarWasVisible && !_disposed)
+        await _capture.EnterScreenBoardAsync(
+            frame =>
             {
-                ShowToolbar();
-            }
-
-            if (magnifierWasEnabled && _mode != InteractionMode.ScreenBoard && !_disposed)
-            {
-                UpdateMagnifierHost();
-            }
-
-            // Restore pinned lenses unless we actually entered a board (then they stay
-            // hidden until the board is dismissed, which restores them via SetInteractionMode).
-            if (!IsVisualBoardMode(_mode) && !_disposed)
-            {
-                _pinnedLenses.RestoreAfterBoard();
-            }
-
-            _captureInProgress = false;
-        }
-    }
-
-    private static async Task WaitForScreenRefreshAsync()
-    {
-        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
-        await Task.Delay(70);
+                _screenBoardFrame = frame;
+                SetInteractionMode(InteractionMode.ScreenBoard);
+            },
+            () => SetInteractionMode(previousMode));
     }
 
     private void SaveScreenBoardSnapshot()
     {
-        _ = SaveScreenBoardSnapshotAsync();
-    }
-
-    private async Task SaveScreenBoardSnapshotAsync()
-    {
-        if (_screenBoardFrame is not { } frame || _overlayManager is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var image = _overlayManager.CaptureScreenBoardFrame(frame);
-            if (image is null)
-            {
-                return;
-            }
-
-            await _screenshotService.SaveImageAsync(image, copyToClipboard: true, fileNamePrefix: "FocusTool_Board");
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Could not save screen board snapshot.", ex);
-            _trayIcon?.ShowMessage("Screen board save failed", ex.Message);
-        }
+        _ = _capture.SaveScreenBoardSnapshotAsync(_screenBoardFrame);
     }
 
     public void SetMagnifierEnabled(bool enabled)
