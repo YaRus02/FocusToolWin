@@ -28,11 +28,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private const string ExitVisualShortcut = "Esc";
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
-    private readonly SettingsStore _settingsStore = new();
+    private readonly SettingsPersistenceController _settingsPersistence;
     private readonly TrailModel _trail = new();
     private readonly AnnotationDocument _annotations;
     private readonly DispatcherTimer _timer;
-    private readonly DispatcherTimer _settingsSaveTimer;
     private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
@@ -40,11 +39,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly CaptureController _capture;
     private readonly PinnedLensController _pinnedLenses;
     private readonly MagnifierController _magnifier;
+    private readonly GlobalHotKeyController _hotKeys;
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
     private TimerController? _timerController;
     private TrayIconController? _trayIcon;
-    private HotKeyManager? _hotKeyManager;
     private MouseHook? _mouseHook;
     private SettingsWindow? _settingsWindow;
     private ScreenBoardFrame? _screenBoardFrame;
@@ -89,7 +88,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public event EventHandler? StateChanged;
 
     public AppSettings Settings { get; private set; }
-    public string SettingsFilePath => _settingsStore.SettingsFilePath;
+    public string SettingsFilePath => _settingsPersistence.SettingsFilePath;
     public InteractionMode Mode => _mode;
     public LaserActivationMode ActivationMode => Settings.GetLaserActivationMode();
     public AnnotationTool CurrentTool => Settings.GetAnnotationTool();
@@ -134,11 +133,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public FocusToolController()
     {
         _annotations = new AnnotationDocument(NowMs);
+        _settingsPersistence = new SettingsPersistenceController(() => Settings, () => _disposed);
         _regionMaskContextMenu = new RegionMaskContextMenuController(
             _regionMasks.GetStyle,
             SetRegionMaskStyle,
             maskId => DeleteRegionMask(maskId, exitMaskMode: false));
-        Settings = _settingsStore.Load();
+        Settings = _settingsPersistence.Load();
         _pinnedLenses = new PinnedLensController(
             () => Settings,
             GetPinnedLensExcludedWindows,
@@ -177,6 +177,29 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             TryGetCursor,
             ApplyMagnifierCursor,
             () => _overlayManager?.ReassertTopmost());
+        _hotKeys = new GlobalHotKeyController(
+            (title, text) => _trayIcon?.ShowMessage(title, text),
+            ToggleLaserActivationMode,
+            ToggleAnnotateMode,
+            StartPushToAnnotate,
+            ToggleCursorHighlight,
+            ToggleSpotlight,
+            ToggleMagnifierMode,
+            TogglePinnedLens,
+            ToggleRegionMask,
+            ClearRegionMasks,
+            ToggleRegionSpotlight,
+            ClearRegionSpotlights,
+            ToggleFadingAnnotations,
+            NewTimer,
+            ToggleToolbar,
+            TakeScreenshot,
+            TakeRegionScreenshot,
+            ToggleScreenBoard,
+            ToggleBlackScreen,
+            ToggleWhiteScreen,
+            Exit,
+            ExitVisualEffects);
         CacheParsedSettings();
         if (IsStepTool(CurrentTool))
         {
@@ -192,15 +215,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             Interval = IdleInterval
         };
         _timer.Tick += OnTimerTick;
-
-        // Coalesce frequent settings mutations (thickness/tool/color hotkeys) into a
-        // single debounced disk write instead of serializing + writing the file on
-        // every change. Flushed synchronously on Dispose.
-        _settingsSaveTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(700)
-        };
-        _settingsSaveTimer.Tick += OnSettingsSaveTick;
 
         _annotations.Changed += OnAnnotationsChanged;
         _annotations.DraftProgressed += OnAnnotationDraftProgressed;
@@ -238,7 +252,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        SaveSettingsDebounced();
+        _settingsPersistence.SaveDebounced();
     }
 
     private void AddTimerLabelToHistory(string label)
@@ -256,29 +270,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             history.RemoveRange(10, history.Count - 10);
         }
 
-        SaveSettingsDebounced();
-    }
-
-    private void SaveSettingsDebounced()
-    {
-        _settingsSaveTimer.Stop();
-        _settingsSaveTimer.Start();
-    }
-
-    private void OnSettingsSaveTick(object? sender, EventArgs e)
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _settingsSaveTimer.Stop();
-
-        // Write off the UI thread so a slow disk / AV scan can't hitch the overlay.
-        // A snapshot is serialized so the background write never races UI-thread
-        // mutations of the live Settings; Dispose still flushes synchronously.
-        var snapshot = Settings.Clone();
-        _ = Task.Run(() => _settingsStore.Save(snapshot));
+        _settingsPersistence.SaveDebounced();
     }
 
     public void Start()
@@ -296,7 +288,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _timer.Start();
         StateChanged?.Invoke(this, EventArgs.Empty);
 
-        if (_settingsStore.WasCreatedOnLoad)
+        if (_settingsPersistence.WasCreatedOnLoad)
         {
             _trayIcon.ShowMessage(
                 "FocusTool is running",
@@ -867,7 +859,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var cursorHighlightWasEnabled = Settings.CursorHighlightEnabled;
         var clickPulseWasEnabled = Settings.ClickPulseEnabled;
         var magnifierWasEnabled = Settings.MagnifierEnabled;
-        var globalHotKeysChanged = !HaveSameGlobalHotKeys(Settings.Shortcuts, settings.Shortcuts);
+        var globalHotKeysChanged = !GlobalHotKeyController.HaveSameGlobalHotKeys(Settings.Shortcuts, settings.Shortcuts);
         var exitVisualHotKeyWasNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
@@ -926,7 +918,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _hasSpotlightCursor = false;
         }
 
-        SaveSettingsDebounced();
+        _settingsPersistence.SaveDebounced();
         var exitVisualHotKeyIsNeeded = ShouldRegisterExitVisualHotKey(
             _mode,
             Settings.MagnifierEnabled,
@@ -2339,8 +2331,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _timer.Stop();
         _timer.Tick -= OnTimerTick;
-        _settingsSaveTimer.Stop();
-        _settingsSaveTimer.Tick -= OnSettingsSaveTick;
         if (_mouseHook is not null)
         {
             _mouseHook.Clicked -= OnMouseHookClicked;
@@ -2351,7 +2341,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _annotations.Changed -= OnAnnotationsChanged;
         _annotations.DraftProgressed -= OnAnnotationDraftProgressed;
         _regionMaskContextMenu.Dispose();
-        _hotKeyManager?.Dispose();
+        _hotKeys.Dispose();
         CloseMagnifierHost();
         _pinnedLenses.Dispose();
         _timerController?.Dispose();
@@ -2359,7 +2349,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _settingsWindow?.Close();
         _toolbar.Close();
         _overlayManager?.Dispose();
-        _settingsStore.Save(Settings);
+        _settingsPersistence.Flush();
+        _settingsPersistence.Dispose();
     }
 
     private void OnTimerTick(object? sender, EventArgs e)
@@ -2964,74 +2955,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void RegisterHotKeys()
     {
-        var registrations = new List<HotKeyRegistration>();
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleLaserActivation, ToggleLaserActivationMode);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleAnnotate, ToggleAnnotateMode);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.PushToAnnotate, StartPushToAnnotate);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleCursorHighlight, ToggleCursorHighlight);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleSpotlight, ToggleSpotlight);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleMagnifier, ToggleMagnifierMode);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TogglePinnedLens, TogglePinnedLens);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleRegionMask, ToggleRegionMask);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ClearRegionMasks, ClearRegionMasks);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleRegionSpotlight, ToggleRegionSpotlight);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ClearRegionSpotlights, ClearRegionSpotlights);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleFadingAnnotations, ToggleFadingAnnotations);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleTimer, NewTimer);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleToolbar, ToggleToolbar);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TakeScreenshot, TakeScreenshot);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.TakeRegionScreenshot, TakeRegionScreenshot);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleScreenBoard, ToggleScreenBoard);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleBlackScreen, ToggleBlackScreen);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ToggleWhiteScreen, ToggleWhiteScreen);
-        AddHotKeyIfEnabled(registrations, Settings.Shortcuts.ExitApp, Exit);
-
-        if (ShouldRegisterExitVisualHotKey(_mode, Settings.MagnifierEnabled, HasExitVisualSpotlightEffect()))
-        {
-            registrations.Add(new HotKeyRegistration(ExitVisualShortcut, ExitVisualEffects));
-        }
-
-        _hotKeyManager ??= new HotKeyManager();
-        _hotKeyManager.SetRegistrations(registrations);
-
-        if (_hotKeyManager.RegistrationErrors.Count > 0)
-        {
-            _trayIcon?.ShowMessage("Global hotkey was not registered", string.Join(Environment.NewLine, _hotKeyManager.RegistrationErrors));
-        }
-    }
-
-    private static void AddHotKeyIfEnabled(List<HotKeyRegistration> registrations, string shortcutText, Action action)
-    {
-        if (!ShortcutSettings.IsShortcutDisabled(shortcutText))
-        {
-            registrations.Add(new HotKeyRegistration(shortcutText, action));
-        }
-    }
-
-    private static bool HaveSameGlobalHotKeys(
-        ShortcutSettings left,
-        ShortcutSettings right)
-    {
-        return string.Equals(left.ToggleLaserActivation, right.ToggleLaserActivation, StringComparison.Ordinal)
-            && string.Equals(left.ToggleAnnotate, right.ToggleAnnotate, StringComparison.Ordinal)
-            && string.Equals(left.PushToAnnotate, right.PushToAnnotate, StringComparison.Ordinal)
-            && string.Equals(left.ToggleCursorHighlight, right.ToggleCursorHighlight, StringComparison.Ordinal)
-            && string.Equals(left.ToggleSpotlight, right.ToggleSpotlight, StringComparison.Ordinal)
-            && string.Equals(left.ToggleMagnifier, right.ToggleMagnifier, StringComparison.Ordinal)
-            && string.Equals(left.TogglePinnedLens, right.TogglePinnedLens, StringComparison.Ordinal)
-            && string.Equals(left.ToggleRegionMask, right.ToggleRegionMask, StringComparison.Ordinal)
-            && string.Equals(left.ClearRegionMasks, right.ClearRegionMasks, StringComparison.Ordinal)
-            && string.Equals(left.ToggleRegionSpotlight, right.ToggleRegionSpotlight, StringComparison.Ordinal)
-            && string.Equals(left.ClearRegionSpotlights, right.ClearRegionSpotlights, StringComparison.Ordinal)
-            && string.Equals(left.ToggleFadingAnnotations, right.ToggleFadingAnnotations, StringComparison.Ordinal)
-            && string.Equals(left.ToggleTimer, right.ToggleTimer, StringComparison.Ordinal)
-            && string.Equals(left.ToggleToolbar, right.ToggleToolbar, StringComparison.Ordinal)
-            && string.Equals(left.TakeScreenshot, right.TakeScreenshot, StringComparison.Ordinal)
-            && string.Equals(left.TakeRegionScreenshot, right.TakeRegionScreenshot, StringComparison.Ordinal)
-            && string.Equals(left.ToggleScreenBoard, right.ToggleScreenBoard, StringComparison.Ordinal)
-            && string.Equals(left.ToggleBlackScreen, right.ToggleBlackScreen, StringComparison.Ordinal)
-            && string.Equals(left.ToggleWhiteScreen, right.ToggleWhiteScreen, StringComparison.Ordinal)
-            && string.Equals(left.ExitApp, right.ExitApp, StringComparison.Ordinal);
+        _hotKeys.Register(
+            Settings.Shortcuts,
+            ShouldRegisterExitVisualHotKey(_mode, Settings.MagnifierEnabled, HasExitVisualSpotlightEffect()),
+            ExitVisualShortcut);
     }
 
     private void ReassertFloatingChromeTopmost()
