@@ -36,6 +36,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
+    private readonly OverlayToolbarController _toolbar;
     private readonly CaptureController _capture;
     private readonly PinnedLensController _pinnedLenses;
     private readonly MagnifierController _magnifier;
@@ -46,7 +47,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private HotKeyManager? _hotKeyManager;
     private MouseHook? _mouseHook;
     private SettingsWindow? _settingsWindow;
-    private OverlayToolbarWindow? _toolbarWindow;
     private ScreenBoardFrame? _screenBoardFrame;
     private Shortcut _laserHoldShortcut;
     private Shortcut _cursorHighlightHoldShortcut;
@@ -99,7 +99,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public bool ClickPulseEnabled => Settings.ClickPulseEnabled;
     public bool SpotlightEnabled => _spotlightEnabled;
     public bool MagnifierEnabled => Settings.MagnifierEnabled;
-    public bool ToolbarVisible => _toolbarWindow?.IsVisible == true;
+    public bool ToolbarVisible => _toolbar.IsVisible;
     public bool ScreenBoardEnabled => _mode == InteractionMode.ScreenBoard;
     public bool BlackScreenEnabled => _mode == InteractionMode.BlackScreen;
     public bool WhiteScreenEnabled => _mode == InteractionMode.WhiteScreen;
@@ -146,6 +146,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             CaptureController.WaitForScreenRefreshAsync,
             () => _overlayManager?.ReassertTopmost(),
             (title, text) => _trayIcon?.ShowMessage(title, text),
+            () => StateChanged?.Invoke(this, EventArgs.Empty));
+        _toolbar = new OverlayToolbarController(
+            this,
+            () => _disposed,
+            () => _overlayManager?.ReassertTopmost(),
             () => StateChanged?.Invoke(this, EventArgs.Empty));
         _capture = new CaptureController(
             () => _disposed,
@@ -602,45 +607,17 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ToggleToolbar()
     {
-        if (_toolbarWindow is { IsVisible: true })
-        {
-            HideToolbar();
-            return;
-        }
-
-        ShowToolbar();
+        _toolbar.Toggle();
     }
 
     public void ShowToolbar()
     {
-        if (_toolbarWindow is null)
-        {
-            _toolbarWindow = new OverlayToolbarWindow(this);
-            _toolbarWindow.Closed += (_, _) =>
-            {
-                _toolbarWindow = null;
-                if (!_disposed)
-                {
-                    StateChanged?.Invoke(this, EventArgs.Empty);
-                }
-            };
-        }
-
-        _toolbarWindow.ShowNearCursor();
-        _overlayManager?.ReassertTopmost();
-        _toolbarWindow.ReassertTopmost();
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        _toolbar.Show();
     }
 
     public void HideToolbar()
     {
-        if (_toolbarWindow is not { IsVisible: true })
-        {
-            return;
-        }
-
-        _toolbarWindow.Hide();
-        StateChanged?.Invoke(this, EventArgs.Empty);
+        _toolbar.Hide();
     }
 
     public void ToggleBlackScreen()
@@ -707,7 +684,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _restoreToolbarAfterRectSelection = ToolbarVisible;
         if (_restoreToolbarAfterRectSelection)
         {
-            _toolbarWindow?.Hide();
+            _toolbar.HideTransient();
         }
 
         SetInteractionMode(mode);
@@ -2380,7 +2357,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _timerController?.Dispose();
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
-        _toolbarWindow?.Close();
+        _toolbar.Close();
         _overlayManager?.Dispose();
         _settingsStore.Save(Settings);
     }
@@ -2811,9 +2788,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private IReadOnlyList<IntPtr> GetMagnifierExcludedWindows()
     {
         var handles = new List<IntPtr>();
-        if (_toolbarWindow is { IsVisible: true } && _toolbarWindow.Handle != IntPtr.Zero)
+        if (_toolbar.TryGetVisibleHandle(out var toolbarHandle))
         {
-            handles.Add(_toolbarWindow.Handle);
+            handles.Add(toolbarHandle);
         }
 
         foreach (var pinnedLensHost in _pinnedLenses.Hosts)
@@ -2830,9 +2807,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private IReadOnlyList<IntPtr> GetPinnedLensExcludedWindows()
     {
         var handles = new List<IntPtr>();
-        if (_toolbarWindow is { IsVisible: true } && _toolbarWindow.Handle != IntPtr.Zero)
+        if (_toolbar.TryGetVisibleHandle(out var toolbarHandle))
         {
-            handles.Add(_toolbarWindow.Handle);
+            handles.Add(toolbarHandle);
         }
 
         foreach (var pinnedLensHost in _pinnedLenses.Hosts)
@@ -3059,11 +3036,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ReassertFloatingChromeTopmost()
     {
-        if (_toolbarWindow is { IsVisible: true })
-        {
-            _toolbarWindow.ReassertTopmost();
-        }
-
+        _toolbar.ReassertTopmost();
         _timerController?.ReassertTopmost();
 
         _pinnedLenses.ReassertContextMenuTopmost();
