@@ -1,13 +1,11 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FocusTool.Win.Models;
 using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
 using FocusTool.Win.Tray;
-using DrawingPoint = System.Drawing.Point;
 using Forms = System.Windows.Forms;
 using Shortcut = FocusTool.Win.Native.Shortcut;
 
@@ -32,6 +30,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly HashSet<string> _pushToAnnotatePolledShortcutDown = new(StringComparer.Ordinal);
 
     private OverlayManager? _overlayManager;
+    private readonly AnnotationInputController _annotationInput;
     private readonly PointerVisualController _pointerVisuals;
     private readonly OverlayToolbarController _toolbar;
     private readonly CaptureController _capture;
@@ -128,6 +127,22 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             SetRegionMaskStyle,
             maskId => DeleteRegionMask(maskId, exitMaskMode: false));
         Settings = _settingsPersistence.Load();
+        _annotationInput = new AnnotationInputController(
+            _annotations,
+            () => Settings,
+            () => _pushToAnnotateActive,
+            () => _pushToAnnotateShortcut,
+            TryGetCursor,
+            () => SetInteractionMode(InteractionMode.Passthrough),
+            TryCompletePushToAnnotateExit,
+            UndoAnnotation,
+            RedoAnnotation,
+            ClearAnnotations,
+            DeleteSelectedAnnotations,
+            AdjustAnnotationThickness,
+            SetAnnotationTool,
+            SelectStepTool,
+            SetAnnotationPresetColor);
         _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = IdleInterval
@@ -1880,116 +1895,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return false;
         }
 
-        var shortcuts = Settings.Shortcuts;
-
-        if (key == Key.V && modifiers == ModifierKeys.Control)
-        {
-            return TryPasteClipboardAnnotation();
-        }
-
-        var annotationModifiers = GetAnnotationShortcutModifiers(modifiers);
-
-        if (_annotations.HasTextInput)
-        {
-            if (key == Key.Enter && annotationModifiers == ModifierKeys.Shift)
-            {
-                _annotations.AppendText("\n");
-                return true;
-            }
-
-            if (MatchesAnnotationShortcut(key, modifiers, "Enter"))
-            {
-                _annotations.CommitTextInput();
-                TryCompletePushToAnnotateExit();
-                return true;
-            }
-
-            if (MatchesAnnotationShortcut(key, modifiers, "Back"))
-            {
-                _annotations.BackspaceText();
-                return true;
-            }
-
-            if (key == Key.Delete && annotationModifiers == ModifierKeys.None)
-            {
-                _annotations.DeleteText();
-                return true;
-            }
-
-            if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ExitAnnotate))
-            {
-                if (_annotations.IsEditingText)
-                {
-                    _annotations.CancelTextEdit();
-                    TryCompletePushToAnnotateExit();
-                }
-                else
-                {
-                    SetInteractionMode(InteractionMode.Passthrough);
-                }
-
-                return true;
-            }
-
-            return false;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ExitAnnotate))
-        {
-            if (_annotations.IsObjectEditing)
-            {
-                _annotations.EndObjectEdit();
-                TryCompletePushToAnnotateExit();
-                return true;
-            }
-
-            SetInteractionMode(InteractionMode.Passthrough);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Undo))
-        {
-            UndoAnnotation();
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Redo))
-        {
-            RedoAnnotation();
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.DeleteSelection))
-        {
-            DeleteSelectedAnnotations();
-            TryCompletePushToAnnotateExit();
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Clear) || MatchesAnnotationShortcut(key, modifiers, shortcuts.ClearAlternate))
-        {
-            ClearAnnotations();
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ThicknessDown))
-        {
-            AdjustAnnotationThickness(-1);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ThicknessUp))
-        {
-            AdjustAnnotationThickness(1);
-            return true;
-        }
-
-        if (TrySelectTool(key, modifiers) || TrySelectColor(key, modifiers))
-        {
-            return true;
-        }
-
-        return false;
+        return _annotationInput.HandleKeyDown(key, modifiers);
     }
 
     private void DeleteSelectedSpotlightRegion()
@@ -2007,90 +1913,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _overlayManager?.Invalidate();
         StateChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private bool TryPasteClipboardAnnotation()
-    {
-        try
-        {
-            if (System.Windows.Clipboard.ContainsImage())
-            {
-                var image = System.Windows.Clipboard.GetImage();
-                if (image is null)
-                {
-                    return false;
-                }
-
-                var frozen = FreezeClipboardImage(image);
-                var rect = CreatePastedImageRect(frozen, GetPasteAnchorPoint());
-                return _annotations.AddPastedImage(frozen, rect);
-            }
-
-            if (!System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.UnicodeText))
-            {
-                return false;
-            }
-
-            var text = System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.UnicodeText);
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return false;
-            }
-
-            if (_annotations.HasTextInput)
-            {
-                _annotations.AppendText(text.Replace("\r\n", "\n").Replace('\r', '\n'));
-                return true;
-            }
-
-            return _annotations.AddPastedText(text, GetPasteAnchorPoint(), Settings);
-        }
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or ThreadStateException or InvalidOperationException)
-        {
-            AppLog.Error("Could not paste clipboard annotation.", ex);
-            return false;
-        }
-    }
-
-    private static BitmapSource FreezeClipboardImage(BitmapSource image)
-    {
-        if (image.IsFrozen)
-        {
-            return image;
-        }
-
-        var clone = image.Clone();
-        clone.Freeze();
-        return clone;
-    }
-
-    private static ScreenPoint GetPasteAnchorPoint()
-    {
-        if (TryGetCursor(out var cursor))
-        {
-            return cursor;
-        }
-
-        var screen = Forms.Screen.PrimaryScreen ?? Forms.Screen.AllScreens[0];
-        return new ScreenPoint(
-            screen.Bounds.Left + screen.Bounds.Width / 2.0,
-            screen.Bounds.Top + screen.Bounds.Height / 2.0);
-    }
-
-    private static ScreenRect CreatePastedImageRect(BitmapSource image, ScreenPoint anchor)
-    {
-        var screen = Forms.Screen.FromPoint(new DrawingPoint((int)Math.Round(anchor.X), (int)Math.Round(anchor.Y)));
-        var maxWidth = Math.Max(160, screen.Bounds.Width * 0.62);
-        var maxHeight = Math.Max(120, screen.Bounds.Height * 0.62);
-        var width = Math.Max(1, image.PixelWidth);
-        var height = Math.Max(1, image.PixelHeight);
-        var scale = Math.Min(1, Math.Min(maxWidth / width, maxHeight / height));
-        var displayWidth = Math.Max(1, width * scale);
-        var displayHeight = Math.Max(1, height * scale);
-        var left = anchor.X - displayWidth / 2;
-        var top = anchor.Y - displayHeight / 2;
-
-        return new ScreenRect(left, top, left + displayWidth, top + displayHeight);
     }
 
     private bool HandleTextObjectClick(ScreenPoint point)
@@ -2307,7 +2129,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         if (IsAnnotationMode(_mode) && _annotations.HasTextInput)
         {
-            _annotations.AppendText(text);
+            _annotationInput.HandleTextInput(text);
         }
     }
 
@@ -2800,128 +2622,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
     }
 
-    private bool TrySelectTool(Key key, ModifierKeys modifiers)
-    {
-        var shortcuts = Settings.Shortcuts;
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolArrow))
-        {
-            SetAnnotationTool(AnnotationTool.Arrow);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolRectangle))
-        {
-            SetAnnotationTool(AnnotationTool.Rectangle);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolEllipse))
-        {
-            SetAnnotationTool(AnnotationTool.Ellipse);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolLine))
-        {
-            SetAnnotationTool(AnnotationTool.Line);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolPencil))
-        {
-            SetAnnotationTool(AnnotationTool.Pencil);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolHighlighter))
-        {
-            SetAnnotationTool(AnnotationTool.Highlighter);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolText))
-        {
-            SetAnnotationTool(AnnotationTool.Text);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolMove))
-        {
-            SetAnnotationTool(AnnotationTool.Move);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolStep))
-        {
-            SelectStepTool();
-            return true;
-        }
-
-        return false;
-    }
-
-    private bool TrySelectColor(Key key, ModifierKeys modifiers)
-    {
-        var shortcuts = Settings.Shortcuts;
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color1))
-        {
-            SetAnnotationPresetColor(0);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color2))
-        {
-            SetAnnotationPresetColor(1);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color3))
-        {
-            SetAnnotationPresetColor(2);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color4))
-        {
-            SetAnnotationPresetColor(3);
-            return true;
-        }
-
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.Color5))
-        {
-            SetAnnotationPresetColor(4);
-            return true;
-        }
-
-        return false;
-    }
-
     private static bool Matches(Key key, ModifierKeys modifiers, string shortcutText)
     {
         return Shortcut.TryParse(shortcutText, out var shortcut) && shortcut.Matches(key, modifiers);
-    }
-
-    private bool MatchesAnnotationShortcut(Key key, ModifierKeys modifiers, string shortcutText)
-    {
-        if (Matches(key, modifiers, shortcutText))
-        {
-            return true;
-        }
-
-        if (!_pushToAnnotateActive || _pushToAnnotateShortcut.Modifiers == ModifierKeys.None)
-        {
-            return false;
-        }
-
-        var strippedModifiers = GetAnnotationShortcutModifiers(modifiers);
-        return strippedModifiers != modifiers && Matches(key, strippedModifiers, shortcutText);
-    }
-
-    private ModifierKeys GetAnnotationShortcutModifiers(ModifierKeys modifiers)
-    {
-        return _pushToAnnotateActive
-            ? modifiers & ~_pushToAnnotateShortcut.Modifiers
-            : modifiers;
     }
 
     private static bool IsAnnotationMode(InteractionMode mode)
