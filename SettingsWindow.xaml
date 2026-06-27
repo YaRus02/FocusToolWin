@@ -1,9 +1,9 @@
-﻿<Window x:Class="FocusTool.Win.SettingsWindow"
+<Window x:Class="FocusTool.Win.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FocusTool Settings"
-        Width="860"
-        MaxHeight="760"
+        Width="920"
+        MaxHeight="780"
         SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
@@ -24,6 +24,18 @@
         <Style TargetType="{x:Type Button}">
             <Setter Property="Padding" Value="8,3" />
             <Setter Property="MinHeight" Value="24" />
+        </Style>
+        <Style TargetType="{x:Type GroupBox}">
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+        <Style x:Key="SectionHeaderTextStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="FieldLabelTextStyle" TargetType="{x:Type TextBlock}">
+            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
         <Style x:Key="ColorSwatchButtonStyle" TargetType="{x:Type Button}">
             <Setter Property="Width" Value="24" />
@@ -54,6 +66,7 @@
             </Setter>
         </Style>
     </Window.Resources>
+
     <DockPanel Margin="16">
         <StackPanel DockPanel.Dock="Bottom">
             <TextBlock x:Name="SettingsPathText"
@@ -80,429 +93,470 @@
         </StackPanel>
 
         <TabControl>
-            <TabItem Header="General">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
+            <TabItem Header="Pointer">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <Grid Margin="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                        <TextBlock Text="Laser" FontSize="16" FontWeight="SemiBold" />
+                        <GroupBox Grid.Column="0" Header="Laser" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="Color slots" Style="{StaticResource FieldLabelTextStyle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button x:Name="LaserPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#FFFF2020" Click="LaserPreset_OnClick" />
+                                    <Button x:Name="LaserPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#FF00D26A" Click="LaserPreset_OnClick" />
+                                    <Button x:Name="LaserPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#FF2080FF" Click="LaserPreset_OnClick" />
+                                    <Button x:Name="LaserPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#FFFFD400" Click="LaserPreset_OnClick" />
+                                    <Button x:Name="LaserPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#FFFFFFFF" Click="LaserPreset_OnClick" />
+                                </StackPanel>
 
-                        <TextBlock Text="Color slots" FontWeight="SemiBold" Margin="0,12,0,0" />
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button x:Name="LaserPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#FFFF2020" Click="LaserPreset_OnClick" />
-                            <Button x:Name="LaserPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#FF00D26A" Click="LaserPreset_OnClick" />
-                            <Button x:Name="LaserPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#FF2080FF" Click="LaserPreset_OnClick" />
-                            <Button x:Name="LaserPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#FFFFD400" Click="LaserPreset_OnClick" />
-                            <Button x:Name="LaserPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#FFFFFFFF" Click="LaserPreset_OnClick" />
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Selected hex" Style="{StaticResource FieldLabelTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <TextBox Grid.Column="1" x:Name="LaserColorBox" TextChanged="LaserColorBox_OnTextChanged" />
+                                    <Border Grid.Column="2" x:Name="LaserColorPreview" Width="24" Height="24" Margin="8,0,0,0" BorderBrush="#66000000" BorderThickness="1" Background="#FFFF2020" />
+                                </Grid>
+
+                                <TextBlock Text="Activation mode" Style="{StaticResource FieldLabelTextStyle}" Margin="0,14,0,0" />
+                                <ComboBox x:Name="LaserActivationModeBox" Margin="0,6,0,0" SelectionChanged="LaserActivationMode_OnSelectionChanged">
+                                    <ComboBoxItem Content="Always on" Tag="Always" />
+                                    <ComboBoxItem Content="Hold key / mouse button" Tag="Hold" />
+                                </ComboBox>
+                                <TextBlock Text="Hold key is configured on the Shortcuts tab." Foreground="#666666" FontSize="11" Margin="0,6,0,4" />
+
+                                <DockPanel Margin="0,14,0,0" LastChildFill="False">
+                                    <TextBlock Text="Point size" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="PointSizeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="PointSizeSlider" Minimum="4" Maximum="48" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                    <TextBlock Text="Trail length" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="TrailLengthValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="TrailLengthSlider" Minimum="80" Maximum="1500" TickFrequency="20" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                    <TextBlock Text="Fade after release" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="FadeDurationValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="FadeDurationSlider" Minimum="80" Maximum="2000" TickFrequency="20" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                <CheckBox x:Name="GlowCheckBox" Content="Glow" Margin="0,10,0,0" />
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Grid.Column="1" Header="Cursor Highlight" Margin="8,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Color slots" Style="{StaticResource FieldLabelTextStyle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button x:Name="CursorHighlightPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#BFFFD400" Click="CursorHighlightPreset_OnClick" />
+                                    <Button x:Name="CursorHighlightPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#BF20D6FF" Click="CursorHighlightPreset_OnClick" />
+                                    <Button x:Name="CursorHighlightPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#BFFF4FD8" Click="CursorHighlightPreset_OnClick" />
+                                    <Button x:Name="CursorHighlightPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#BFFFFFFF" Click="CursorHighlightPreset_OnClick" />
+                                    <Button x:Name="CursorHighlightPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#BF00D26A" Click="CursorHighlightPreset_OnClick" />
+                                </StackPanel>
+
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Selected hex" Style="{StaticResource FieldLabelTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <TextBox Grid.Column="1" x:Name="CursorHighlightColorBox" TextChanged="CursorHighlightColorBox_OnTextChanged" />
+                                    <Border Grid.Column="2" x:Name="CursorHighlightColorPreview" Width="24" Height="24" Margin="8,0,0,0" BorderBrush="#66000000" BorderThickness="1" Background="#BFFFD400" />
+                                </Grid>
+
+                                <TextBlock Text="Activation mode" Style="{StaticResource FieldLabelTextStyle}" Margin="0,14,0,0" />
+                                <ComboBox x:Name="CursorHighlightActivationModeBox" Margin="0,6,0,0">
+                                    <ComboBoxItem Content="Always on" Tag="Always" />
+                                    <ComboBoxItem Content="Hold key / mouse button" Tag="Hold" />
+                                </ComboBox>
+                                <TextBlock Text="Hold key is configured on the Shortcuts tab." Foreground="#666666" FontSize="11" Margin="0,6,0,4" />
+
+                                <DockPanel Margin="0,14,0,0" LastChildFill="False">
+                                    <TextBlock Text="Radius" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="CursorHighlightRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="CursorHighlightRadiusSlider" Minimum="12" Maximum="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                    <TextBlock Text="Thickness" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="CursorHighlightThicknessValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="CursorHighlightThicknessSlider" Minimum="1" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                <CheckBox x:Name="CursorHighlightClickPulseCheckBox" Content="Click pulse" Margin="0,10,0,0" />
+                            </StackPanel>
+                        </GroupBox>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Focus">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <GroupBox Header="Zoom">
+                                <StackPanel>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock Text="Radius" Style="{StaticResource FieldLabelTextStyle}" />
+                                        <TextBlock x:Name="MagnifierRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                    </DockPanel>
+                                    <Slider x:Name="MagnifierRadiusSlider" Minimum="80" Maximum="360" TickFrequency="4" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                    <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                        <TextBlock Text="Zoom" Style="{StaticResource FieldLabelTextStyle}" />
+                                        <TextBlock x:Name="MagnifierZoomValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                    </DockPanel>
+                                    <Slider x:Name="MagnifierZoomSlider" Minimum="1.25" Maximum="4" TickFrequency="0.25" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Pinned lens">
+                                <StackPanel>
+                                    <DockPanel LastChildFill="False">
+                                        <TextBlock Text="Default zoom" Style="{StaticResource FieldLabelTextStyle}" />
+                                        <TextBlock x:Name="PinnedLensZoomValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                    </DockPanel>
+                                    <Slider x:Name="PinnedLensZoomSlider" Minimum="1" Maximum="4" TickFrequency="0.25" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                    <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                        <TextBlock Text="Refresh" Style="{StaticResource FieldLabelTextStyle}" />
+                                        <TextBlock x:Name="PinnedLensRefreshFpsValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                    </DockPanel>
+                                    <Slider x:Name="PinnedLensRefreshFpsSlider" Minimum="10" Maximum="60" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
 
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Selected hex" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <TextBox Grid.Column="1" x:Name="LaserColorBox" TextChanged="LaserColorBox_OnTextChanged" />
-                            <Border Grid.Column="2" x:Name="LaserColorPreview" Width="24" Height="24" Margin="8,0,0,0" BorderBrush="#66000000" BorderThickness="1" Background="#FFFF2020" />
-                        </Grid>
+                        <GroupBox Grid.Column="1" Header="Spotlight" Margin="8,0,0,14">
+                            <StackPanel>
+                                <DockPanel LastChildFill="False">
+                                    <TextBlock Text="Radius" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="SpotlightRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="SpotlightRadiusSlider" Minimum="48" Maximum="480" TickFrequency="4" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
 
-                        <TextBlock Text="Activation mode" FontWeight="SemiBold" Margin="0,14,0,0" />
-                        <ComboBox x:Name="LaserActivationModeBox" Margin="0,6,0,0" MinHeight="26" SelectionChanged="LaserActivationMode_OnSelectionChanged">
-                            <ComboBoxItem Content="Always on" Tag="Always" />
-                            <ComboBoxItem Content="Hold key / mouse button" Tag="Hold" />
-                        </ComboBox>
-                        <TextBlock Text="Hold key is configured on the Shortcuts tab." Foreground="#666666" FontSize="11" Margin="0,6,0,4" />
+                                <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                    <TextBlock Text="Dim amount" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="SpotlightOpacityValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="SpotlightOpacitySlider" Minimum="20" Maximum="88" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                            </StackPanel>
+                        </GroupBox>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
 
-                        <DockPanel Margin="0,14,0,0" LastChildFill="False">
-                            <TextBlock Text="Point size" FontWeight="SemiBold" />
-                            <TextBlock x:Name="PointSizeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="PointSizeSlider" Minimum="4" Maximum="48" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+            <TabItem Header="Draw">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Trail length" FontWeight="SemiBold" />
-                            <TextBlock x:Name="TrailLengthValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="TrailLengthSlider" Minimum="80" Maximum="1500" TickFrequency="20" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                        <GroupBox Grid.Column="0" Header="Annotation" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="Color slots" Style="{StaticResource FieldLabelTextStyle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button x:Name="AnnotationPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#FFFF2020" Click="AnnotationPreset_OnClick" />
+                                    <Button x:Name="AnnotationPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#FF00D26A" Click="AnnotationPreset_OnClick" />
+                                    <Button x:Name="AnnotationPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#FF2080FF" Click="AnnotationPreset_OnClick" />
+                                    <Button x:Name="AnnotationPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#FFFFD400" Click="AnnotationPreset_OnClick" />
+                                    <Button x:Name="AnnotationPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#FFFFFFFF" Click="AnnotationPreset_OnClick" />
+                                </StackPanel>
 
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Fade after release" FontWeight="SemiBold" />
-                            <TextBlock x:Name="FadeDurationValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="FadeDurationSlider" Minimum="80" Maximum="2000" TickFrequency="20" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Selected hex" Style="{StaticResource FieldLabelTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <TextBox Grid.Column="1" x:Name="AnnotationPreset5Box" TextChanged="AnnotationPreset5Box_OnTextChanged" />
+                                </Grid>
 
-                        <CheckBox x:Name="GlowCheckBox" Content="Glow" Margin="0,10,0,0" />
+                                <DockPanel Margin="0,14,0,0" LastChildFill="False">
+                                    <TextBlock Text="Line thickness" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="AnnotationThicknessValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="AnnotationThicknessSlider" Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
 
-                        <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Cursor Highlight" FontSize="16" FontWeight="SemiBold" />
+                                <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                    <TextBlock Text="Font size" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="AnnotationFontSizeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="AnnotationFontSizeSlider" Minimum="8" Maximum="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                            </StackPanel>
+                        </GroupBox>
 
-                        <TextBlock Text="Color slots" FontWeight="SemiBold" Margin="0,12,0,0" />
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button x:Name="CursorHighlightPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#BFFFD400" Click="CursorHighlightPreset_OnClick" />
-                            <Button x:Name="CursorHighlightPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#BF20D6FF" Click="CursorHighlightPreset_OnClick" />
-                            <Button x:Name="CursorHighlightPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#BFFF4FD8" Click="CursorHighlightPreset_OnClick" />
-                            <Button x:Name="CursorHighlightPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#BFFFFFFF" Click="CursorHighlightPreset_OnClick" />
-                            <Button x:Name="CursorHighlightPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#BF00D26A" Click="CursorHighlightPreset_OnClick" />
-                        </StackPanel>
+                        <GroupBox Grid.Column="1" Header="Fading annotations" Margin="8,0,0,14">
+                            <StackPanel>
+                                <CheckBox x:Name="FadingAnnotationsCheckBox" Content="Enabled" />
 
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Selected hex" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <TextBox Grid.Column="1" x:Name="CursorHighlightColorBox" TextChanged="CursorHighlightColorBox_OnTextChanged" />
-                            <Border Grid.Column="2"
-                                    x:Name="CursorHighlightColorPreview"
-                                    Width="24"
-                                    Height="24"
-                                    Margin="8,0,0,0"
-                                    BorderBrush="#66000000"
-                                    BorderThickness="1"
-                                    Background="#BFFFD400" />
-                        </Grid>
+                                <DockPanel Margin="0,14,0,0" LastChildFill="False">
+                                    <TextBlock Text="Visible duration" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="FadingAnnotationVisibleValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="FadingAnnotationVisibleSlider" Minimum="0.5" Maximum="60" TickFrequency="0.5" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
 
-                        <TextBlock Text="Activation mode" FontWeight="SemiBold" Margin="0,10,0,0" />
-                        <ComboBox x:Name="CursorHighlightActivationModeBox" Margin="0,6,0,0">
-                            <ComboBoxItem Content="Always on" Tag="Always" />
-                            <ComboBoxItem Content="Hold key / mouse button" Tag="Hold" />
-                        </ComboBox>
-                        <TextBlock Text="Hold key is configured on the Shortcuts tab." Foreground="#666666" FontSize="11" Margin="0,6,0,0" />
+                                <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                                    <TextBlock Text="Fade duration" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="FadingAnnotationFadeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="FadingAnnotationFadeSlider" Minimum="0.1" Maximum="10" TickFrequency="0.1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                            </StackPanel>
+                        </GroupBox>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
 
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Radius" FontWeight="SemiBold" />
-                            <TextBlock x:Name="CursorHighlightRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="CursorHighlightRadiusSlider" Minimum="12" Maximum="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+            <TabItem Header="Mask">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Thickness" FontWeight="SemiBold" />
-                            <TextBlock x:Name="CursorHighlightThicknessValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="CursorHighlightThicknessSlider" Minimum="1" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                        <GroupBox Grid.Column="0" Header="Region mask" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="Color slots" Style="{StaticResource FieldLabelTextStyle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button x:Name="RegionMaskPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#FF000000" Click="MaskColorPreset_OnClick" />
+                                    <Button x:Name="RegionMaskPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#FF404040" Click="MaskColorPreset_OnClick" />
+                                    <Button x:Name="RegionMaskPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#FFFFFFFF" Click="MaskColorPreset_OnClick" />
+                                    <Button x:Name="RegionMaskPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#FFB00020" Click="MaskColorPreset_OnClick" />
+                                    <Button x:Name="RegionMaskPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#FF2080FF" Click="MaskColorPreset_OnClick" />
+                                </StackPanel>
 
-                        <CheckBox x:Name="CursorHighlightClickPulseCheckBox" Content="Click pulse" Margin="0,10,0,0" />
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Selected hex" Style="{StaticResource FieldLabelTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <TextBox Grid.Column="1" x:Name="RegionMaskColorBox" TextChanged="RegionMaskColorBox_OnTextChanged" />
+                                    <Border Grid.Column="2" x:Name="RegionMaskColorPreview" Width="24" Height="24" Margin="8,0,0,0" BorderBrush="#66000000" BorderThickness="1" Background="#FF000000" />
+                                </Grid>
 
-                        <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Spotlight" FontSize="16" FontWeight="SemiBold" />
+                                <DockPanel Margin="0,14,0,0" LastChildFill="False">
+                                    <TextBlock Text="Opacity" Style="{StaticResource FieldLabelTextStyle}" />
+                                    <TextBlock x:Name="RegionMaskOpacityValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
+                                </DockPanel>
+                                <Slider x:Name="RegionMaskOpacitySlider" Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+                            </StackPanel>
+                        </GroupBox>
 
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Radius" FontWeight="SemiBold" />
-                            <TextBlock x:Name="SpotlightRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="SpotlightRadiusSlider" Minimum="48" Maximum="480" TickFrequency="4" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Dim amount" FontWeight="SemiBold" />
-                            <TextBlock x:Name="SpotlightOpacityValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="SpotlightOpacitySlider" Minimum="20" Maximum="88" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Zoom" FontSize="16" FontWeight="SemiBold" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Radius" FontWeight="SemiBold" />
-                            <TextBlock x:Name="MagnifierRadiusValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="MagnifierRadiusSlider" Minimum="80" Maximum="360" TickFrequency="4" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Zoom" FontWeight="SemiBold" />
-                            <TextBlock x:Name="MagnifierZoomValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="MagnifierZoomSlider" Minimum="1.25" Maximum="4" TickFrequency="0.25" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
-                        <TextBlock Text="Pinned lens" FontSize="16" FontWeight="SemiBold" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Zoom" FontWeight="SemiBold" />
-                            <TextBlock x:Name="PinnedLensZoomValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="PinnedLensZoomSlider" Minimum="1" Maximum="4" TickFrequency="0.25" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Refresh" FontWeight="SemiBold" />
-                            <TextBlock x:Name="PinnedLensRefreshFpsValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="PinnedLensRefreshFpsSlider" Minimum="10" Maximum="60" TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Region mask" FontSize="16" FontWeight="SemiBold" />
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Selected hex" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <TextBox Grid.Column="1" x:Name="RegionMaskColorBox" TextChanged="RegionMaskColorBox_OnTextChanged" />
-                            <Border Grid.Column="2"
-                                    x:Name="RegionMaskColorPreview"
-                                    Width="24"
-                                    Height="24"
-                                    Margin="8,0,0,0"
-                                    BorderBrush="#66000000"
-                                    BorderThickness="1"
-                                    Background="#FF000000" />
-                        </Grid>
-
-                        <TextBlock Text="Color slots" FontWeight="SemiBold" Margin="0,10,0,0" />
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button x:Name="RegionMaskPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#FF000000" Click="MaskColorPreset_OnClick" />
-                            <Button x:Name="RegionMaskPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#FF404040" Click="MaskColorPreset_OnClick" />
-                            <Button x:Name="RegionMaskPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#FFFFFFFF" Click="MaskColorPreset_OnClick" />
-                            <Button x:Name="RegionMaskPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#FFB00020" Click="MaskColorPreset_OnClick" />
-                            <Button x:Name="RegionMaskPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#FF2080FF" Click="MaskColorPreset_OnClick" />
-                        </StackPanel>
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Opacity" FontWeight="SemiBold" />
-                            <TextBlock x:Name="RegionMaskOpacityValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="RegionMaskOpacitySlider" Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Annotation" FontSize="16" FontWeight="SemiBold" />
-
-                        <TextBlock Text="Color slots" FontWeight="SemiBold" Margin="0,12,0,0" />
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button x:Name="AnnotationPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#FFFF2020" Click="AnnotationPreset_OnClick" />
-                            <Button x:Name="AnnotationPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#FF00D26A" Click="AnnotationPreset_OnClick" />
-                            <Button x:Name="AnnotationPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#FF2080FF" Click="AnnotationPreset_OnClick" />
-                            <Button x:Name="AnnotationPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#FFFFD400" Click="AnnotationPreset_OnClick" />
-                            <Button x:Name="AnnotationPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#FFFFFFFF" Click="AnnotationPreset_OnClick" />
-                        </StackPanel>
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Selected hex" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <TextBox Grid.Column="1" x:Name="AnnotationPreset5Box" TextChanged="AnnotationPreset5Box_OnTextChanged" />
-                        </Grid>
-
-                        <DockPanel Margin="0,14,0,0" LastChildFill="False">
-                            <TextBlock Text="Line thickness" FontWeight="SemiBold" />
-                            <TextBlock x:Name="AnnotationThicknessValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="AnnotationThicknessSlider" Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Font size" FontWeight="SemiBold" />
-                            <TextBlock x:Name="AnnotationFontSizeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="AnnotationFontSizeSlider" Minimum="8" Maximum="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <CheckBox x:Name="FadingAnnotationsCheckBox" Content="Fading annotations" Margin="0,12,0,0" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Visible duration" FontWeight="SemiBold" />
-                            <TextBlock x:Name="FadingAnnotationVisibleValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="FadingAnnotationVisibleSlider" Minimum="0.5" Maximum="60" TickFrequency="0.5" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-
-                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
-                            <TextBlock Text="Fade duration" FontWeight="SemiBold" />
-                            <TextBlock x:Name="FadingAnnotationFadeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
-                        </DockPanel>
-                        <Slider x:Name="FadingAnnotationFadeSlider" Minimum="0.1" Maximum="10" TickFrequency="0.1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
-                    </StackPanel>
+                        <GroupBox Grid.Column="1" Header="Defaults" Margin="8,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Style" Style="{StaticResource FieldLabelTextStyle}" />
+                                <ComboBox x:Name="RegionMaskStyleBox" Margin="0,6,0,0">
+                                    <ComboBoxItem Content="Solid" Tag="Solid" />
+                                    <ComboBoxItem Content="Stripes" Tag="Stripes" />
+                                    <ComboBoxItem Content="HIDE label" Tag="Label" />
+                                    <ComboBoxItem Content="Stripes + HIDE" Tag="StripesWithLabel" />
+                                </ComboBox>
+                                <TextBlock Text="This style is used for new masks. Existing masks keep their own style." Foreground="#666666" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </GroupBox>
                     </Grid>
                 </ScrollViewer>
             </TabItem>
 
             <TabItem Header="Shortcuts">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="Use names like A, Ctrl+Alt+D, Delete, Esc, Backspace, [, ], XButton2. Leave a shortcut empty or type None to disable it. Toggle laser mode switches Always/Hold; Hold laser is used only in Hold key / mouse button mode." Foreground="#666666" TextWrapping="Wrap" Margin="0,0,0,12" />
+                        <TextBlock Grid.Row="0" Text="Use names like A, Ctrl+Alt+D, Delete, Esc, Backspace, [, ], XButton2. Leave a shortcut empty or type None to disable it. Toggle laser mode switches Always/Hold; Hold laser is used only in Hold key / mouse button mode." Foreground="#666666" TextWrapping="Wrap" Margin="0,0,0,12" />
 
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.08*" />
-                            <ColumnDefinition Width="0.80*" />
-                            <ColumnDefinition Width="1.12*" />
-                        </Grid.ColumnDefinitions>
-                        <GroupBox Grid.Column="0" Header="Modes" Padding="10" Margin="0,0,8,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="132" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.08*" />
+                                <ColumnDefinition Width="0.80*" />
+                                <ColumnDefinition Width="1.12*" />
+                            </Grid.ColumnDefinitions>
+                            <GroupBox Grid.Column="0" Header="Modes" Padding="10" Margin="0,0,8,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="132" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Text="Toggle annotate" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToggleAnnotateBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="1" Text="Toggle laser" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToggleLaserActivationBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="2" Text="Toggle spotlight" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToggleSpotlightBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="3" Text="Toggle zoom" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToggleMagnifierBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="4" Text="Pin" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="TogglePinnedLensBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="5" Text="Region mask" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToggleRegionMaskBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="6" Text="Clear masks" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="ClearRegionMasksBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="7" Text="Fading annotations" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToggleFadingAnnotationsBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="8" Text="Timer" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToggleTimerBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="9" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="9" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="10" Text="Screenshot" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="10" Grid.Column="1" x:Name="TakeScreenshotBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="11" Text="Screen board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="11" Grid.Column="1" x:Name="ToggleScreenBoardBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="12" Text="Black board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="12" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="13" Text="White board" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="13" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="14" Text="Hold laser" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="14" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="15" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="15" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="16" Text="Cursor Highlight" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="16" Grid.Column="1" x:Name="ToggleCursorHighlightBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="17" Text="Hold highlight" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="17" Grid.Column="1" x:Name="CursorHighlightHoldBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="18" Text="Region screenshot" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="18" Grid.Column="1" x:Name="TakeRegionScreenshotBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="19" Text="Region spotlight" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="19" Grid.Column="1" x:Name="ToggleRegionSpotlightBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="20" Text="Clear spot regions" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="20" Grid.Column="1" x:Name="ClearRegionSpotlightsBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="21" Text="Push annotate" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="21" Grid.Column="1" x:Name="PushToAnnotateBox" Margin="8,3,0,3" />
-                            </Grid>
-                        </GroupBox>
+                                    <TextBlock Grid.Row="0" Text="Toggle annotate" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToggleAnnotateBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="1" Text="Toggle laser" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToggleLaserActivationBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="2" Text="Toggle spotlight" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToggleSpotlightBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="3" Text="Toggle zoom" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToggleMagnifierBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="4" Text="Pin" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="TogglePinnedLensBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="5" Text="Region mask" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToggleRegionMaskBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="6" Text="Clear masks" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="6" Grid.Column="1" x:Name="ClearRegionMasksBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="7" Text="Fading annotations" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToggleFadingAnnotationsBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="8" Text="Timer" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToggleTimerBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="9" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="9" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="10" Text="Screenshot" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="10" Grid.Column="1" x:Name="TakeScreenshotBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="11" Text="Screen board" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="11" Grid.Column="1" x:Name="ToggleScreenBoardBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="12" Text="Black board" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="12" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="13" Text="White board" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="13" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="14" Text="Hold laser" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="14" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="15" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="15" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="16" Text="Cursor Highlight" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="16" Grid.Column="1" x:Name="ToggleCursorHighlightBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="17" Text="Hold highlight" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="17" Grid.Column="1" x:Name="CursorHighlightHoldBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="18" Text="Region screenshot" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="18" Grid.Column="1" x:Name="TakeRegionScreenshotBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="19" Text="Region spotlight" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="19" Grid.Column="1" x:Name="ToggleRegionSpotlightBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="20" Text="Clear spot regions" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="20" Grid.Column="1" x:Name="ClearRegionSpotlightsBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="21" Text="Push annotate" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="21" Grid.Column="1" x:Name="PushToAnnotateBox" Margin="8,3,0,3" />
+                                </Grid>
+                            </GroupBox>
 
-                        <GroupBox Grid.Column="1" Header="Tools" Padding="10" Margin="4,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="78" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                            <GroupBox Grid.Column="1" Header="Tools" Padding="10" Margin="4,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="78" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Text="Arrow" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToolArrowBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="1" Text="Rectangle" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToolRectangleBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="2" Text="Ellipse / Circle" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToolEllipseBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="3" Text="Line" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToolLineBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="4" Text="Pencil" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToolPencilBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="5" Text="Highlighter" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToolHighlighterBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="6" Text="Text" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToolTextBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="7" Text="Move selection" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToolMoveBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="8" Text="Step marker" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToolStepBox" Margin="8,3,0,3" />
-                            </Grid>
-                        </GroupBox>
+                                    <TextBlock Grid.Row="0" Text="Arrow" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToolArrowBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="1" Text="Rectangle" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToolRectangleBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="2" Text="Ellipse / Circle" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToolEllipseBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="3" Text="Line" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToolLineBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="4" Text="Pencil" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToolPencilBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="5" Text="Highlighter" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToolHighlighterBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="6" Text="Text" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToolTextBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="7" Text="Move selection" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToolMoveBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="8" Text="Step marker" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToolStepBox" Margin="8,3,0,3" />
+                                </Grid>
+                            </GroupBox>
 
-                        <GroupBox Grid.Column="2" Header="Commands" Padding="10" Margin="8,0,0,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="150" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                            <GroupBox Grid.Column="2" Header="Commands" Padding="10" Margin="8,0,0,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="150" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Text="Colors" VerticalAlignment="Center" Margin="0,4" />
-                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="8,3,0,3">
-                                    <TextBox x:Name="Color1Box" Width="24" Margin="0,0,4,0" />
-                                    <TextBox x:Name="Color2Box" Width="24" Margin="0,0,4,0" />
-                                    <TextBox x:Name="Color3Box" Width="24" Margin="0,0,4,0" />
-                                    <TextBox x:Name="Color4Box" Width="24" Margin="0,0,4,0" />
-                                    <TextBox x:Name="Color5Box" Width="24" />
-                                </StackPanel>
-                                <TextBlock Grid.Row="1" Text="Thickness" VerticalAlignment="Center" Margin="0,4" />
-                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="8,3,0,3">
-                                    <TextBox x:Name="ThicknessDownBox" Width="60" Margin="0,0,6,0" />
-                                    <TextBox x:Name="ThicknessUpBox" Width="60" />
-                                </StackPanel>
-                                <TextBlock Grid.Row="2" Text="Undo" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="UndoBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="3" Text="Redo" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="3" Grid.Column="1" x:Name="RedoBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="4" Text="Delete selection" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="DeleteSelectionBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="5" Text="Clear / Alt" VerticalAlignment="Center" Margin="0,4" />
-                                <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="8,3,0,3">
-                                    <TextBox x:Name="ClearBox" Width="60" Margin="0,0,6,0" />
-                                    <TextBox x:Name="ClearAlternateBox" Width="60" />
-                                </StackPanel>
-                                <TextBlock Grid.Row="6" Text="Exit annotate" VerticalAlignment="Center" Margin="0,4" />
-                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="ExitAnnotateBox" Margin="8,3,0,3" />
-                            </Grid>
-                        </GroupBox>
+                                    <TextBlock Grid.Row="0" Text="Colors" VerticalAlignment="Center" Margin="0,4" />
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="8,3,0,3">
+                                        <TextBox x:Name="Color1Box" Width="24" Margin="0,0,4,0" />
+                                        <TextBox x:Name="Color2Box" Width="24" Margin="0,0,4,0" />
+                                        <TextBox x:Name="Color3Box" Width="24" Margin="0,0,4,0" />
+                                        <TextBox x:Name="Color4Box" Width="24" Margin="0,0,4,0" />
+                                        <TextBox x:Name="Color5Box" Width="24" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Text="Thickness" VerticalAlignment="Center" Margin="0,4" />
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="8,3,0,3">
+                                        <TextBox x:Name="ThicknessDownBox" Width="60" Margin="0,0,6,0" />
+                                        <TextBox x:Name="ThicknessUpBox" Width="60" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="2" Text="Undo" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="UndoBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="3" Text="Redo" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="3" Grid.Column="1" x:Name="RedoBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="4" Text="Delete selection" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="DeleteSelectionBox" Margin="8,3,0,3" />
+                                    <TextBlock Grid.Row="5" Text="Clear / Alt" VerticalAlignment="Center" Margin="0,4" />
+                                    <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="8,3,0,3">
+                                        <TextBox x:Name="ClearBox" Width="60" Margin="0,0,6,0" />
+                                        <TextBox x:Name="ClearAlternateBox" Width="60" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="6" Text="Exit annotate" VerticalAlignment="Center" Margin="0,4" />
+                                    <TextBox Grid.Row="6" Grid.Column="1" x:Name="ExitAnnotateBox" Margin="8,3,0,3" />
+                                </Grid>
+                            </GroupBox>
+                        </Grid>
                     </Grid>
-                </Grid>
                 </ScrollViewer>
             </TabItem>
         </TabControl>

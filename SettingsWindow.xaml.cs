@@ -56,6 +56,7 @@ public partial class SettingsWindow : Window
         PinnedLensZoomSlider.Value = settings.PinnedLensZoom;
         PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
         RegionMaskOpacitySlider.Value = settings.RegionMaskOpacity * 100;
+        SelectRegionMaskStyle(settings.RegionMaskStyle);
         FadingAnnotationsCheckBox.IsChecked = settings.FadingAnnotationsEnabled;
         FadingAnnotationVisibleSlider.Value = settings.FadingAnnotationVisibleMs / 1000.0;
         FadingAnnotationFadeSlider.Value = settings.FadingAnnotationFadeMs / 1000.0;
@@ -351,6 +352,7 @@ public partial class SettingsWindow : Window
         updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
         updated.RegionMaskColor = _regionMaskColor;
         updated.RegionMaskOpacity = RegionMaskOpacitySlider.Value / 100.0;
+        updated.RegionMaskStyle = ReadRegionMaskStyle().ToString();
         updated.FadingAnnotationsEnabled = FadingAnnotationsCheckBox.IsChecked == true;
         updated.FadingAnnotationVisibleMs = (int)Math.Round(FadingAnnotationVisibleSlider.Value * 1000);
         updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
@@ -971,6 +973,34 @@ public partial class SettingsWindow : Window
         }
 
         return LaserActivationMode.Always;
+    }
+
+    private void SelectRegionMaskStyle(string styleText)
+    {
+        var style = Enum.TryParse<RegionMaskStyle>(styleText, true, out var parsed)
+            ? parsed
+            : RegionMaskStyle.StripesWithLabel;
+        foreach (var item in RegionMaskStyleBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag?.ToString()?.Equals(style.ToString(), StringComparison.OrdinalIgnoreCase) == true)
+            {
+                RegionMaskStyleBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        RegionMaskStyleBox.SelectedIndex = 3;
+    }
+
+    private RegionMaskStyle ReadRegionMaskStyle()
+    {
+        if (RegionMaskStyleBox.SelectedItem is ComboBoxItem item
+            && Enum.TryParse<RegionMaskStyle>(item.Tag?.ToString(), true, out var style))
+        {
+            return style;
+        }
+
+        return RegionMaskStyle.StripesWithLabel;
     }
 
     private void UpdateLaserHoldFieldState()
