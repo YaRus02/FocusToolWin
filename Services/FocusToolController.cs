@@ -1241,6 +1241,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _captureStage.StartForWindow(source);
     }
 
+    public Task StartCaptureStageWithPickerAsync()
+    {
+        return _captureStage.StartWithPickerAsync();
+    }
+
     public void CloseCaptureStages()
     {
         _captureStage.CloseAll();

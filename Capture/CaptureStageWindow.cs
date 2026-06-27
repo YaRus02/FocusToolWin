@@ -46,6 +46,7 @@ internal sealed class CaptureStageWindow : Form
     private WindowCaptureSession? _session;
     private SizeInt32 _swapSize;
     private bool _graphicsDisposed;
+    private bool _maximizedOnShow;
 
     public CaptureStageWindow(IntPtr sourceWindow)
     {
@@ -72,6 +73,18 @@ internal sealed class CaptureStageWindow : Form
             AppLog.Error("Capture Stage could not start.", ex);
             BeginInvoke(Close);
         }
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        if (_maximizedOnShow)
+        {
+            return;
+        }
+
+        _maximizedOnShow = true;
+        WindowState = System.Windows.Forms.FormWindowState.Maximized;
     }
 
     private void InitializeGraphics()

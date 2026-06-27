@@ -338,7 +338,13 @@ internal sealed class TrayIconController : IDisposable
         timerMenu.DropDownItems.Add(_newTimerItem);
         timerMenu.DropDownItems.Add(_closeTimersItem);
         _contextMenu.Items.Add(timerMenu);
-        _contextMenu.Items.Add("Capture Stage: mirror focused window", null, (_, _) => _controller.StartCaptureStageForLastWindow());
+
+        var captureStageMenu = new ToolStripMenuItem("Capture Stage");
+        captureStageMenu.DropDownItems.Add("Pick source...", null, async (_, _) => await _controller.StartCaptureStageWithPickerAsync());
+        captureStageMenu.DropDownItems.Add("Mirror focused window", null, (_, _) => _controller.StartCaptureStageForLastWindow());
+        captureStageMenu.DropDownItems.Add("Close all", null, (_, _) => _controller.CloseCaptureStages());
+        _contextMenu.Items.Add(captureStageMenu);
+
         _contextMenu.Items.Add(new ToolStripSeparator());
         _contextMenu.Items.Add(_toolbarItem);
         _contextMenu.Items.Add("Settings...", null, (_, _) => _controller.ShowSettingsWindow());

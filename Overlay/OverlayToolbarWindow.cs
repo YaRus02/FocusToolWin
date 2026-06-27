@@ -469,6 +469,8 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(CreateButton("Hide", "Collapse toolbar to a small grip", (_, _) => CollapseToHandle(), width: 44));
         row.Children.Add(CreateButton("Close", "Close the toolbar (reopen from the tray menu or the toolbar hotkey)", (_, _) => _controller.HideToolbar(), width: 46));
         row.Children.Add(CreateSeparator());
+        row.Children.Add(CreateButton("Stage", "Pick a source for Capture Stage", async (_, _) => await _controller.StartCaptureStageWithPickerAsync(), width: 48));
+        row.Children.Add(CreateSeparator());
         row.Children.Add(CreateButton("Settings", "Open settings", (_, _) => _controller.ShowSettingsWindow(), width: 60));
         return row;
     }

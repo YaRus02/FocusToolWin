@@ -3,6 +3,7 @@ using Vortice.Direct3D11;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX.Direct3D11;
 using WinRT;
+using WinRT.Interop;
 
 namespace FocusTool.Win.Capture;
 
@@ -54,6 +55,13 @@ internal static class CaptureInterop
         {
             Marshal.Release(rawItem);
         }
+    }
+
+    public static async Task<GraphicsCaptureItem?> PickItemAsync(IntPtr ownerWindow)
+    {
+        var picker = new GraphicsCapturePicker();
+        InitializeWithWindow.Initialize(picker, ownerWindow);
+        return await picker.PickSingleItemAsync();
     }
 
     public static IDirect3DDevice CreateDirect3DDevice(ID3D11Device device)
