@@ -140,7 +140,16 @@
                         <CheckBox x:Name="GlowCheckBox" Content="Glow" Margin="0,10,0,0" />
 
                         <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Cursor highlight" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="Cursor Highlight" FontSize="16" FontWeight="SemiBold" />
+
+                        <TextBlock Text="Color slots" FontWeight="SemiBold" Margin="0,12,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button x:Name="CursorHighlightPreset0Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="0" Background="#BFFFD400" Click="CursorHighlightPreset_OnClick" />
+                            <Button x:Name="CursorHighlightPreset1Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="1" Background="#BF20D6FF" Click="CursorHighlightPreset_OnClick" />
+                            <Button x:Name="CursorHighlightPreset2Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="2" Background="#BFFF4FD8" Click="CursorHighlightPreset_OnClick" />
+                            <Button x:Name="CursorHighlightPreset3Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="3" Background="#BFFFFFFF" Click="CursorHighlightPreset_OnClick" />
+                            <Button x:Name="CursorHighlightPreset4Button" Style="{StaticResource ColorSwatchButtonStyle}" Tag="4" Background="#BF00D26A" Click="CursorHighlightPreset_OnClick" />
+                        </StackPanel>
 
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
@@ -148,7 +157,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Color" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <TextBlock Text="Selected hex" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
                             <TextBox Grid.Column="1" x:Name="CursorHighlightColorBox" TextChanged="CursorHighlightColorBox_OnTextChanged" />
                             <Border Grid.Column="2"
                                     x:Name="CursorHighlightColorPreview"
@@ -197,7 +206,7 @@
                         <Slider x:Name="SpotlightOpacitySlider" Minimum="20" Maximum="88" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
 
                         <Separator Margin="0,18,0,14" />
-                        <TextBlock Text="Magnifier" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="Zoom" FontSize="16" FontWeight="SemiBold" />
 
                         <DockPanel Margin="0,10,0,0" LastChildFill="False">
                             <TextBlock Text="Radius" FontWeight="SemiBold" />
@@ -368,9 +377,9 @@
                                 <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToggleLaserActivationBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="2" Text="Toggle spotlight" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToggleSpotlightBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="3" Text="Toggle magnifier" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBlock Grid.Row="3" Text="Toggle zoom" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToggleMagnifierBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="4" Text="Pinned lens" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBlock Grid.Row="4" Text="Pin" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="4" Grid.Column="1" x:Name="TogglePinnedLensBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="5" Text="Region mask" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToggleRegionMaskBox" Margin="8,3,0,3" />
@@ -394,11 +403,11 @@
                                 <TextBox Grid.Row="14" Grid.Column="1" x:Name="LaserHoldBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="15" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="15" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="16" Text="Cursor highlight" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBlock Grid.Row="16" Text="Cursor Highlight" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="16" Grid.Column="1" x:Name="ToggleCursorHighlightBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="17" Text="Hold highlight" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="17" Grid.Column="1" x:Name="CursorHighlightHoldBox" Margin="8,3,0,3" />
-                                <TextBlock Grid.Row="18" Text="Screenshot region" VerticalAlignment="Center" Margin="0,4" />
+                                <TextBlock Grid.Row="18" Text="Region screenshot" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="18" Grid.Column="1" x:Name="TakeRegionScreenshotBox" Margin="8,3,0,3" />
                                 <TextBlock Grid.Row="19" Text="Region spotlight" VerticalAlignment="Center" Margin="0,4" />
                                 <TextBox Grid.Row="19" Grid.Column="1" x:Name="ToggleRegionSpotlightBox" Margin="8,3,0,3" />

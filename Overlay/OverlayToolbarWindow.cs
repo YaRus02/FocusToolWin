@@ -81,6 +81,8 @@ internal sealed class OverlayToolbarWindow : Window
     private TextBlock _zoomRadiusText = null!;
     private TextBlock _pinZoomText = null!;
     private TextBlock _pinFpsText = null!;
+    private WpfButton _pinOptionsButton = null!;
+    private UIElement _pinOptionsRow = null!;
     private WpfButton _closePinsButton = null!;
     private TextBlock _maskOpacityText = null!;
     private WpfButton _clearMaskButton = null!;
@@ -94,6 +96,7 @@ internal sealed class OverlayToolbarWindow : Window
     private string? _openRowKey;
     private bool _stepOptionsVisible;
     private bool _fadeOptionsVisible;
+    private bool _pinOptionsVisible;
 
     private UIElement _expandedRoot = null!;
     private UIElement _collapsedRoot = null!;
@@ -209,12 +212,12 @@ internal sealed class OverlayToolbarWindow : Window
 
         _laserButton = AddSplitButton(primary, "Laser", "Toggle laser always/hold", 45, (_, _) => _controller.ToggleLaserActivationMode(), "laser");
         _highlightButton = AddSplitButton(primary, "Cursor", "Toggle cursor highlight", 48, (_, _) => _controller.ToggleCursorHighlight(), "highlight");
-        _drawButton = AddSplitButton(primary, "Draw", "Toggle annotation mode", 42, (_, _) => ToggleMode(InteractionMode.Annotate), "draw");
-        primary.Children.Add(CreateSeparator());
         _spotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
         _zoomButton = AddSplitButton(primary, "Zoom", "Toggle magnifier", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
-        _maskButton = AddSplitButton(primary, "Mask", "Select regions to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
         primary.Children.Add(CreateSeparator());
+        _drawButton = AddSplitButton(primary, "Draw", "Toggle annotation mode", 42, (_, _) => ToggleMode(InteractionMode.Annotate), "draw");
+        primary.Children.Add(CreateSeparator());
+        _maskButton = AddSplitButton(primary, "Mask", "Select regions to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
         _boardButton = AddSplitButton(primary, "Board", "Screen board, black or white", 48, (_, _) => ShowContextualRow("board"), "board");
         AddSplitButton(primary, "Shot", "Screenshot current monitor", 40, (_, _) => _controller.TakeScreenshot(), "shot");
         primary.Children.Add(CreateSeparator());
@@ -264,10 +267,10 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(CreateSeparator());
         AddColorSwatches(row, _laserColorButtons, "Laser color", _controller.SetLaserPresetColor);
         row.Children.Add(CreateSeparator());
+        _trailText = CreateStepper(row, "Trail", () => _controller.AdjustLaserTrailLength(-40), () => _controller.AdjustLaserTrailLength(40));
+        row.Children.Add(CreateSeparator());
         _glowButton = CreateButton("Glow", "Toggle laser glow", (_, _) => _controller.SetGlowEnabled(!_controller.Settings.GlowEnabled), width: 44);
         row.Children.Add(_glowButton);
-        row.Children.Add(CreateSeparator());
-        _trailText = CreateStepper(row, "Trail", () => _controller.AdjustLaserTrailLength(-40), () => _controller.AdjustLaserTrailLength(40));
         return row;
     }
 
@@ -294,16 +297,18 @@ internal sealed class OverlayToolbarWindow : Window
         var row = CreateRow();
         row.Children.Add(CreateToolButton(AnnotationTool.Pencil, "Pen", "Pencil", 34));
         row.Children.Add(CreateToolButton(AnnotationTool.Highlighter, "Mark", "Highlighter", 40));
+        row.Children.Add(CreateSeparator());
         row.Children.Add(CreateToolButton(AnnotationTool.Arrow, "Arrow", "Arrow", 43));
         row.Children.Add(CreateToolButton(AnnotationTool.Line, "Line", "Line", 37));
         row.Children.Add(CreateToolButton(AnnotationTool.Rectangle, "Rect", "Rectangle", 37));
         row.Children.Add(CreateToolButton(AnnotationTool.Ellipse, "Oval", "Ellipse / Circle", 37));
+        row.Children.Add(CreateSeparator());
         row.Children.Add(CreateToolButton(AnnotationTool.Text, "Text", "Text", 37));
-        row.Children.Add(CreateToolButton(AnnotationTool.Move, "Move", "Move selection", 41));
         _stepButton = CreateButton("Step", "Numbered step marker", (_, _) => _controller.SelectStepTool(), width: 41);
         row.Children.Add(_stepButton);
         _stepOptionsButton = CreateInlineOptionsButton("Step marker shape", ToggleStepOptions);
         row.Children.Add(_stepOptionsButton);
+        row.Children.Add(CreateToolButton(AnnotationTool.Move, "Move", "Move selection", 41));
         row.Children.Add(CreateSeparator());
         AddColorSwatches(row, _colorButtons, "Annotation color", _controller.SetAnnotationPresetColor);
         row.Children.Add(CreateSeparator());
@@ -376,18 +381,43 @@ internal sealed class OverlayToolbarWindow : Window
 
     private UIElement BuildZoomRow()
     {
-        var row = CreateRow();
-        _zoomZoomText = CreateStepper(row, "Zoom", () => _controller.AdjustMagnifierZoom(-0.25), () => _controller.AdjustMagnifierZoom(0.25));
-        _zoomRadiusText = CreateStepper(row, "Radius", () => _controller.AdjustMagnifierRadius(-16), () => _controller.AdjustMagnifierRadius(16));
-        row.Children.Add(CreateSeparator());
+        var stack = new StackPanel { Orientation = WpfOrientation.Vertical };
+
+        var zoomRow = CreateRow();
+        _zoomZoomText = CreateStepper(zoomRow, "Zoom", () => _controller.AdjustMagnifierZoom(-0.25), () => _controller.AdjustMagnifierZoom(0.25));
+        _zoomRadiusText = CreateStepper(zoomRow, "Radius", () => _controller.AdjustMagnifierRadius(-16), () => _controller.AdjustMagnifierRadius(16));
+        zoomRow.Children.Add(CreateSeparator());
         _pinButton = CreateButton("Pin", "Select a live pinned lens area", (_, _) => _controller.TogglePinnedLens(), width: 34);
-        row.Children.Add(_pinButton);
-        _pinZoomText = CreateStepper(row, "Zoom", () => _controller.AdjustPinnedLensZoom(-0.25), () => _controller.AdjustPinnedLensZoom(0.25));
-        _pinFpsText = CreateStepper(row, "Fps", () => _controller.AdjustPinnedLensRefreshFps(-5), () => _controller.AdjustPinnedLensRefreshFps(5));
-        row.Children.Add(CreateSeparator());
+        zoomRow.Children.Add(_pinButton);
+        _pinOptionsButton = CreateInlineOptionsButton("Pin settings", TogglePinOptions);
+        zoomRow.Children.Add(_pinOptionsButton);
+
+        _pinOptionsRow = BuildPinOptionsRow();
+        _pinOptionsRow.Visibility = Visibility.Collapsed;
+
+        stack.Children.Add(zoomRow);
+        stack.Children.Add(_pinOptionsRow);
+        return stack;
+    }
+
+    private UIElement BuildPinOptionsRow()
+    {
+        var pinRow = CreateRow();
+        pinRow.Margin = new Thickness(0, 5, 0, 0);
+        pinRow.Children.Add(new TextBlock
+        {
+            Text = "Pin",
+            Foreground = LabelBrush,
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 5, 0)
+        });
+        _pinZoomText = CreateStepper(pinRow, "Zoom", () => _controller.AdjustPinnedLensZoom(-0.25), () => _controller.AdjustPinnedLensZoom(0.25));
+        _pinFpsText = CreateStepper(pinRow, "Fps", () => _controller.AdjustPinnedLensRefreshFps(-5), () => _controller.AdjustPinnedLensRefreshFps(5));
+        pinRow.Children.Add(CreateSeparator());
         _closePinsButton = CreateButton("Close all", "Close all pinned lenses", (_, _) => _controller.ClosePinnedLenses(), width: 64);
-        row.Children.Add(_closePinsButton);
-        return row;
+        pinRow.Children.Add(_closePinsButton);
+        return pinRow;
     }
 
     private UIElement BuildMaskRow()
@@ -763,6 +793,11 @@ internal sealed class OverlayToolbarWindow : Window
             HideFadeOptions();
         }
 
+        if (key != "zoom")
+        {
+            HidePinOptions();
+        }
+
         _openRowKey = key;
         _contextualHost.Child = row;
         _contextualHost.Visibility = Visibility.Visible;
@@ -782,6 +817,7 @@ internal sealed class OverlayToolbarWindow : Window
         _openRowKey = null;
         HideStepOptions();
         HideFadeOptions();
+        HidePinOptions();
         _contextualHost.Child = null;
         _contextualHost.Visibility = Visibility.Collapsed;
         foreach (var caret in _carets.Values)
@@ -845,6 +881,27 @@ internal sealed class OverlayToolbarWindow : Window
         _fadeOptionsRow.Visibility = Visibility.Collapsed;
     }
 
+    private void TogglePinOptions()
+    {
+        _pinOptionsVisible = !_pinOptionsVisible;
+        _pinOptionsRow.Visibility = _pinOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
+        UpdateState();
+        UpdateLayout();
+        ClampOntoMonitor();
+        ReassertTopmost();
+    }
+
+    private void HidePinOptions()
+    {
+        if (_pinOptionsRow is null)
+        {
+            return;
+        }
+
+        _pinOptionsVisible = false;
+        _pinOptionsRow.Visibility = Visibility.Collapsed;
+    }
+
     private void ToggleMode(InteractionMode mode)
     {
         _controller.SetInteractionMode(_controller.Mode == mode ? InteractionMode.Passthrough : mode);
@@ -893,7 +950,7 @@ internal sealed class OverlayToolbarWindow : Window
 
             SetButtonActive(_highlightAlwaysButton, settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always);
             SetButtonActive(_highlightHoldButton, settings.GetCursorHighlightActivationMode() == LaserActivationMode.Hold);
-            UpdateColorSwatches(_highlightColorButtons, settings.LaserColorPresets, settings.CursorHighlightColor);
+            UpdateColorSwatches(_highlightColorButtons, settings.CursorHighlightColorPresets, settings.CursorHighlightColor);
             SetButtonActive(_highlightPulseButton, settings.ClickPulseEnabled);
             _highlightRadiusText.Text = $"{settings.CursorHighlightRadius:0}";
 
@@ -928,6 +985,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonEnabled(_clearSpotRegionsButton, _clearSpotRegionsButton.IsEnabled);
             _zoomZoomText.Text = $"{settings.MagnifierZoom:0.##}x";
             _zoomRadiusText.Text = $"{settings.MagnifierRadius:0}";
+            SetButtonActive(_pinOptionsButton, _pinOptionsVisible);
             _pinZoomText.Text = $"{settings.PinnedLensZoom:0.##}x";
             _pinFpsText.Text = $"{settings.PinnedLensRefreshFps:0}";
             _closePinsButton.IsEnabled = _controller.PinnedLensActive;

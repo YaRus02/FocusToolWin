@@ -24,6 +24,15 @@ public sealed class AppSettings
         "#FF2080FF"
     ];
 
+    private static readonly string[] DefaultCursorHighlightColorSlots =
+    [
+        "#BFFFD400",
+        "#BF20D6FF",
+        "#BFFF4FD8",
+        "#BFFFFFFF",
+        "#BF00D26A"
+    ];
+
     public string Color { get; set; } = "#FFFF2020";
     public List<string> LaserColorPresets { get; set; } = [.. DefaultColorSlots];
     public double PointSize { get; set; } = 12;
@@ -35,6 +44,7 @@ public sealed class AppSettings
     [JsonIgnore]
     public bool CursorHighlightEnabled { get; set; }
     public string CursorHighlightColor { get; set; } = "#BFFFD400";
+    public List<string> CursorHighlightColorPresets { get; set; } = [.. DefaultCursorHighlightColorSlots];
     public double CursorHighlightRadius { get; set; } = 30;
     public double CursorHighlightThickness { get; set; } = 3;
     public string CursorHighlightActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Always.ToString();
@@ -77,6 +87,7 @@ public sealed class AppSettings
         LaserHoldShortcut = LaserHoldShortcut,
         CursorHighlightEnabled = CursorHighlightEnabled,
         CursorHighlightColor = CursorHighlightColor,
+        CursorHighlightColorPresets = [.. CursorHighlightColorPresets],
         CursorHighlightRadius = CursorHighlightRadius,
         CursorHighlightThickness = CursorHighlightThickness,
         CursorHighlightActivationMode = CursorHighlightActivationMode,
@@ -118,6 +129,7 @@ public sealed class AppSettings
         LaserHoldShortcut = other.LaserHoldShortcut;
         CursorHighlightEnabled = other.CursorHighlightEnabled;
         CursorHighlightColor = other.CursorHighlightColor;
+        CursorHighlightColorPresets = [.. other.CursorHighlightColorPresets];
         CursorHighlightRadius = other.CursorHighlightRadius;
         CursorHighlightThickness = other.CursorHighlightThickness;
         CursorHighlightActivationMode = other.CursorHighlightActivationMode;
@@ -156,6 +168,7 @@ public sealed class AppSettings
         }
 
         LaserColorPresets = NormalizeColorPresets(LaserColorPresets, DefaultColorSlots);
+        CursorHighlightColorPresets = NormalizeColorPresets(CursorHighlightColorPresets, DefaultCursorHighlightColorSlots);
         AnnotationColorPresets = NormalizeColorPresets(AnnotationColorPresets, DefaultColorSlots);
         RegionMaskColorPresets = NormalizeColorPresets(RegionMaskColorPresets, DefaultRegionMaskColorSlots);
         EnsureColorInPresets(Color, LaserColorPresets, fallbackIndex: 4);
@@ -189,6 +202,7 @@ public sealed class AppSettings
         {
             CursorHighlightColor = "#BFFFD400";
         }
+        EnsureColorInPresets(CursorHighlightColor, CursorHighlightColorPresets, fallbackIndex: 0);
 
         if (!Enum.TryParse<LaserActivationMode>(CursorHighlightActivationMode, true, out var cursorHighlightActivationMode))
         {
@@ -237,6 +251,8 @@ public sealed class AppSettings
     }
 
     public static string[] DefaultLaserColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultCursorHighlightColorPresets() => [.. DefaultCursorHighlightColorSlots];
 
     public static string[] DefaultAnnotationColorPresets() => [.. DefaultColorSlots];
 

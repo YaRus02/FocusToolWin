@@ -335,11 +335,6 @@ internal sealed class PointerVisualController : IDisposable
     private bool IsCursorHighlightVisuallyActive()
     {
         var settings = _settingsProvider();
-        if (!settings.CursorHighlightEnabled)
-        {
-            return false;
-        }
-
         return settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always
             || _cursorHighlightHoldShortcut.IsPressed();
     }

@@ -172,7 +172,7 @@ internal sealed class InteractionModeTransitionController
             _previousForegroundWindow = IntPtr.Zero;
         }
 
-        _setLaserVisualActive(_activationModeProvider() == LaserActivationMode.Always || IsAnnotationMode(mode));
+        _setLaserVisualActive(_activationModeProvider() == LaserActivationMode.Always);
         var exitVisualHotKeyIsNeeded = _exitVisualHotKeyNeededProvider(mode);
         if (exitVisualHotKeyWasNeeded != exitVisualHotKeyIsNeeded)
         {

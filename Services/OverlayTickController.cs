@@ -87,7 +87,7 @@ internal sealed class OverlayTickController
         var activationMode = _activationModeProvider();
         var holdActive = !suppressPointerVisuals && _pointerVisuals.IsLaserHoldActive(activationMode);
 
-        _pointerVisuals.SetLaserVisualActive(!suppressPointerVisuals && (holdActive || IsAnnotationMode(mode)));
+        _pointerVisuals.SetLaserVisualActive(!suppressPointerVisuals && holdActive);
         if (magnifierActive)
         {
             if (!_magnifier.IsRenderingSubscribed)
