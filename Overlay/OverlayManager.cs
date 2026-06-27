@@ -221,7 +221,7 @@ internal sealed class OverlayManager : IDisposable
                 continue;
             }
 
-            var bitmap = window.CaptureSurfaceRegion(rect);
+            var bitmap = window.CaptureSurfaceRegion(rect, OverlayRenderOptions.CaptureStage);
             if (bitmap is null)
             {
                 return null;

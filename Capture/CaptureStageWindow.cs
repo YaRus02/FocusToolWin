@@ -1,8 +1,10 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Vortice.Direct2D1;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
+using Vortice.Mathematics;
 using Windows.Graphics;
 using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
@@ -31,11 +33,14 @@ internal sealed class CaptureStageWindow : Form
     private ID3D11DeviceContext? _context;
     private IDXGISwapChain1? _swapChain;
     private ID3D11Texture2D? _backBuffer;
+    private ID3D11Texture2D? _sourceFrame;
     private ID2D1Factory1? _d2dFactory;
     private ID2D1Device? _d2dDevice;
     private ID2D1DeviceContext? _d2dContext;
     private ID2D1Bitmap1? _d2dTarget;
     private ID2D1Bitmap? _overlayBitmap;
+    private ID2D1SolidColorBrush? _cursorFillBrush;
+    private ID2D1SolidColorBrush? _cursorStrokeBrush;
     private readonly List<SpriteBitmap> _spriteBitmaps = [];
     private OverlaySnapshotData? _pendingOverlay;
     private WindowCaptureSession? _session;
@@ -138,6 +143,8 @@ internal sealed class CaptureStageWindow : Form
         using var dxgiDevice = _device!.QueryInterface<IDXGIDevice>();
         _d2dDevice = _d2dFactory.CreateDevice(dxgiDevice);
         _d2dContext = _d2dDevice.CreateDeviceContext(DeviceContextOptions.None);
+        _cursorFillBrush = _d2dContext.CreateSolidColorBrush(new Color4(1f, 1f, 1f, 0.96f));
+        _cursorStrokeBrush = _d2dContext.CreateSolidColorBrush(new Color4(0f, 0f, 0f, 0.86f));
     }
 
     // Wraps the current back buffer as a Direct2D render target so overlays can be
@@ -194,10 +201,61 @@ internal sealed class CaptureStageWindow : Form
                 return;
             }
 
-            _context.CopyResource(_backBuffer, texture);
-            DrawOverlay();
-            _swapChain.Present(1, PresentFlags.None);
+            EnsureSourceFrame(textureWidth, textureHeight);
+            if (_sourceFrame is null)
+            {
+                return;
+            }
+
+            _context.CopyResource(_sourceFrame, texture);
+            RenderCurrentFrame();
         }
+    }
+
+    private void EnsureSourceFrame(int width, int height)
+    {
+        if (_device is null)
+        {
+            return;
+        }
+
+        if (_sourceFrame is not null)
+        {
+            var current = _sourceFrame.Description;
+            if (current.Width == width && current.Height == height)
+            {
+                return;
+            }
+
+            _sourceFrame.Dispose();
+            _sourceFrame = null;
+        }
+
+        _sourceFrame = _device.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)width,
+            Height = (uint)height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = SwapFormat,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.None,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.None,
+        });
+    }
+
+    private void RenderCurrentFrame()
+    {
+        if (_swapChain is null || _backBuffer is null || _sourceFrame is null || _context is null)
+        {
+            return;
+        }
+
+        _context.CopyResource(_backBuffer, _sourceFrame);
+        DrawOverlay();
+        _swapChain.Present(1, PresentFlags.None);
     }
 
     // Composites the latest overlay snapshot over the copied source frame. The
@@ -216,8 +274,7 @@ internal sealed class CaptureStageWindow : Form
             RefreshOverlay(pending);
         }
 
-        if ((_overlayBitmap is null && _spriteBitmaps.Count == 0)
-            || !TryGetSourceContentRect(out var left, out var top, out var width, out var height))
+        if (!TryGetSourceContentRect(out var left, out var top, out var width, out var height))
         {
             return;
         }
@@ -248,7 +305,44 @@ internal sealed class CaptureStageWindow : Form
             _d2dContext.DrawBitmap(sprite.Bitmap, spriteRect, 1f, BitmapInterpolationMode.Linear, new Vortice.Mathematics.Rect(0, 0, spriteSize.Width, spriteSize.Height));
         }
 
+        DrawStageCursor(left, top, width, height);
+
         _d2dContext.EndDraw();
+    }
+
+    private void DrawStageCursor(double sourceLeft, double sourceTop, double sourceWidth, double sourceHeight)
+    {
+        if (_d2dFactory is null || _d2dContext is null || _cursorFillBrush is null || _cursorStrokeBrush is null)
+        {
+            return;
+        }
+
+        if (!NativeMethods.GetCursorPos(out var cursor))
+        {
+            return;
+        }
+
+        if (cursor.X < sourceLeft || cursor.Y < sourceTop || cursor.X > sourceLeft + sourceWidth || cursor.Y > sourceTop + sourceHeight)
+        {
+            return;
+        }
+
+        var x = (float)((cursor.X - sourceLeft) / sourceWidth * _swapSize.Width);
+        var y = (float)((cursor.Y - sourceTop) / sourceHeight * _swapSize.Height);
+        using var geometry = _d2dFactory.CreatePathGeometry();
+        using var sink = geometry.Open();
+        sink.BeginFigure(new Vector2(x, y), FigureBegin.Filled);
+        sink.AddLine(new Vector2(x, y + 22));
+        sink.AddLine(new Vector2(x + 5, y + 17));
+        sink.AddLine(new Vector2(x + 8, y + 25));
+        sink.AddLine(new Vector2(x + 12, y + 23));
+        sink.AddLine(new Vector2(x + 9, y + 15));
+        sink.AddLine(new Vector2(x + 16, y + 15));
+        sink.EndFigure(FigureEnd.Closed);
+        sink.Close();
+
+        _d2dContext.FillGeometry(geometry, _cursorFillBrush);
+        _d2dContext.DrawGeometry(geometry, _cursorStrokeBrush, 1.35f);
     }
 
     private void RefreshOverlay(OverlaySnapshotData data)
@@ -345,6 +439,7 @@ internal sealed class CaptureStageWindow : Form
             if (!_graphicsDisposed)
             {
                 _pendingOverlay = data;
+                RenderCurrentFrame();
             }
         }
     }
@@ -385,6 +480,8 @@ internal sealed class CaptureStageWindow : Form
         _d2dTarget = null;
         _backBuffer?.Dispose();
         _backBuffer = null;
+        _sourceFrame?.Dispose();
+        _sourceFrame = null;
         _swapChain!.ResizeBuffers(BufferCount, (uint)width, (uint)height, SwapFormat, SwapChainFlags.None);
         _backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
         _swapSize = new SizeInt32 { Width = width, Height = height };
@@ -438,6 +535,10 @@ internal sealed class CaptureStageWindow : Form
             _d2dTarget = null;
             _overlayBitmap?.Dispose();
             _overlayBitmap = null;
+            _cursorFillBrush?.Dispose();
+            _cursorFillBrush = null;
+            _cursorStrokeBrush?.Dispose();
+            _cursorStrokeBrush = null;
             foreach (var sprite in _spriteBitmaps)
             {
                 sprite.Bitmap.Dispose();
@@ -453,6 +554,8 @@ internal sealed class CaptureStageWindow : Form
             _d2dFactory = null;
             _backBuffer?.Dispose();
             _backBuffer = null;
+            _sourceFrame?.Dispose();
+            _sourceFrame = null;
             _swapChain?.Dispose();
             _swapChain = null;
             _context?.Dispose();

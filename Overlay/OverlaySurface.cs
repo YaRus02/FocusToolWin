@@ -155,7 +155,16 @@ internal sealed class OverlaySurface : FrameworkElement
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
+        RenderOverlay(drawingContext, OverlayRenderOptions.Live);
+    }
 
+    public void RenderSnapshot(DrawingContext drawingContext, OverlayRenderOptions options)
+    {
+        RenderOverlay(drawingContext, options);
+    }
+
+    private void RenderOverlay(DrawingContext drawingContext, OverlayRenderOptions options)
+    {
         // ToLocal/PointFromScreen require a live PresentationSource; during teardown
         // or a source/DPI transition it returns NaN, which throws inside WPF
         // geometry/text draw calls. Skip the frame rather than feed NaN downstream.
@@ -194,8 +203,12 @@ internal sealed class OverlaySurface : FrameworkElement
         }
 
         DrawAnnotations(drawingContext);
-        DrawCursorHighlight(drawingContext, _cursorHighlightProvider());
-        DrawLaserTrail(drawingContext);
+        if (!options.SuppressPointerVisuals)
+        {
+            DrawCursorHighlight(drawingContext, _cursorHighlightProvider());
+            DrawLaserTrail(drawingContext);
+        }
+
         if (!blankScreen)
         {
             DrawRegionSpotlights(drawingContext);
@@ -218,6 +231,7 @@ internal sealed class OverlaySurface : FrameworkElement
         {
             DrawAnnotateBorder(drawingContext);
         }
+
     }
 
     private void DrawInputCatcher(DrawingContext drawingContext)

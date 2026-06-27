@@ -51,6 +51,7 @@ internal sealed class WindowCaptureSession : IDisposable
             _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(_winrtDevice, PixelFormat, BufferCount, _item.Size);
             _framePool.FrameArrived += OnFrameArrived;
             _session = _framePool.CreateCaptureSession(_item);
+            _session.IsCursorCaptureEnabled = false;
             _session.StartCapture();
         }
     }

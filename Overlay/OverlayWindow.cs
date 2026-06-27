@@ -266,9 +266,8 @@ internal sealed class OverlayWindow : Window
 
     // Like CaptureSurface but cropped to a screen rect (physical px), so the Capture
     // Stage snapshots only the source window's area instead of the whole monitor
-    // (far less per-frame work and GC pressure). Uses a VisualBrush viewbox to
-    // select the sub-region of the overlay surface.
-    public BitmapSource? CaptureSurfaceRegion(ScreenRect sourceRect)
+    // (far less per-frame work and GC pressure).
+    public BitmapSource? CaptureSurfaceRegion(ScreenRect sourceRect, OverlayRenderOptions options)
     {
         if (_surface.ActualWidth <= 1 || _surface.ActualHeight <= 1)
         {
@@ -295,13 +294,13 @@ internal sealed class OverlayWindow : Window
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
         {
-            var brush = new VisualBrush(_surface)
-            {
-                ViewboxUnits = BrushMappingMode.Absolute,
-                Viewbox = new System.Windows.Rect(viewLeftDip, viewTopDip, viewWidthDip, viewHeightDip),
-                Stretch = Stretch.Fill,
-            };
-            dc.DrawRectangle(brush, null, new System.Windows.Rect(0, 0, viewWidthDip, viewHeightDip));
+            var target = new System.Windows.Rect(0, 0, viewWidthDip, viewHeightDip);
+            dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, target);
+            dc.PushClip(new RectangleGeometry(target));
+            dc.PushTransform(new TranslateTransform(-viewLeftDip, -viewTopDip));
+            _surface.RenderSnapshot(dc, options);
+            dc.Pop();
+            dc.Pop();
         }
 
         bitmap.Render(visual);

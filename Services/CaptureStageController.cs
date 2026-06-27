@@ -16,7 +16,7 @@ namespace FocusTool.Win.Services;
 /// </summary>
 internal sealed class CaptureStageController : IDisposable
 {
-    private const int OverlayRefreshIntervalMs = 16;
+    private const int OverlayRefreshIntervalMs = 33;
 
     private readonly List<CaptureStageWindow> _stages = [];
     private readonly Func<ScreenRect, OverlaySnapshotData?> _overlayProvider;
