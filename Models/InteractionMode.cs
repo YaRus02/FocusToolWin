@@ -6,6 +6,8 @@ internal enum InteractionMode
     Annotate,
     PinnedLensSelect,
     RegionMaskSelect,
+    ScreenshotRegionSelect,
+    RegionSpotlightSelect,
     ScreenBoard,
     BlackScreen,
     WhiteScreen

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -189,6 +188,47 @@ internal sealed class TimerWindow : Window
         Activate();
     }
 
+    // Snapshot the timer as a premultiplied-BGRA sprite plus its screen rect, so a
+    // Capture Stage can composite it over the source frame by screen overlap. The
+    // content (_block) is drawn via a VisualBrush stretched to the window's client
+    // size, which reproduces the on-screen scale transform.
+    public OverlaySprite? CaptureSprite()
+    {
+        if (!IsVisible || ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return null;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero || !NativeMethods.GetWindowRect(handle, out var rect))
+        {
+            return null;
+        }
+
+        var widthPx = rect.Right - rect.Left;
+        var heightPx = rect.Bottom - rect.Top;
+        if (widthPx <= 0 || heightPx <= 0)
+        {
+            return null;
+        }
+
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            widthPx, heightPx, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, System.Windows.Media.PixelFormats.Pbgra32);
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var brush = new System.Windows.Media.VisualBrush(_block) { Stretch = System.Windows.Media.Stretch.Fill };
+            dc.DrawRectangle(brush, null, new System.Windows.Rect(0, 0, ActualWidth, ActualHeight));
+        }
+
+        bitmap.Render(visual);
+        var stride = widthPx * 4;
+        var pixels = new byte[stride * heightPx];
+        bitmap.CopyPixels(pixels, stride, 0);
+        return new OverlaySprite(pixels, widthPx, heightPx, stride, rect.Left, rect.Top, widthPx, heightPx);
+    }
+
     public void MoveToPhysical(int x, int y)
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -205,6 +245,32 @@ internal sealed class TimerWindow : Window
             0,
             0,
             NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+    }
+
+    // Pull the timer back onto the nearest surviving monitor's working area after a
+    // display change so it is never stranded off-screen on a removed monitor.
+    public void ReconcileToWorkingArea()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero || !NativeMethods.GetWindowRect(handle, out var rect))
+        {
+            return;
+        }
+
+        var width = Math.Max(1, rect.Right - rect.Left);
+        var height = Math.Max(1, rect.Bottom - rect.Top);
+        var area = System.Windows.Forms.Screen
+            .FromRectangle(System.Drawing.Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom))
+            .WorkingArea;
+        const int margin = 1;
+        var maxLeft = Math.Max(area.Left + margin, area.Right - width - margin);
+        var maxTop = Math.Max(area.Top + margin, area.Bottom - height - margin);
+        var x = Math.Clamp(rect.Left, area.Left + margin, maxLeft);
+        var y = Math.Clamp(rect.Top, area.Top + margin, maxTop);
+        if (x != rect.Left || y != rect.Top)
+        {
+            MoveToPhysical(x, y);
+        }
     }
 
     public void ReassertTopmost()
@@ -687,33 +753,13 @@ internal sealed class TimerWindow : Window
         }
 
         _editingTime = true;
-        _timeEdit.MaxLength = TimeEditMaxLength();
-        _timeEdit.ToolTip = TimeEditToolTip();
+        _timeEdit.MaxLength = TimerTimeEditor.MaxLength(_model.Mode, _model.Use24HourTime);
+        _timeEdit.ToolTip = TimerTimeEditor.ToolTip(_model.Mode, _model.Use24HourTime);
         _timeEdit.Text = _model.Mode == TimerMode.UntilTime ? _model.TargetTimeText() : _model.DurationText();
         _timeText.Visibility = Visibility.Collapsed;
         _timeEdit.Visibility = Visibility.Visible;
         _timeEdit.Focus();
         _timeEdit.CaretIndex = 0;
-    }
-
-    private int TimeEditMaxLength()
-    {
-        if (_model.Mode != TimerMode.UntilTime)
-        {
-            return 8;
-        }
-
-        return _model.Use24HourTime ? 5 : 8;
-    }
-
-    private string TimeEditToolTip()
-    {
-        if (_model.Mode != TimerMode.UntilTime)
-        {
-            return "mm:ss or h:mm:ss";
-        }
-
-        return _model.Use24HourTime ? "HH:mm" : "h:mm AM/PM";
     }
 
     private void OnTimeEditPreviewKeyDown(object sender, WpfKeyEventArgs e)
@@ -770,7 +816,7 @@ internal sealed class TimerWindow : Window
             return;
         }
 
-        e.Handled = !IsValidTimeEditPartial(GetProposedText(_timeEdit, e.Text), _model.Mode, _model.Use24HourTime);
+        e.Handled = !TimerTimeEditor.IsValidPartial(GetProposedText(_timeEdit, e.Text), _model.Mode, _model.Use24HourTime);
     }
 
     private void OnTimeEditPaste(object sender, DataObjectPastingEventArgs e)
@@ -783,7 +829,7 @@ internal sealed class TimerWindow : Window
 
         var text = e.DataObject.GetData(WpfDataFormats.Text) as string ?? string.Empty;
         if ((SelectionTouchesFixedTimeSeparator() && text.IndexOf(':') < 0)
-            || !IsValidTimeEditPartial(GetProposedText(_timeEdit, text), _model.Mode, _model.Use24HourTime))
+            || !TimerTimeEditor.IsValidPartial(GetProposedText(_timeEdit, text), _model.Mode, _model.Use24HourTime))
         {
             e.CancelCommand();
         }
@@ -797,12 +843,12 @@ internal sealed class TimerWindow : Window
         }
 
         var input = _timeEdit.Text.Trim();
-        if (_model.Mode == TimerMode.Countdown && TryParseDuration(input, out var seconds))
+        if (_model.Mode == TimerMode.Countdown && TimerTimeEditor.TryParseDuration(input, out var seconds))
         {
             _model.SetCountdownSeconds(seconds);
             DefaultsChanged?.Invoke(this, EventArgs.Empty);
         }
-        else if (_model.Mode == TimerMode.UntilTime && TryParseTargetTime(input, _model.Use24HourTime, out var target))
+        else if (_model.Mode == TimerMode.UntilTime && TimerTimeEditor.TryParseTargetTime(input, _model.Use24HourTime, out var target))
         {
             _model.SetTargetTime(target);
             DefaultsChanged?.Invoke(this, EventArgs.Empty);
@@ -847,165 +893,6 @@ internal sealed class TimerWindow : Window
         return length > 0 && text.AsSpan(start, length).Contains(':');
     }
 
-    private static bool IsValidTimeEditPartial(string text, TimerMode mode, bool use24HourTime)
-    {
-        if (text.Length == 0)
-        {
-            return true;
-        }
-
-        if (mode == TimerMode.UntilTime && !use24HourTime)
-        {
-            return IsValidTwelveHourTargetPartial(text);
-        }
-
-        if (text.Any(ch => !char.IsDigit(ch) && ch != ':') || text.Contains("::", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var parts = text.Split(':');
-        var maxParts = mode == TimerMode.UntilTime ? 2 : 3;
-        if (parts.Length > maxParts)
-        {
-            return false;
-        }
-
-        return parts.All(part => part.Length <= 2);
-    }
-
-    private static bool IsValidTwelveHourTargetPartial(string text)
-    {
-        if (text.Length > 8 || text.Contains("::", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        foreach (var ch in text)
-        {
-            if (!char.IsDigit(ch) && ch != ':' && ch != ' ' && "apmAPM".IndexOf(ch) < 0)
-            {
-                return false;
-            }
-        }
-
-        var upper = text.ToUpperInvariant();
-        if (upper.Count(ch => ch == ':') > 1)
-        {
-            return false;
-        }
-
-        var markerIndex = upper.IndexOfAny(['A', 'P', 'M']);
-        if (markerIndex >= 0)
-        {
-            var marker = upper[markerIndex..].TrimStart();
-            if (!"AM".StartsWith(marker, StringComparison.Ordinal) && !"PM".StartsWith(marker, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            var beforeMarker = upper[..markerIndex].TrimEnd();
-            if (beforeMarker.Any(ch => ch is 'A' or 'P' or 'M'))
-            {
-                return false;
-            }
-        }
-
-        var timePart = markerIndex >= 0 ? upper[..markerIndex].TrimEnd() : upper;
-        var parts = timePart.Split(':');
-        return parts.Length <= 2 && parts.All(part => part.Length <= 2);
-    }
-
-    // "mm:ss", "h:mm:ss", or a single number (minutes); returns total seconds (>= 1).
-    private static bool TryParseDuration(string text, out int seconds)
-    {
-        seconds = 0;
-        var parts = text.Split(':');
-        if (parts.Length is < 1 or > 3)
-        {
-            return false;
-        }
-
-        int hours = 0, minutes = 0, secs = 0;
-        if (parts.Length == 1)
-        {
-            if (!int.TryParse(parts[0], out minutes))
-            {
-                return false;
-            }
-        }
-        else if (parts.Length == 2)
-        {
-            if (!int.TryParse(parts[0], out minutes) || !int.TryParse(parts[1], out secs))
-            {
-                return false;
-            }
-        }
-        else if (!int.TryParse(parts[0], out hours) || !int.TryParse(parts[1], out minutes) || !int.TryParse(parts[2], out secs))
-        {
-            return false;
-        }
-
-        if (hours < 0 || minutes < 0 || secs < 0)
-        {
-            return false;
-        }
-
-        seconds = (hours * 3600) + (minutes * 60) + secs;
-        return seconds >= 1;
-    }
-
-    // Wall-clock time; rolls to tomorrow if already passed today.
-    private static bool TryParseTargetTime(string text, bool use24HourTime, out DateTime target)
-    {
-        target = default;
-        var now = DateTime.Now;
-        if (!use24HourTime)
-        {
-            if (!DateTime.TryParseExact(
-                text.Trim().ToUpperInvariant(),
-                ["h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt"],
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AllowWhiteSpaces,
-                out var parsed))
-            {
-                return false;
-            }
-
-            target = new DateTime(now.Year, now.Month, now.Day, parsed.Hour, parsed.Minute, 0);
-            if (target <= now)
-            {
-                target = target.AddDays(1);
-            }
-
-            return true;
-        }
-
-        var parts = text.Split(':');
-        if (parts.Length != 2)
-        {
-            return false;
-        }
-
-        if (!int.TryParse(parts[0], out var hours) || !int.TryParse(parts[1], out var minutes))
-        {
-            return false;
-        }
-
-        if (hours is < 0 or > 23 || minutes is < 0 or > 59)
-        {
-            return false;
-        }
-
-        target = new DateTime(now.Year, now.Month, now.Day, hours, minutes, 0);
-        if (target <= now)
-        {
-            target = target.AddDays(1);
-        }
-
-        return true;
-    }
-
     public TimerSettings CaptureDefaults() => new()
     {
         Mode = _model.Mode.ToString(),
@@ -1032,7 +919,10 @@ internal sealed class TimerWindow : Window
         foreach (var value in Enum.GetValues<TimerMode>())
         {
             var captured = value;
-            mode.Items.Add(NewItem(ModeName(value), (_, _) => { _model.SetMode(captured, _clock()); DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); }));
+            var modeItem = NewItem(ModeName(value), (_, _) => { _model.SetMode(captured, _clock()); DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); });
+            modeItem.IsCheckable = true;
+            modeItem.IsChecked = value == _model.Mode;
+            mode.Items.Add(modeItem);
         }
 
         menu.Items.Add(mode);
@@ -1123,7 +1013,10 @@ internal sealed class TimerWindow : Window
         foreach (var option in new[] { "Light", "Dark", "Auto" })
         {
             var captured = option;
-            theme.Items.Add(NewItem(option, (_, _) => { _theme = captured; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); }));
+            var themeItem = NewItem(option, (_, _) => { _theme = captured; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); });
+            themeItem.IsCheckable = true;
+            themeItem.IsChecked = string.Equals(_theme, option, StringComparison.OrdinalIgnoreCase);
+            theme.Items.Add(themeItem);
         }
 
         style.Items.Add(theme);
@@ -1140,8 +1033,16 @@ internal sealed class TimerWindow : Window
         timeFormat.Items.Add(twelveHourItem);
 
         style.Items.Add(timeFormat);
-        style.Items.Add(NewItem("Progress on/off", (_, _) => { _progressVisible = !_progressVisible; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); }));
-        style.Items.Add(NewItem("Label on/off", (_, _) => { _model.LabelVisible = !_model.LabelVisible; DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); }));
+        var progressItem = NewItem("Show progress", (_, _) => { _progressVisible = !_progressVisible; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); });
+        progressItem.IsCheckable = true;
+        progressItem.IsChecked = _progressVisible;
+        style.Items.Add(progressItem);
+
+        var labelItem = NewItem("Show label", (_, _) => { _model.LabelVisible = !_model.LabelVisible; DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); });
+        labelItem.IsCheckable = true;
+        labelItem.IsChecked = _model.LabelVisible;
+        style.Items.Add(labelItem);
+
         var blinkItem = NewItem("Blink on finish", (_, _) => { _blinkOnFinish = !_blinkOnFinish; DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); });
         blinkItem.IsCheckable = true;
         blinkItem.IsChecked = _blinkOnFinish;
@@ -1207,6 +1108,21 @@ internal sealed class TimerWindow : Window
                         formatOption.IsChecked = !_model.Use24HourTime;
                     }
                 }
+            }
+            else if (item is WpfMenuItem { Header: "Theme" } themeItem)
+            {
+                foreach (var themeOption in themeItem.Items.OfType<WpfMenuItem>())
+                {
+                    themeOption.IsChecked = string.Equals(themeOption.Header?.ToString(), _theme, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            else if (item is WpfMenuItem { Header: "Show progress" } progressItem)
+            {
+                progressItem.IsChecked = _progressVisible;
+            }
+            else if (item is WpfMenuItem { Header: "Show label" } labelItem)
+            {
+                labelItem.IsChecked = _model.LabelVisible;
             }
             else if (item is WpfMenuItem { Header: "Blink on finish" } blinkItem)
             {

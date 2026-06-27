@@ -76,6 +76,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
     public event EventHandler? FreezeStateChanged;
 
+    public event EventHandler? Selected;
+
     public Action? CloseAllRequested { get; }
 
     public bool IsAvailable { get; private set; }
@@ -86,7 +88,25 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
     public bool IsFrozen => _frozen;
 
+    public bool IsSelected { get; private set; }
+
     public double Zoom => _zoom;
+
+    public bool Contains(ScreenPoint point)
+    {
+        return _windowBounds.Contains((int)Math.Round(point.X), (int)Math.Round(point.Y));
+    }
+
+    public void SetSelected(bool selected)
+    {
+        if (IsSelected == selected)
+        {
+            return;
+        }
+
+        IsSelected = selected;
+        _host?.Invalidate();
+    }
 
     public void Show()
     {
@@ -266,6 +286,22 @@ internal sealed class PinnedLensHostWindow : IDisposable
         _host?.ReassertContextMenuTopmost();
     }
 
+    // Pull the window back onto the nearest surviving monitor's working area after a
+    // display change so it is never stranded off-screen on a removed monitor.
+    public void ReconcileToWorkingArea()
+    {
+        if (_disposed || _hostHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var clamped = ClampWindowBoundsToNearestWorkingArea(_windowBounds);
+        if (clamped != _windowBounds)
+        {
+            ApplyHostWindowBounds(clamped, topmost: true);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -304,6 +340,14 @@ internal sealed class PinnedLensHostWindow : IDisposable
         if (!_disposed)
         {
             Closed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void RequestSelection()
+    {
+        if (!_disposed)
+        {
+            Selected?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -673,6 +717,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         private readonly ToolStripMenuItem _freezeItem;
         private readonly ToolStripMenuItem _zoomInItem;
         private readonly ToolStripMenuItem _zoomOutItem;
+        private readonly List<System.Windows.Forms.Timer> _topmostTimers = [];
         private bool _freezeTogglePending;
 
         public HostForm(PinnedLensHostWindow owner)
@@ -701,7 +746,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
             _menu.Items.Add(new ToolStripMenuItem("Close", null, (_, _) => Close()));
             _menu.Items.Add(new ToolStripMenuItem("Close all", null, (_, _) => _owner.CloseAllRequested?.Invoke()));
             _menu.Opening += (_, _) => UpdateMenuState();
-            _menu.Opened += (_, _) => ReassertContextMenuTopmost();
+            TopmostContextMenuHelper.Attach(_menu, _topmostTimers);
             ContextMenuStrip = _menu;
         }
 
@@ -727,6 +772,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
+            _owner.RequestSelection();
+
             if (e.Button == MouseButtons.Left)
             {
                 NativeMethods.ReleaseCapture();
@@ -771,6 +818,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
                     Math.Max(0, ClientSize.Height - BorderThickness * 2)));
             var color = _owner.IsFrozen
                 ? Color.FromArgb(230, 90, 190, 255)
+                : _owner.IsSelected
+                    ? Color.FromArgb(235, 255, 214, 80)
                 : Color.FromArgb(220, 255, 255, 255);
             using var pen = new Pen(color, BorderThickness);
             e.Graphics.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
@@ -792,6 +841,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         {
             if (disposing)
             {
+                TopmostContextMenuHelper.DisposeTimers(_topmostTimers);
                 _menu.Dispose();
             }
 
@@ -800,7 +850,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         private void UpdateMenuState()
         {
-            _freezeItem.Text = _owner.IsFrozen ? "Resume" : "Freeze";
+            _freezeItem.Text = _owner.IsFrozen ? "Unfreeze" : "Freeze";
             _freezeItem.Enabled = !_freezeTogglePending;
             _zoomInItem.Enabled = !_freezeTogglePending && _owner.Zoom < _owner._maximumZoom - 0.001;
             _zoomOutItem.Enabled = !_freezeTogglePending && _owner.Zoom > 1.0 + 0.001;
@@ -849,19 +899,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         public void ReassertContextMenuTopmost()
         {
-            if (!_menu.Visible || _menu.Handle == IntPtr.Zero)
-            {
-                return;
-            }
-
-            NativeMethods.SetWindowPos(
-                _menu.Handle,
-                NativeMethods.HwndTopmost,
-                0,
-                0,
-                0,
-                0,
-                NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+            TopmostContextMenuHelper.ReassertIfVisible(_menu);
         }
 
         protected override void WndProc(ref Message m)

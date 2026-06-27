@@ -11,6 +11,10 @@ internal sealed class SettingsStore
         WriteIndented = true
     };
 
+    // Serializes concurrent writes: the debounced save now runs on a thread-pool
+    // thread, and Dispose still saves synchronously on the UI thread.
+    private readonly object _saveLock = new();
+
     public string SettingsFilePath { get; }
     public bool WasCreatedOnLoad { get; private set; }
 
@@ -48,37 +52,40 @@ internal sealed class SettingsStore
 
     public void Save(AppSettings settings)
     {
-        string? temporaryPath = null;
-        try
+        lock (_saveLock)
         {
-            settings.Normalize();
-            var directory = Path.GetDirectoryName(SettingsFilePath);
-            if (!string.IsNullOrWhiteSpace(directory))
+            string? temporaryPath = null;
+            try
             {
-                Directory.CreateDirectory(directory);
-            }
-
-            var json = JsonSerializer.Serialize(settings, JsonOptions);
-            temporaryPath = SettingsFilePath + $".{Environment.ProcessId}.tmp";
-            File.WriteAllText(temporaryPath, json);
-            File.Move(temporaryPath, SettingsFilePath, overwrite: true);
-            temporaryPath = null;
-        }
-        catch (Exception ex)
-        {
-            AppLog.Error("Could not save settings", ex);
-        }
-        finally
-        {
-            if (temporaryPath is not null)
-            {
-                try
+                settings.Normalize();
+                var directory = Path.GetDirectoryName(SettingsFilePath);
+                if (!string.IsNullOrWhiteSpace(directory))
                 {
-                    File.Delete(temporaryPath);
+                    Directory.CreateDirectory(directory);
                 }
-                catch
+
+                var json = JsonSerializer.Serialize(settings, JsonOptions);
+                temporaryPath = SettingsFilePath + $".{Environment.ProcessId}.tmp";
+                File.WriteAllText(temporaryPath, json);
+                File.Move(temporaryPath, SettingsFilePath, overwrite: true);
+                temporaryPath = null;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Could not save settings", ex);
+            }
+            finally
+            {
+                if (temporaryPath is not null)
                 {
-                    // Cleanup must not hide the original settings error.
+                    try
+                    {
+                        File.Delete(temporaryPath);
+                    }
+                    catch
+                    {
+                        // Cleanup must not hide the original settings error.
+                    }
                 }
             }
         }

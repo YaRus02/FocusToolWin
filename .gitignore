@@ -50,3 +50,6 @@ publish/**
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+IDEAS.md
+docs/**

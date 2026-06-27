@@ -14,9 +14,13 @@ internal sealed class OverlayManager : IDisposable
     private readonly Func<InteractionMode> _modeProvider;
     private readonly Func<double> _clockProvider;
     private readonly Func<ScreenPoint?> _spotlightProvider;
+    private readonly Func<CursorHighlightFrame> _cursorHighlightProvider;
     private readonly Func<ScreenBoardFrame?> _screenBoardProvider;
-    private readonly Func<ScreenRect?> _pinnedLensSelectionProvider;
+    private readonly Func<RectOverlayVisual?> _rectOverlayProvider;
     private readonly Func<IReadOnlyList<RegionMask>> _regionMaskProvider;
+    private readonly Func<int> _regionMaskSelectionProvider;
+    private readonly Func<IReadOnlyList<ScreenRect>> _spotlightRegionProvider;
+    private readonly Func<int> _spotlightRegionSelectionProvider;
     private readonly IOverlayInputHandler _inputHandler;
     private readonly Action? _beforeTopmostReassert;
     private readonly Action? _afterTopmostReassert;
@@ -32,9 +36,13 @@ internal sealed class OverlayManager : IDisposable
         Func<InteractionMode> modeProvider,
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
+        Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<RectOverlayVisual?> rectOverlayProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
+        Func<int> regionMaskSelectionProvider,
+        Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
+        Func<int> spotlightRegionSelectionProvider,
         IOverlayInputHandler inputHandler,
         Action? beforeTopmostReassert = null,
         Action? afterTopmostReassert = null)
@@ -45,9 +53,13 @@ internal sealed class OverlayManager : IDisposable
         _modeProvider = modeProvider;
         _clockProvider = clockProvider;
         _spotlightProvider = spotlightProvider;
+        _cursorHighlightProvider = cursorHighlightProvider;
         _screenBoardProvider = screenBoardProvider;
-        _pinnedLensSelectionProvider = pinnedLensSelectionProvider;
+        _rectOverlayProvider = rectOverlayProvider;
         _regionMaskProvider = regionMaskProvider;
+        _regionMaskSelectionProvider = regionMaskSelectionProvider;
+        _spotlightRegionProvider = spotlightRegionProvider;
+        _spotlightRegionSelectionProvider = spotlightRegionSelectionProvider;
         _inputHandler = inputHandler;
         _beforeTopmostReassert = beforeTopmostReassert;
         _afterTopmostReassert = afterTopmostReassert;
@@ -106,6 +118,27 @@ internal sealed class OverlayManager : IDisposable
         foreach (var window in _windows)
         {
             window.Refresh();
+        }
+    }
+
+    // Repaint only the monitor(s) whose content actually changes as the cursor moves
+    // (spotlight hole / magnifier ring). Other monitors keep an identical cached
+    // frame, so on a multi-monitor setup idle surfaces are not repainted every move.
+    // Both the current and previous cursor monitors are refreshed to clear the old
+    // position when the cursor crosses a monitor boundary.
+    public void InvalidateForCursor(ScreenPoint current, ScreenPoint previous)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        foreach (var window in _windows)
+        {
+            if (window.Contains(current) || window.Contains(previous))
+            {
+                window.Refresh();
+            }
         }
     }
 
@@ -177,6 +210,47 @@ internal sealed class OverlayManager : IDisposable
         return null;
     }
 
+    // Snapshot only the part of the overlay surface that overlaps the captured
+    // source rect. The Capture Stage can draw it straight onto its back buffer.
+    public OverlayLayer? CaptureOverlayLayer(ScreenRect rect)
+    {
+        var window = PickOverlayWindowForRect(rect);
+        var bitmap = window?.CaptureSurfaceRegion(rect, OverlayRenderOptions.CaptureStage);
+        if (bitmap is null)
+        {
+            return null;
+        }
+
+        var width = bitmap.PixelWidth;
+        var height = bitmap.PixelHeight;
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+        return new OverlayLayer(pixels, width, height, stride);
+    }
+
+    // Prefer the monitor containing the source rect's center (where the window
+    // mostly lives); fall back to the first intersecting monitor.
+    private OverlayWindow? PickOverlayWindowForRect(ScreenRect rect)
+    {
+        var center = new ScreenPoint((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2);
+        OverlayWindow? firstIntersecting = null;
+        foreach (var window in _windows)
+        {
+            if (window.Contains(center))
+            {
+                return window;
+            }
+
+            if (firstIntersecting is null && window.Intersects(rect))
+            {
+                firstIntersecting = window;
+            }
+        }
+
+        return firstIntersecting;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -234,7 +308,7 @@ internal sealed class OverlayManager : IDisposable
 
         foreach (var screen in Screen.AllScreens)
         {
-            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _screenBoardProvider, _pinnedLensSelectionProvider, _regionMaskProvider, _inputHandler));
+            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _cursorHighlightProvider, _screenBoardProvider, _rectOverlayProvider, _regionMaskProvider, _regionMaskSelectionProvider, _spotlightRegionProvider, _spotlightRegionSelectionProvider, _inputHandler));
         }
     }
 

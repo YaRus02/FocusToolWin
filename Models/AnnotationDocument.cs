@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Windows.Media.Imaging;
 using FocusTool.Win.Overlay;
 
 namespace FocusTool.Win.Models;
@@ -12,6 +13,12 @@ internal sealed class AnnotationDocument
     private readonly Stack<List<AnnotationShape>> _redo = new();
     private readonly List<int> _selectedIndices = [];
     private readonly Func<double> _clockProvider;
+    private List<AnnotationShape>? _textEditUndoSnapshot;
+    private AnnotationShape? _editingTextOriginal;
+    private int _editingTextIndex = -1;
+    private int _objectEditIndex = -1;
+    private AnnotationEditHandle _objectEditHandle = AnnotationEditHandle.None;
+    private bool _objectEditHandleUndoPushed;
     private bool _historyMayContainTemporaryAnnotations;
     private bool _movingSelection;
     private bool _selectionUndoPushed;
@@ -23,6 +30,10 @@ internal sealed class AnnotationDocument
         ? ScreenRect.FromPoints(Draft.Start, Draft.End)
         : null;
     public bool HasDraftText => Draft?.Tool == AnnotationTool.Text;
+    public bool IsEditingText => IsValidEditingTextIndex();
+    public bool HasTextInput => HasDraftText || IsEditingText;
+    public bool IsObjectEditing => IsValidObjectEditIndex();
+    public AnnotationShape? ObjectEditShape => IsValidObjectEditIndex() ? _shapes[_objectEditIndex] : null;
     public bool HasSelection => _selectedIndices.Count > 0 && SelectionBounds is not null;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
@@ -40,7 +51,7 @@ internal sealed class AnnotationDocument
 
     public void BeginStroke(AnnotationTool tool, ScreenPoint start, AppSettings settings)
     {
-        CommitTextDraft();
+        CommitTextInput();
         ClearSelectionCore();
 
         Draft = new AnnotationShape
@@ -62,6 +73,33 @@ internal sealed class AnnotationDocument
         OnChanged();
     }
 
+    public void AddPointShape(AnnotationTool tool, ScreenPoint point, AppSettings settings)
+    {
+        if (tool != AnnotationTool.StepOval)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tool), tool, "Only point-based annotation tools can be added directly.");
+        }
+
+        CommitTextInput();
+        ClearSelectionCore();
+        PushUndo();
+
+        var shape = new AnnotationShape
+        {
+            Tool = tool,
+            Start = point,
+            End = point,
+            Color = settings.AnnotationColor,
+            Thickness = settings.AnnotationThickness,
+            FontSize = settings.AnnotationFontSize
+        };
+        shape.ApplyFadingSettings(settings);
+        shape.MarkCreated(_clockProvider());
+        _shapes.Add(shape);
+
+        OnChanged();
+    }
+
     public void UpdateStroke(ScreenPoint current, bool shift)
     {
         if (Draft is null || Draft.Tool is AnnotationTool.Text or AnnotationTool.Move)
@@ -78,7 +116,7 @@ internal sealed class AnnotationDocument
         }
         else
         {
-            Draft.End = ApplyConstraint(Draft.Tool, Draft.Start, current, shift);
+            Draft.End = AnnotationGeometry.ApplyConstraint(Draft.Tool, Draft.Start, current, shift);
         }
 
         OnDraftProgressed();
@@ -91,7 +129,7 @@ internal sealed class AnnotationDocument
             return;
         }
 
-        if (IsMeaningful(Draft))
+        if (AnnotationGeometry.IsMeaningful(Draft))
         {
             PushUndo();
             Draft.MarkCreated(_clockProvider());
@@ -104,7 +142,7 @@ internal sealed class AnnotationDocument
 
     public void BeginSelection(ScreenPoint start)
     {
-        CommitTextDraft();
+        CommitTextInput();
         ClearSelectionCore();
 
         Draft = new AnnotationShape
@@ -151,7 +189,7 @@ internal sealed class AnnotationDocument
 
             if (_selectedIndices.Count > 0)
             {
-                SelectionBounds = selectionRect;
+                RefreshSelectionBoundsCore();
             }
         }
 
@@ -160,7 +198,7 @@ internal sealed class AnnotationDocument
 
     public bool BeginSelectionMove(ScreenPoint point)
     {
-        CommitTextDraft();
+        CommitTextInput();
 
         if (!HasSelection || SelectionBounds is not { } bounds || !bounds.Contains(point))
         {
@@ -219,6 +257,60 @@ internal sealed class AnnotationDocument
         _selectionUndoPushed = false;
     }
 
+    public bool TryHitObjectEditHandle(ScreenPoint point, out AnnotationEditHandle handle)
+    {
+        if (!IsValidObjectEditIndex())
+        {
+            handle = AnnotationEditHandle.None;
+            return false;
+        }
+
+        return AnnotationHitTesting.TryHitEditHandle(_shapes[_objectEditIndex], point, out handle);
+    }
+
+    public bool BeginObjectEditHandleDrag(AnnotationEditHandle handle)
+    {
+        if (!IsValidObjectEditIndex() || handle == AnnotationEditHandle.None)
+        {
+            return false;
+        }
+
+        _objectEditHandle = handle;
+        _objectEditHandleUndoPushed = false;
+        return true;
+    }
+
+    public void UpdateObjectEditHandleDrag(ScreenPoint point, bool shift)
+    {
+        if (!IsValidObjectEditIndex() || _objectEditHandle == AnnotationEditHandle.None)
+        {
+            return;
+        }
+
+        var shape = _shapes[_objectEditIndex];
+        if (!AnnotationGeometry.CanResize(shape.Tool))
+        {
+            return;
+        }
+
+        if (!_objectEditHandleUndoPushed)
+        {
+            PushUndo();
+            _objectEditHandleUndoPushed = true;
+            OnChanged();
+        }
+
+        AnnotationGeometry.ResizeShape(shape, _objectEditHandle, point, shift);
+        SelectionBounds = shape.GetBounds();
+        OnDraftProgressed();
+    }
+
+    public void EndObjectEditHandleDrag()
+    {
+        _objectEditHandle = AnnotationEditHandle.None;
+        _objectEditHandleUndoPushed = false;
+    }
+
     public void ClearSelection()
     {
         if (ClearSelectionCore())
@@ -227,9 +319,190 @@ internal sealed class AnnotationDocument
         }
     }
 
+    public bool HitTestText(ScreenPoint point)
+    {
+        return AnnotationHitTesting.TryFindTextAt(_shapes, point, out _);
+    }
+
+    public bool HitTestShape(ScreenPoint point)
+    {
+        return AnnotationHitTesting.TryFindShapeAt(_shapes, point, out _);
+    }
+
+    public bool HitTestStep(ScreenPoint point)
+    {
+        return AnnotationHitTesting.TryFindShapeAt(_shapes, point, out var index)
+            && _shapes[index].Tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
+    }
+
+    public bool TryBeginTextEditAt(ScreenPoint point)
+    {
+        CommitTextInput();
+        if (!AnnotationHitTesting.TryFindTextAt(_shapes, point, out var index))
+        {
+            return false;
+        }
+
+        _editingTextIndex = index;
+        _editingTextOriginal = _shapes[index].Clone();
+        _textEditUndoSnapshot = Snapshot(_clockProvider());
+        SelectSingleIndexCore(index, objectEdit: true);
+        OnChanged();
+        return true;
+    }
+
+    public bool TryBeginObjectEditAt(ScreenPoint point)
+    {
+        CommitTextInput();
+        if (!AnnotationHitTesting.TryFindShapeAt(_shapes, point, out var index))
+        {
+            return false;
+        }
+
+        SelectSingleIndexCore(index, objectEdit: true);
+        OnChanged();
+        return true;
+    }
+
+    public bool ObjectEditContains(ScreenPoint point)
+    {
+        return IsValidObjectEditIndex()
+            && SelectionBounds is { } bounds
+            && bounds.Contains(point);
+    }
+
+    public void EndObjectEdit()
+    {
+        if (!IsObjectEditing)
+        {
+            return;
+        }
+
+        ClearSelectionCore();
+        OnChanged();
+    }
+
+    public bool TextEditContains(ScreenPoint point)
+    {
+        return IsValidEditingTextIndex() && _shapes[_editingTextIndex].GetBounds().Contains(point);
+    }
+
+    public bool IsTextBeingEdited(AnnotationShape shape)
+    {
+        return IsValidEditingTextIndex() && ReferenceEquals(_shapes[_editingTextIndex], shape);
+    }
+
+    public bool ApplyColorToSelection(string color)
+    {
+        if (IsValidEditingTextIndex())
+        {
+            _shapes[_editingTextIndex].Color = color;
+            RefreshSelectionBoundsCore();
+            OnChanged();
+            return true;
+        }
+
+        var indices = SelectedShapeIndices()
+            .Where(index => _shapes[index].Tool != AnnotationTool.Image)
+            .ToList();
+        if (indices.Count == 0 || indices.All(index => string.Equals(_shapes[index].Color, color, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        PushUndo();
+        foreach (var index in indices)
+        {
+            _shapes[index].Color = color;
+        }
+
+        RefreshSelectionBoundsCore();
+        OnChanged();
+        return true;
+    }
+
+    public bool AdjustSelectedTextFontSize(double delta)
+    {
+        if (Math.Abs(delta) < 0.001)
+        {
+            return false;
+        }
+
+        if (IsValidEditingTextIndex())
+        {
+            var shape = _shapes[_editingTextIndex];
+            var next = AnnotationGeometry.ClampFontSize(shape.FontSize + delta);
+            if (Math.Abs(shape.FontSize - next) < 0.001)
+            {
+                return false;
+            }
+
+            shape.FontSize = next;
+            RefreshSelectionBoundsCore();
+            OnChanged();
+            return true;
+        }
+
+        var indices = SelectedShapeIndices()
+            .Where(index => _shapes[index].Tool == AnnotationTool.Text)
+            .ToList();
+        if (indices.Count == 0)
+        {
+            return false;
+        }
+
+        var changed = indices.Any(index => Math.Abs(_shapes[index].FontSize - AnnotationGeometry.ClampFontSize(_shapes[index].FontSize + delta)) >= 0.001);
+        if (!changed)
+        {
+            return false;
+        }
+
+        PushUndo();
+        foreach (var index in indices)
+        {
+            _shapes[index].FontSize = AnnotationGeometry.ClampFontSize(_shapes[index].FontSize + delta);
+        }
+
+        RefreshSelectionBoundsCore();
+        OnChanged();
+        return true;
+    }
+
+    public bool AdjustSelectedThickness(double delta)
+    {
+        if (Math.Abs(delta) < 0.001)
+        {
+            return false;
+        }
+
+        var indices = SelectedShapeIndices()
+            .Where(index => _shapes[index].Tool is not AnnotationTool.Text and not AnnotationTool.Image)
+            .ToList();
+        if (indices.Count == 0)
+        {
+            return false;
+        }
+
+        var changed = indices.Any(index => Math.Abs(_shapes[index].Thickness - AnnotationGeometry.ClampThickness(_shapes[index].Thickness + delta)) >= 0.001);
+        if (!changed)
+        {
+            return false;
+        }
+
+        PushUndo();
+        foreach (var index in indices)
+        {
+            _shapes[index].Thickness = AnnotationGeometry.ClampThickness(_shapes[index].Thickness + delta);
+        }
+
+        RefreshSelectionBoundsCore();
+        OnChanged();
+        return true;
+    }
+
     public bool DeleteSelection()
     {
-        CommitTextDraft();
+        CommitTextInput();
 
         if (!HasSelection)
         {
@@ -259,9 +532,64 @@ internal sealed class AnnotationDocument
         return true;
     }
 
+    public bool AddPastedText(string text, ScreenPoint point, AppSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        CommitTextInput();
+        ClearSelectionCore();
+        PushUndo();
+
+        var shape = new AnnotationShape
+        {
+            Tool = AnnotationTool.Text,
+            Start = point,
+            End = point,
+            Color = settings.AnnotationColor,
+            Thickness = settings.AnnotationThickness,
+            FontSize = settings.AnnotationFontSize,
+            Text = text.Replace("\r\n", "\n").Replace('\r', '\n')
+        };
+        shape.MarkCreated(_clockProvider());
+        _shapes.Add(shape);
+        SelectSingleIndexCore(_shapes.Count - 1, objectEdit: true);
+
+        OnChanged();
+        return true;
+    }
+
+    public bool AddPastedImage(BitmapSource image, ScreenRect rect)
+    {
+        if (rect.Width < 1 || rect.Height < 1)
+        {
+            return false;
+        }
+
+        CommitTextInput();
+        ClearSelectionCore();
+        PushUndo();
+
+        var shape = new AnnotationShape
+        {
+            Tool = AnnotationTool.Image,
+            Start = new ScreenPoint(rect.Left, rect.Top),
+            End = new ScreenPoint(rect.Right, rect.Bottom),
+            Image = image
+        };
+        shape.MarkCreated(_clockProvider());
+        _shapes.Add(shape);
+        SelectSingleIndexCore(_shapes.Count - 1, objectEdit: true);
+
+        OnChanged();
+        return true;
+    }
+
     public void BeginText(ScreenPoint point, AppSettings settings)
     {
-        CommitTextDraft();
+        CommitTextInput();
         ClearSelectionCore();
 
         Draft = new AnnotationShape
@@ -281,27 +609,75 @@ internal sealed class AnnotationDocument
 
     public void AppendText(string text)
     {
-        if (Draft?.Tool != AnnotationTool.Text || string.IsNullOrEmpty(text))
+        if (string.IsNullOrEmpty(text))
         {
             return;
         }
 
-        Draft.Text += text;
-        OnChanged();
+        if (Draft?.Tool == AnnotationTool.Text)
+        {
+            Draft.Text += text;
+            OnChanged();
+            return;
+        }
+
+        if (IsValidEditingTextIndex())
+        {
+            _shapes[_editingTextIndex].Text += text;
+            RefreshSelectionBoundsCore();
+            OnChanged();
+        }
     }
 
     public void BackspaceText()
     {
-        if (Draft?.Tool != AnnotationTool.Text || Draft.Text.Length == 0)
+        if (Draft?.Tool == AnnotationTool.Text)
+        {
+            if (Draft.Text.Length == 0)
+            {
+                return;
+            }
+
+            Draft.Text = RemoveLastTextElement(Draft.Text);
+            OnChanged();
+            return;
+        }
+
+        if (!IsValidEditingTextIndex() || _shapes[_editingTextIndex].Text.Length == 0)
         {
             return;
         }
 
-        var elements = StringInfo.ParseCombiningCharacters(Draft.Text);
-        Draft.Text = elements.Length > 1
-            ? Draft.Text[..elements[^1]]
-            : string.Empty;
+        _shapes[_editingTextIndex].Text = RemoveLastTextElement(_shapes[_editingTextIndex].Text);
+        RefreshSelectionBoundsCore();
         OnChanged();
+    }
+
+    public void DeleteText()
+    {
+        BackspaceText();
+    }
+
+    public void CommitTextInput()
+    {
+        if (IsEditingText)
+        {
+            CommitTextEdit();
+            return;
+        }
+
+        CommitTextDraft();
+    }
+
+    public void CancelTextInput()
+    {
+        if (IsEditingText)
+        {
+            CancelTextEdit();
+            return;
+        }
+
+        CancelDraft();
     }
 
     public void CommitTextDraft()
@@ -322,6 +698,56 @@ internal sealed class AnnotationDocument
         OnChanged();
     }
 
+    public void CommitTextEdit()
+    {
+        if (!IsValidEditingTextIndex())
+        {
+            ClearTextEditCore();
+            return;
+        }
+
+        var index = _editingTextIndex;
+        var shape = _shapes[index];
+        var removeShape = string.IsNullOrWhiteSpace(shape.Text);
+        var changed = _editingTextOriginal is null || removeShape || !AnnotationHistory.ShapesEqual(shape, _editingTextOriginal);
+        if (changed && _textEditUndoSnapshot is not null)
+        {
+            PushUndoSnapshot(_textEditUndoSnapshot);
+        }
+
+        if (removeShape)
+        {
+            _shapes.RemoveAt(index);
+            ClearSelectionCore();
+        }
+        else
+        {
+            SelectSingleIndexCore(index, objectEdit: true);
+        }
+
+        ClearTextEditCore(keepSelection: true);
+        OnChanged();
+    }
+
+    public void CancelTextEdit()
+    {
+        if (!IsValidEditingTextIndex())
+        {
+            ClearTextEditCore();
+            return;
+        }
+
+        var index = _editingTextIndex;
+        if (_editingTextOriginal is not null)
+        {
+            _shapes[index] = _editingTextOriginal.Clone();
+            SelectSingleIndexCore(index, objectEdit: true);
+        }
+
+        ClearTextEditCore(keepSelection: true);
+        OnChanged();
+    }
+
     public void CancelDraft()
     {
         if (Draft is null)
@@ -335,7 +761,7 @@ internal sealed class AnnotationDocument
 
     public void Undo()
     {
-        CommitTextDraft();
+        CommitTextInput();
         EndSelectionMove();
 
         var nowMs = _clockProvider();
@@ -360,7 +786,7 @@ internal sealed class AnnotationDocument
 
     public void Redo()
     {
-        CommitTextDraft();
+        CommitTextInput();
         EndSelectionMove();
 
         var nowMs = _clockProvider();
@@ -386,11 +812,13 @@ internal sealed class AnnotationDocument
     public void Clear()
     {
         var hadDraft = Draft is not null;
+        var hadTextEdit = IsEditingText;
         var hadSelection = ClearSelectionCore();
         Draft = null;
+        ClearTextEditCore();
         if (_shapes.Count == 0)
         {
-            if (hadDraft || hadSelection)
+            if (hadDraft || hadTextEdit || hadSelection)
             {
                 OnChanged();
             }
@@ -437,33 +865,22 @@ internal sealed class AnnotationDocument
         }
     }
 
-    private void PushHistory(Stack<List<AnnotationShape>> history, List<AnnotationShape> snapshot)
+    private void PushUndoSnapshot(List<AnnotationShape> snapshot)
     {
-        PushBounded(history, snapshot);
-        if (!_historyMayContainTemporaryAnnotations && snapshot.Any(shape => shape.IsTemporary))
+        PushHistory(_undo, snapshot.Select(shape => shape.Clone()).ToList());
+        _redo.Clear();
+        if (_historyMayContainTemporaryAnnotations)
         {
-            _historyMayContainTemporaryAnnotations = true;
+            RefreshHistoryTemporaryFlag();
         }
     }
 
-    private static void PushBounded(
-        Stack<List<AnnotationShape>> history,
-        List<AnnotationShape> snapshot)
+    private void PushHistory(Stack<List<AnnotationShape>> history, List<AnnotationShape> snapshot)
     {
-        history.Push(snapshot);
-        if (history.Count <= MaximumHistoryEntries)
+        AnnotationHistory.PushBounded(history, snapshot, MaximumHistoryEntries);
+        if (!_historyMayContainTemporaryAnnotations && snapshot.Any(shape => shape.IsTemporary))
         {
-            return;
-        }
-
-        var retained = history
-            .Take(MaximumHistoryEntries)
-            .Reverse()
-            .ToArray();
-        history.Clear();
-        foreach (var item in retained)
-        {
-            history.Push(item);
+            _historyMayContainTemporaryAnnotations = true;
         }
     }
 
@@ -475,6 +892,13 @@ internal sealed class AnnotationDocument
             .ToList();
     }
 
+    private IEnumerable<int> SelectedShapeIndices()
+    {
+        return _selectedIndices
+            .Where(index => index >= 0 && index < _shapes.Count)
+            .Distinct();
+    }
+
     private void Restore(IEnumerable<AnnotationShape> snapshot, double nowMs)
     {
         _shapes.Clear();
@@ -482,6 +906,7 @@ internal sealed class AnnotationDocument
             .Where(shape => !shape.IsExpired(nowMs))
             .Select(shape => shape.Clone()));
         Draft = null;
+        ClearTextEditCore();
         ClearSelectionCore();
     }
 
@@ -508,8 +933,8 @@ internal sealed class AnnotationDocument
     private bool NormalizeHistory(double nowMs)
     {
         var current = Snapshot(nowMs);
-        var changed = NormalizeHistoryStack(_undo, current, nowMs)
-            | NormalizeHistoryStack(_redo, current, nowMs);
+        var changed = AnnotationHistory.NormalizeStack(_undo, current, nowMs)
+            | AnnotationHistory.NormalizeStack(_redo, current, nowMs);
         RefreshHistoryTemporaryFlag();
         return changed;
     }
@@ -521,157 +946,81 @@ internal sealed class AnnotationDocument
 
     private void RefreshHistoryTemporaryFlag()
     {
-        _historyMayContainTemporaryAnnotations = HistoryContainsTemporaryAnnotations(_undo)
-            || HistoryContainsTemporaryAnnotations(_redo);
-    }
-
-    private static bool HistoryContainsTemporaryAnnotations(Stack<List<AnnotationShape>> history)
-    {
-        return history.Any(snapshot => snapshot.Any(shape => shape.IsTemporary));
-    }
-
-    private static bool NormalizeHistoryStack(
-        Stack<List<AnnotationShape>> history,
-        IReadOnlyList<AnnotationShape> current,
-        double nowMs)
-    {
-        if (history.Count == 0)
-        {
-            return false;
-        }
-
-        var original = history.ToList();
-        var normalized = new List<List<AnnotationShape>>();
-        var previous = current;
-        foreach (var snapshot in original)
-        {
-            var filtered = snapshot
-                .Where(shape => !shape.IsExpired(nowMs))
-                .Select(shape => shape.Clone())
-                .ToList();
-
-            if (SnapshotsEqual(filtered, previous))
-            {
-                continue;
-            }
-
-            normalized.Add(filtered);
-            previous = filtered;
-        }
-
-        var changed = normalized.Count != original.Count;
-        if (!changed)
-        {
-            for (var i = 0; i < original.Count; i++)
-            {
-                if (!SnapshotsEqual(original[i], normalized[i]))
-                {
-                    changed = true;
-                    break;
-                }
-            }
-        }
-
-        if (!changed)
-        {
-            return false;
-        }
-
-        history.Clear();
-        for (var i = normalized.Count - 1; i >= 0; i--)
-        {
-            history.Push(normalized[i]);
-        }
-
-        return true;
-    }
-
-    private static bool SnapshotsEqual(
-        IReadOnlyList<AnnotationShape> left,
-        IReadOnlyList<AnnotationShape> right)
-    {
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < left.Count; i++)
-        {
-            if (!ShapesEqual(left[i], right[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool ShapesEqual(AnnotationShape left, AnnotationShape right)
-    {
-        return left.Tool == right.Tool
-            && left.Start.Equals(right.Start)
-            && left.End.Equals(right.End)
-            && left.Points.SequenceEqual(right.Points)
-            && string.Equals(left.Color, right.Color, StringComparison.Ordinal)
-            && Math.Abs(left.Thickness - right.Thickness) < 0.0001
-            && string.Equals(left.Text, right.Text, StringComparison.Ordinal)
-            && Math.Abs(left.FontSize - right.FontSize) < 0.0001
-            && left.IsTemporary == right.IsTemporary
-            && Math.Abs(left.CreatedAtMs - right.CreatedAtMs) < 0.0001
-            && left.TemporaryVisibleMs == right.TemporaryVisibleMs
-            && left.TemporaryFadeMs == right.TemporaryFadeMs;
+        _historyMayContainTemporaryAnnotations = AnnotationHistory.HistoryContainsTemporaryAnnotations(_undo)
+            || AnnotationHistory.HistoryContainsTemporaryAnnotations(_redo);
     }
 
     private bool ClearSelectionCore()
     {
-        var hadSelection = _selectedIndices.Count > 0 || SelectionBounds is not null || _movingSelection;
+        var hadSelection = _selectedIndices.Count > 0 || SelectionBounds is not null || _movingSelection || _objectEditIndex >= 0;
         _selectedIndices.Clear();
         SelectionBounds = null;
         _movingSelection = false;
         _selectionUndoPushed = false;
+        _objectEditIndex = -1;
+        _objectEditHandle = AnnotationEditHandle.None;
+        _objectEditHandleUndoPushed = false;
         return hadSelection;
     }
 
-    private static bool IsMeaningful(AnnotationShape shape)
+    private void SelectSingleIndexCore(int index, bool objectEdit = false)
     {
-        return (shape.Tool == AnnotationTool.Pencil || shape.Tool == AnnotationTool.Highlighter)
-            ? shape.Points.Count > 1
-            : shape.Start.DistanceTo(shape.End) >= 2.0;
+        ClearSelectionCore();
+        if (index < 0 || index >= _shapes.Count)
+        {
+            return;
+        }
+
+        _selectedIndices.Add(index);
+        _objectEditIndex = objectEdit ? index : -1;
+        SelectionBounds = _shapes[index].GetBounds();
     }
 
-    private static ScreenPoint ApplyConstraint(AnnotationTool tool, ScreenPoint start, ScreenPoint current, bool shift)
+    private void RefreshSelectionBoundsCore()
     {
-        if (!shift)
+        ScreenRect? bounds = null;
+        foreach (var index in SelectedShapeIndices())
         {
-            return current;
+            bounds = bounds is { } current
+                ? current.Union(_shapes[index].GetBounds())
+                : _shapes[index].GetBounds();
         }
 
-        var dx = current.X - start.X;
-        var dy = current.Y - start.Y;
+        SelectionBounds = bounds;
+    }
 
-        if (tool is AnnotationTool.Rectangle or AnnotationTool.Ellipse)
+    private bool IsValidEditingTextIndex()
+    {
+        return _editingTextIndex >= 0
+            && _editingTextIndex < _shapes.Count
+            && _shapes[_editingTextIndex].Tool == AnnotationTool.Text;
+    }
+
+    private bool IsValidObjectEditIndex()
+    {
+        return _objectEditIndex >= 0
+            && _objectEditIndex < _shapes.Count
+            && _selectedIndices.Count == 1
+            && _selectedIndices[0] == _objectEditIndex;
+    }
+
+    private void ClearTextEditCore(bool keepSelection = false)
+    {
+        _editingTextIndex = -1;
+        _editingTextOriginal = null;
+        _textEditUndoSnapshot = null;
+        if (!keepSelection)
         {
-            var size = Math.Max(Math.Abs(dx), Math.Abs(dy));
-            // Use a non-zero sign so an axis-aligned drag (dx==0 or dy==0) still
-            // produces a square instead of collapsing to a zero-width/height shape.
-            var signX = dx < 0 ? -1 : 1;
-            var signY = dy < 0 ? -1 : 1;
-            return new ScreenPoint(start.X + signX * size, start.Y + signY * size);
+            ClearSelectionCore();
         }
+    }
 
-        if (tool == AnnotationTool.Line)
-        {
-            var length = Math.Sqrt(dx * dx + dy * dy);
-            if (length < 0.01)
-            {
-                return current;
-            }
-
-            var snappedAngle = Math.Round(Math.Atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-            return new ScreenPoint(start.X + Math.Cos(snappedAngle) * length, start.Y + Math.Sin(snappedAngle) * length);
-        }
-
-        return current;
+    private static string RemoveLastTextElement(string text)
+    {
+        var elements = StringInfo.ParseCombiningCharacters(text);
+        return elements.Length > 1
+            ? text[..elements[^1]]
+            : string.Empty;
     }
 
     private void OnChanged()

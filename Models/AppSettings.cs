@@ -24,14 +24,32 @@ public sealed class AppSettings
         "#FF2080FF"
     ];
 
+    private static readonly string[] DefaultCursorHighlightColorSlots =
+    [
+        "#BFFFD400",
+        "#BF20D6FF",
+        "#BFFF4FD8",
+        "#BFFFFFFF",
+        "#BF00D26A"
+    ];
+
     public string Color { get; set; } = "#FFFF2020";
     public List<string> LaserColorPresets { get; set; } = [.. DefaultColorSlots];
     public double PointSize { get; set; } = 12;
     public int TrailLengthMs { get; set; } = 400;
     public int FadeDurationMs { get; set; } = 500;
     public bool GlowEnabled { get; set; } = true;
-    public string LaserActivationMode { get; set; } = string.Empty;
-    public string LaserHoldShortcut { get; set; } = "XButton2";
+    public string LaserActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Hold.ToString();
+    public string LaserHoldShortcut { get; set; } = "Alt+Z";
+    [JsonIgnore]
+    public bool CursorHighlightEnabled { get; set; }
+    public string CursorHighlightColor { get; set; } = "#BFFFD400";
+    public List<string> CursorHighlightColorPresets { get; set; } = [.. DefaultCursorHighlightColorSlots];
+    public double CursorHighlightRadius { get; set; } = 30;
+    public double CursorHighlightThickness { get; set; } = 3;
+    public string CursorHighlightActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Hold.ToString();
+    public string CursorHighlightHoldShortcut { get; set; } = "Alt+X";
+    public bool ClickPulseEnabled { get; set; }
     [JsonIgnore]
     public bool SpotlightEnabled { get; set; }
     public double SpotlightRadius { get; set; } = 160;
@@ -45,6 +63,7 @@ public sealed class AppSettings
     public string RegionMaskColor { get; set; } = "#FF000000";
     public List<string> RegionMaskColorPresets { get; set; } = [.. DefaultRegionMaskColorSlots];
     public double RegionMaskOpacity { get; set; } = 1.0;
+    public string RegionMaskStyle { get; set; } = FocusTool.Win.Models.RegionMaskStyle.StripesWithLabel.ToString();
     public string AnnotationColor { get; set; } = "#FFFF2020";
     public List<string> AnnotationColorPresets { get; set; } = [.. DefaultColorSlots];
     public double AnnotationThickness { get; set; } = 4;
@@ -66,6 +85,14 @@ public sealed class AppSettings
         GlowEnabled = GlowEnabled,
         LaserActivationMode = LaserActivationMode,
         LaserHoldShortcut = LaserHoldShortcut,
+        CursorHighlightEnabled = CursorHighlightEnabled,
+        CursorHighlightColor = CursorHighlightColor,
+        CursorHighlightColorPresets = [.. CursorHighlightColorPresets],
+        CursorHighlightRadius = CursorHighlightRadius,
+        CursorHighlightThickness = CursorHighlightThickness,
+        CursorHighlightActivationMode = CursorHighlightActivationMode,
+        CursorHighlightHoldShortcut = CursorHighlightHoldShortcut,
+        ClickPulseEnabled = ClickPulseEnabled,
         SpotlightEnabled = SpotlightEnabled,
         SpotlightRadius = SpotlightRadius,
         SpotlightOpacity = SpotlightOpacity,
@@ -77,6 +104,7 @@ public sealed class AppSettings
         RegionMaskColor = RegionMaskColor,
         RegionMaskColorPresets = [.. RegionMaskColorPresets],
         RegionMaskOpacity = RegionMaskOpacity,
+        RegionMaskStyle = RegionMaskStyle,
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
         AnnotationThickness = AnnotationThickness,
@@ -99,6 +127,14 @@ public sealed class AppSettings
         GlowEnabled = other.GlowEnabled;
         LaserActivationMode = other.LaserActivationMode;
         LaserHoldShortcut = other.LaserHoldShortcut;
+        CursorHighlightEnabled = other.CursorHighlightEnabled;
+        CursorHighlightColor = other.CursorHighlightColor;
+        CursorHighlightColorPresets = [.. other.CursorHighlightColorPresets];
+        CursorHighlightRadius = other.CursorHighlightRadius;
+        CursorHighlightThickness = other.CursorHighlightThickness;
+        CursorHighlightActivationMode = other.CursorHighlightActivationMode;
+        CursorHighlightHoldShortcut = other.CursorHighlightHoldShortcut;
+        ClickPulseEnabled = other.ClickPulseEnabled;
         SpotlightEnabled = other.SpotlightEnabled;
         SpotlightRadius = other.SpotlightRadius;
         SpotlightOpacity = other.SpotlightOpacity;
@@ -110,6 +146,7 @@ public sealed class AppSettings
         RegionMaskColor = other.RegionMaskColor;
         RegionMaskColorPresets = [.. other.RegionMaskColorPresets];
         RegionMaskOpacity = other.RegionMaskOpacity;
+        RegionMaskStyle = other.RegionMaskStyle;
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
         AnnotationThickness = other.AnnotationThickness;
@@ -131,6 +168,7 @@ public sealed class AppSettings
         }
 
         LaserColorPresets = NormalizeColorPresets(LaserColorPresets, DefaultColorSlots);
+        CursorHighlightColorPresets = NormalizeColorPresets(CursorHighlightColorPresets, DefaultCursorHighlightColorSlots);
         AnnotationColorPresets = NormalizeColorPresets(AnnotationColorPresets, DefaultColorSlots);
         RegionMaskColorPresets = NormalizeColorPresets(RegionMaskColorPresets, DefaultRegionMaskColorSlots);
         EnsureColorInPresets(Color, LaserColorPresets, fallbackIndex: 4);
@@ -148,21 +186,39 @@ public sealed class AppSettings
 
         if (!Enum.TryParse<LaserActivationMode>(LaserActivationMode, true, out var laserActivationMode))
         {
-            laserActivationMode = IsLaserHoldShortcutDisabled(LaserHoldShortcut)
-                ? FocusTool.Win.Models.LaserActivationMode.Always
-                : FocusTool.Win.Models.LaserActivationMode.Hold;
+            laserActivationMode = FocusTool.Win.Models.LaserActivationMode.Hold;
         }
 
         LaserActivationMode = laserActivationMode.ToString();
         if (laserActivationMode == FocusTool.Win.Models.LaserActivationMode.Hold
             && IsLaserHoldShortcutDisabled(LaserHoldShortcut))
         {
-            LaserHoldShortcut = "XButton2";
+            LaserHoldShortcut = "Alt+Z";
+        }
+
+        if (!TryParseColor(CursorHighlightColor, out _))
+        {
+            CursorHighlightColor = "#BFFFD400";
+        }
+        EnsureColorInPresets(CursorHighlightColor, CursorHighlightColorPresets, fallbackIndex: 0);
+
+        if (!Enum.TryParse<LaserActivationMode>(CursorHighlightActivationMode, true, out var cursorHighlightActivationMode))
+        {
+            cursorHighlightActivationMode = FocusTool.Win.Models.LaserActivationMode.Hold;
+        }
+
+        CursorHighlightActivationMode = cursorHighlightActivationMode.ToString();
+        if (cursorHighlightActivationMode == FocusTool.Win.Models.LaserActivationMode.Hold
+            && IsLaserHoldShortcutDisabled(CursorHighlightHoldShortcut))
+        {
+            CursorHighlightHoldShortcut = "Alt+X";
         }
 
         PointSize = Math.Clamp(PointSize, 4, 64);
         TrailLengthMs = Math.Clamp(TrailLengthMs, 80, 3000);
         FadeDurationMs = Math.Clamp(FadeDurationMs, 80, 3000);
+        CursorHighlightRadius = Math.Clamp(CursorHighlightRadius, 12, 96);
+        CursorHighlightThickness = Math.Clamp(CursorHighlightThickness, 1, 12);
         SpotlightRadius = Math.Clamp(SpotlightRadius, 48, 480);
         SpotlightOpacity = Math.Clamp(SpotlightOpacity, 0.2, 0.88);
         MagnifierRadius = Math.Clamp(MagnifierRadius, 80, 360);
@@ -176,6 +232,12 @@ public sealed class AppSettings
         EnsureColorInPresets(RegionMaskColor, RegionMaskColorPresets, fallbackIndex: 4);
 
         RegionMaskOpacity = Math.Clamp(RegionMaskOpacity, 0.1, 1.0);
+        if (!Enum.TryParse<RegionMaskStyle>(RegionMaskStyle, true, out var regionMaskStyle))
+        {
+            regionMaskStyle = FocusTool.Win.Models.RegionMaskStyle.StripesWithLabel;
+        }
+
+        RegionMaskStyle = regionMaskStyle.ToString();
         AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
         FadingAnnotationVisibleMs = Math.Clamp(FadingAnnotationVisibleMs, 500, 60000);
@@ -187,6 +249,8 @@ public sealed class AppSettings
     }
 
     public static string[] DefaultLaserColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultCursorHighlightColorPresets() => [.. DefaultCursorHighlightColorSlots];
 
     public static string[] DefaultAnnotationColorPresets() => [.. DefaultColorSlots];
 
@@ -272,6 +336,18 @@ public sealed class AppSettings
         LaserActivationMode = mode.ToString();
     }
 
+    internal LaserActivationMode GetCursorHighlightActivationMode()
+    {
+        return Enum.TryParse<LaserActivationMode>(CursorHighlightActivationMode, true, out var mode)
+            ? mode
+            : FocusTool.Win.Models.LaserActivationMode.Hold;
+    }
+
+    internal void SetCursorHighlightActivationMode(LaserActivationMode mode)
+    {
+        CursorHighlightActivationMode = mode.ToString();
+    }
+
     public MediaColor ToAnnotationMediaColor()
     {
         if (TryParseColor(AnnotationColor, out var color))
@@ -322,15 +398,20 @@ public sealed class ShortcutSettings
 
     public string ToggleLaserActivation { get; set; } = "Ctrl+Alt+L";
     public string ToggleAnnotate { get; set; } = "Ctrl+Alt+D";
+    public string PushToAnnotate { get; set; } = "Alt+A";
+    public string ToggleCursorHighlight { get; set; } = "Ctrl+Alt+U";
     public string ToggleSpotlight { get; set; } = "Ctrl+Alt+S";
     public string ToggleMagnifier { get; set; } = "Ctrl+Alt+M";
     public string TogglePinnedLens { get; set; } = "Ctrl+Alt+P";
     public string ToggleRegionMask { get; set; } = "Ctrl+Alt+H";
     public string ClearRegionMasks { get; set; } = "Ctrl+Alt+Shift+H";
+    public string ToggleRegionSpotlight { get; set; } = "Ctrl+Alt+Shift+S";
+    public string ClearRegionSpotlights { get; set; } = "Ctrl+Alt+Shift+X";
     public string ToggleFadingAnnotations { get; set; } = "Ctrl+Alt+F";
     public string ToggleTimer { get; set; } = "Ctrl+Alt+N";
     public string ToggleToolbar { get; set; } = "Ctrl+Alt+T";
     public string TakeScreenshot { get; set; } = "Ctrl+Alt+C";
+    public string TakeRegionScreenshot { get; set; } = "Ctrl+Alt+Shift+C";
     public string ToggleScreenBoard { get; set; } = "Ctrl+Alt+G";
     public string ToggleBlackScreen { get; set; } = "Ctrl+Alt+B";
     public string ToggleWhiteScreen { get; set; } = "Ctrl+Alt+W";
@@ -343,6 +424,7 @@ public sealed class ShortcutSettings
     public string ToolHighlighter { get; set; } = "H";
     public string ToolText { get; set; } = "T";
     public string ToolMove { get; set; } = "M";
+    public string ToolStep { get; set; } = "N";
     public string Color1 { get; set; } = "1";
     public string Color2 { get; set; } = "2";
     public string Color3 { get; set; } = "3";
@@ -361,15 +443,20 @@ public sealed class ShortcutSettings
     {
         ToggleLaserActivation = ToggleLaserActivation,
         ToggleAnnotate = ToggleAnnotate,
+        PushToAnnotate = PushToAnnotate,
+        ToggleCursorHighlight = ToggleCursorHighlight,
         ToggleSpotlight = ToggleSpotlight,
         ToggleMagnifier = ToggleMagnifier,
         TogglePinnedLens = TogglePinnedLens,
         ToggleRegionMask = ToggleRegionMask,
         ClearRegionMasks = ClearRegionMasks,
+        ToggleRegionSpotlight = ToggleRegionSpotlight,
+        ClearRegionSpotlights = ClearRegionSpotlights,
         ToggleFadingAnnotations = ToggleFadingAnnotations,
         ToggleTimer = ToggleTimer,
         ToggleToolbar = ToggleToolbar,
         TakeScreenshot = TakeScreenshot,
+        TakeRegionScreenshot = TakeRegionScreenshot,
         ToggleScreenBoard = ToggleScreenBoard,
         ToggleBlackScreen = ToggleBlackScreen,
         ToggleWhiteScreen = ToggleWhiteScreen,
@@ -382,6 +469,7 @@ public sealed class ShortcutSettings
         ToolHighlighter = ToolHighlighter,
         ToolText = ToolText,
         ToolMove = ToolMove,
+        ToolStep = ToolStep,
         Color1 = Color1,
         Color2 = Color2,
         Color3 = Color3,
@@ -401,15 +489,20 @@ public sealed class ShortcutSettings
     {
         ToggleLaserActivation = NormalizeShortcut(ToggleLaserActivation, "Ctrl+Alt+L");
         ToggleAnnotate = NormalizeShortcut(ToggleAnnotate, "Ctrl+Alt+D");
+        PushToAnnotate = NormalizeShortcut(PushToAnnotate, "Alt+A");
+        ToggleCursorHighlight = NormalizeShortcut(ToggleCursorHighlight, "Ctrl+Alt+U");
         ToggleSpotlight = NormalizeShortcut(ToggleSpotlight, "Ctrl+Alt+S");
         ToggleMagnifier = NormalizeShortcut(ToggleMagnifier, "Ctrl+Alt+M");
         TogglePinnedLens = NormalizeShortcut(TogglePinnedLens, "Ctrl+Alt+P");
         ToggleRegionMask = NormalizeShortcut(ToggleRegionMask, "Ctrl+Alt+H");
         ClearRegionMasks = NormalizeShortcut(ClearRegionMasks, "Ctrl+Alt+Shift+H");
+        ToggleRegionSpotlight = NormalizeShortcut(ToggleRegionSpotlight, "Ctrl+Alt+Shift+S");
+        ClearRegionSpotlights = NormalizeShortcut(ClearRegionSpotlights, "Ctrl+Alt+Shift+X");
         ToggleFadingAnnotations = NormalizeShortcut(ToggleFadingAnnotations, "Ctrl+Alt+F");
         ToggleTimer = NormalizeShortcut(ToggleTimer, "Ctrl+Alt+N");
         ToggleToolbar = NormalizeShortcut(ToggleToolbar, "Ctrl+Alt+T");
         TakeScreenshot = NormalizeShortcut(TakeScreenshot, "Ctrl+Alt+C");
+        TakeRegionScreenshot = NormalizeShortcut(TakeRegionScreenshot, "Ctrl+Alt+Shift+C");
         ToggleScreenBoard = NormalizeShortcut(ToggleScreenBoard, "Ctrl+Alt+G");
         ToggleBlackScreen = NormalizeShortcut(ToggleBlackScreen, "Ctrl+Alt+B");
         ToggleWhiteScreen = NormalizeShortcut(ToggleWhiteScreen, "Ctrl+Alt+W");
@@ -422,6 +515,7 @@ public sealed class ShortcutSettings
         ToolHighlighter = NormalizeShortcut(ToolHighlighter, "H");
         ToolText = NormalizeShortcut(ToolText, "T");
         ToolMove = NormalizeShortcut(ToolMove, "M");
+        ToolStep = NormalizeShortcut(ToolStep, "N");
         Color1 = NormalizeShortcut(Color1, "1");
         Color2 = NormalizeShortcut(Color2, "2");
         Color3 = NormalizeShortcut(Color3, "3");

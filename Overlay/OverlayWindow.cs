@@ -30,9 +30,13 @@ internal sealed class OverlayWindow : Window
         Func<InteractionMode> modeProvider,
         Func<double> clockProvider,
         Func<ScreenPoint?> spotlightProvider,
+        Func<CursorHighlightFrame> cursorHighlightProvider,
         Func<ScreenBoardFrame?> screenBoardProvider,
-        Func<ScreenRect?> pinnedLensSelectionProvider,
+        Func<RectOverlayVisual?> rectOverlayProvider,
         Func<IReadOnlyList<RegionMask>> regionMaskProvider,
+        Func<int> regionMaskSelectionProvider,
+        Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
+        Func<int> spotlightRegionSelectionProvider,
         IOverlayInputHandler inputHandler)
     {
         _screen = screen;
@@ -45,9 +49,13 @@ internal sealed class OverlayWindow : Window
             modeProvider,
             clockProvider,
             spotlightProvider,
+            cursorHighlightProvider,
             screenBoardProvider,
-            pinnedLensSelectionProvider,
+            rectOverlayProvider,
             regionMaskProvider,
+            regionMaskSelectionProvider,
+            spotlightRegionProvider,
+            spotlightRegionSelectionProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
 
         Title = "FocusTool";
@@ -127,6 +135,15 @@ internal sealed class OverlayWindow : Window
     {
         var bounds = _screen.Bounds;
         return new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom).Intersects(rect);
+    }
+
+    public ScreenRect ScreenBounds
+    {
+        get
+        {
+            var bounds = _screen.Bounds;
+            return new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+        }
     }
 
     public double DistanceSquaredTo(ScreenPoint point)
@@ -247,6 +264,50 @@ internal sealed class OverlayWindow : Window
         return bitmap;
     }
 
+    // Like CaptureSurface but cropped to a screen rect (physical px), so the Capture
+    // Stage snapshots only the source window's area instead of the whole monitor
+    // (far less per-frame work and GC pressure).
+    public BitmapSource? CaptureSurfaceRegion(ScreenRect sourceRect, OverlayRenderOptions options)
+    {
+        if (_surface.ActualWidth <= 1 || _surface.ActualHeight <= 1)
+        {
+            return null;
+        }
+
+        _surface.UpdateLayout();
+        var dpi = VisualTreeHelper.GetDpi(_surface);
+        var bounds = _screen.Bounds;
+
+        var widthPx = (int)Math.Round(sourceRect.Right - sourceRect.Left);
+        var heightPx = (int)Math.Round(sourceRect.Bottom - sourceRect.Top);
+        if (widthPx <= 0 || heightPx <= 0)
+        {
+            return null;
+        }
+
+        var viewLeftDip = (sourceRect.Left - bounds.Left) / dpi.DpiScaleX;
+        var viewTopDip = (sourceRect.Top - bounds.Top) / dpi.DpiScaleY;
+        var viewWidthDip = widthPx / dpi.DpiScaleX;
+        var viewHeightDip = heightPx / dpi.DpiScaleY;
+
+        var bitmap = new RenderTargetBitmap(widthPx, heightPx, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var target = new System.Windows.Rect(0, 0, viewWidthDip, viewHeightDip);
+            dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, target);
+            dc.PushClip(new RectangleGeometry(target));
+            dc.PushTransform(new TranslateTransform(-viewLeftDip, -viewTopDip));
+            _surface.RenderSnapshot(dc, options);
+            dc.Pop();
+            dc.Pop();
+        }
+
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
     private void ApplyWindowStyles(bool annotate)
     {
         var handle = new WindowInteropHelper(this).Handle;
@@ -283,6 +344,8 @@ internal sealed class OverlayWindow : Window
         return mode is InteractionMode.Annotate
             or InteractionMode.PinnedLensSelect
             or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenshotRegionSelect
+            or InteractionMode.RegionSpotlightSelect
             or InteractionMode.ScreenBoard
             or InteractionMode.BlackScreen
             or InteractionMode.WhiteScreen;
@@ -378,6 +441,9 @@ internal sealed class OverlayWindow : Window
                 _inputHandler.HandleOverlayMouseUp(ToScreenPoint(hwnd, lParam), MouseButton.Right, Keyboard.Modifiers);
                 handled = true;
                 break;
+            case NativeMethods.WmMouseWheel:
+                handled = _inputHandler.HandleOverlayMouseWheel(ToScreenPoint(lParam), GetMouseWheelDelta(wParam), Keyboard.Modifiers);
+                break;
             case NativeMethods.WmCancelMode:
             case NativeMethods.WmCaptureChanged:
                 if (_nativeMouseCaptured
@@ -394,6 +460,11 @@ internal sealed class OverlayWindow : Window
         return IntPtr.Zero;
     }
 
+    private static int GetMouseWheelDelta(IntPtr wParam)
+    {
+        return unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
+    }
+
     private static ScreenPoint ToScreenPoint(IntPtr hwnd, IntPtr lParam)
     {
         var raw = lParam.ToInt64();
@@ -405,5 +476,13 @@ internal sealed class OverlayWindow : Window
 
         NativeMethods.ClientToScreen(hwnd, ref point);
         return new ScreenPoint(point.X, point.Y);
+    }
+
+    private static ScreenPoint ToScreenPoint(IntPtr lParam)
+    {
+        var raw = lParam.ToInt64();
+        return new ScreenPoint(
+            unchecked((short)(raw & 0xFFFF)),
+            unchecked((short)((raw >> 16) & 0xFFFF)));
     }
 }

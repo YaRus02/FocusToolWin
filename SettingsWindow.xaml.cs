@@ -15,12 +15,15 @@ public partial class SettingsWindow : Window
     private AppSettings _settings;
     private bool _loading = true;
     private readonly string[] _laserPresets = new string[5];
+    private readonly string[] _cursorHighlightPresets = new string[5];
     private readonly string[] _annotationPresets = new string[5];
     private readonly string[] _regionMaskPresets = new string[5];
     private string _laserColor = "#FFFF2020";
+    private string _cursorHighlightColor = "#BFFFD400";
     private string _annotationColor = "#FFFF2020";
     private string _regionMaskColor = "#FF000000";
     private int _selectedLaserPresetIndex;
+    private int _selectedCursorHighlightPresetIndex;
     private int _selectedAnnotationPresetIndex;
     private int _selectedRegionMaskPresetIndex;
 
@@ -42,6 +45,10 @@ public partial class SettingsWindow : Window
         FadeDurationSlider.Value = settings.FadeDurationMs;
         GlowCheckBox.IsChecked = settings.GlowEnabled;
         SelectLaserActivationMode(settings.GetLaserActivationMode());
+        SelectCursorHighlightActivationMode(settings.GetCursorHighlightActivationMode());
+        CursorHighlightRadiusSlider.Value = settings.CursorHighlightRadius;
+        CursorHighlightThicknessSlider.Value = settings.CursorHighlightThickness;
+        CursorHighlightClickPulseCheckBox.IsChecked = settings.ClickPulseEnabled;
         SpotlightRadiusSlider.Value = settings.SpotlightRadius;
         SpotlightOpacitySlider.Value = settings.SpotlightOpacity * 100;
         MagnifierRadiusSlider.Value = settings.MagnifierRadius;
@@ -49,6 +56,7 @@ public partial class SettingsWindow : Window
         PinnedLensZoomSlider.Value = settings.PinnedLensZoom;
         PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
         RegionMaskOpacitySlider.Value = settings.RegionMaskOpacity * 100;
+        SelectRegionMaskStyle(settings.RegionMaskStyle);
         FadingAnnotationsCheckBox.IsChecked = settings.FadingAnnotationsEnabled;
         FadingAnnotationVisibleSlider.Value = settings.FadingAnnotationVisibleMs / 1000.0;
         FadingAnnotationFadeSlider.Value = settings.FadingAnnotationFadeMs / 1000.0;
@@ -58,6 +66,12 @@ public partial class SettingsWindow : Window
         SelectColorSlot(settings.Color, _laserPresets, ref _selectedLaserPresetIndex, fallbackIndex: 4);
         _laserColor = _laserPresets[_selectedLaserPresetIndex];
         LaserColorBox.Text = _laserPresets[_selectedLaserPresetIndex];
+
+        var cursorHighlightPresets = GetPresetValues(settings.CursorHighlightColorPresets, AppSettings.DefaultCursorHighlightColorPresets());
+        Array.Copy(cursorHighlightPresets, _cursorHighlightPresets, _cursorHighlightPresets.Length);
+        SelectColorSlot(settings.CursorHighlightColor, _cursorHighlightPresets, ref _selectedCursorHighlightPresetIndex, fallbackIndex: 0);
+        _cursorHighlightColor = _cursorHighlightPresets[_selectedCursorHighlightPresetIndex];
+        CursorHighlightColorBox.Text = _cursorHighlightPresets[_selectedCursorHighlightPresetIndex];
 
         var regionMaskPresets = GetPresetValues(settings.RegionMaskColorPresets, AppSettings.DefaultRegionMaskColorPresets());
         Array.Copy(regionMaskPresets, _regionMaskPresets, _regionMaskPresets.Length);
@@ -76,18 +90,23 @@ public partial class SettingsWindow : Window
         LoadShortcutFields(settings);
 
         ApplyPresetBrushes(GetLaserPresetButtons(), _laserPresets);
+        ApplyPresetBrushes(GetCursorHighlightPresetButtons(), _cursorHighlightPresets);
         ApplyPresetBrushes(GetRegionMaskPresetButtons(), _regionMaskPresets);
         ApplyPresetBrushes(GetAnnotationPresetButtons(), _annotationPresets);
 
         _loading = false;
         UpdateLabels();
         UpdateSelectedLaserSwatch();
+        UpdateSelectedCursorHighlightSwatch();
         UpdateSelectedAnnotationSwatch();
         UpdateSelectedRegionMaskSwatch();
+        UpdateCursorHighlightSwatch();
         UpdateLaserPresetSelection();
+        UpdateCursorHighlightPresetSelection();
         UpdateAnnotationPresetSelection();
         UpdateRegionMaskPresetSelection();
         UpdateLaserHoldFieldState();
+        UpdateCursorHighlightHoldFieldState();
     }
 
     private void Apply_OnClick(object sender, RoutedEventArgs e)
@@ -163,6 +182,24 @@ public partial class SettingsWindow : Window
         UpdateAnnotationPresetSelection();
     }
 
+    private void CursorHighlightPreset_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button
+            || !int.TryParse(button.Tag?.ToString(), out var index)
+            || index < 0 || index >= _cursorHighlightPresets.Length)
+        {
+            return;
+        }
+
+        _selectedCursorHighlightPresetIndex = index;
+        _cursorHighlightColor = _cursorHighlightPresets[index];
+        _loading = true;
+        CursorHighlightColorBox.Text = _cursorHighlightPresets[index];
+        _loading = false;
+        UpdateSelectedCursorHighlightSwatch();
+        UpdateCursorHighlightPresetSelection();
+    }
+
     private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!_loading)
@@ -219,6 +256,23 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void CursorHighlightColorBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        var hex = CursorHighlightColorBox.Text.Trim();
+        if (AppSettings.TryParseColor(hex, out _))
+        {
+            _cursorHighlightPresets[_selectedCursorHighlightPresetIndex] = hex;
+            _cursorHighlightColor = hex;
+        }
+
+        UpdateSelectedCursorHighlightSwatch();
+    }
+
     private void MaskColorPreset_OnClick(object sender, RoutedEventArgs e)
     {
         if (sender is not System.Windows.Controls.Button button
@@ -245,6 +299,14 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void CursorHighlightActivationMode_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            UpdateCursorHighlightHoldFieldState();
+        }
+    }
+
     private bool TryApply()
     {
         if (!AppSettings.TryParseColor(LaserColorBox.Text.Trim(), out _))
@@ -265,12 +327,19 @@ public partial class SettingsWindow : Window
             return false;
         }
 
+        if (!AppSettings.TryParseColor(CursorHighlightColorBox.Text.Trim(), out _))
+        {
+            System.Windows.MessageBox.Show(this, "Use #AARRGGBB or #RRGGBB for the cursor highlight color.", "Invalid color", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
         _laserPresets[_selectedLaserPresetIndex] = LaserColorBox.Text.Trim();
         _laserColor = _laserPresets[_selectedLaserPresetIndex];
         _annotationPresets[_selectedAnnotationPresetIndex] = AnnotationPreset5Box.Text.Trim();
         _annotationColor = _annotationPresets[_selectedAnnotationPresetIndex];
         _regionMaskPresets[_selectedRegionMaskPresetIndex] = RegionMaskColorBox.Text.Trim();
         _regionMaskColor = _regionMaskPresets[_selectedRegionMaskPresetIndex];
+        _cursorHighlightColor = CursorHighlightColorBox.Text.Trim();
 
         var updated = _settings.Clone();
         updated.Color = _laserColor;
@@ -279,6 +348,11 @@ public partial class SettingsWindow : Window
         updated.FadeDurationMs = (int)FadeDurationSlider.Value;
         updated.GlowEnabled = GlowCheckBox.IsChecked == true;
         updated.SetLaserActivationMode(ReadLaserActivationMode());
+        updated.CursorHighlightColor = _cursorHighlightColor;
+        updated.SetCursorHighlightActivationMode(ReadCursorHighlightActivationMode());
+        updated.CursorHighlightRadius = CursorHighlightRadiusSlider.Value;
+        updated.CursorHighlightThickness = CursorHighlightThicknessSlider.Value;
+        updated.ClickPulseEnabled = CursorHighlightClickPulseCheckBox.IsChecked == true;
         updated.SpotlightRadius = SpotlightRadiusSlider.Value;
         updated.SpotlightOpacity = SpotlightOpacitySlider.Value / 100.0;
         updated.MagnifierRadius = MagnifierRadiusSlider.Value;
@@ -287,11 +361,13 @@ public partial class SettingsWindow : Window
         updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
         updated.RegionMaskColor = _regionMaskColor;
         updated.RegionMaskOpacity = RegionMaskOpacitySlider.Value / 100.0;
+        updated.RegionMaskStyle = ReadRegionMaskStyle().ToString();
         updated.FadingAnnotationsEnabled = FadingAnnotationsCheckBox.IsChecked == true;
         updated.FadingAnnotationVisibleMs = (int)Math.Round(FadingAnnotationVisibleSlider.Value * 1000);
         updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
         updated.AnnotationColor = _annotationColor;
         WritePresetValues(updated.LaserColorPresets, _laserPresets);
+        WritePresetValues(updated.CursorHighlightColorPresets, _cursorHighlightPresets);
         WritePresetValues(updated.AnnotationColorPresets, _annotationPresets);
         WritePresetValues(updated.RegionMaskColorPresets, _regionMaskPresets);
 
@@ -313,18 +389,24 @@ public partial class SettingsWindow : Window
     private void LoadShortcutFields(AppSettings settings)
     {
         LaserHoldBox.Text = settings.LaserHoldShortcut;
+        CursorHighlightHoldBox.Text = settings.CursorHighlightHoldShortcut;
 
         ToggleAnnotateBox.Text = settings.Shortcuts.ToggleAnnotate;
+        PushToAnnotateBox.Text = settings.Shortcuts.PushToAnnotate;
         ToggleLaserActivationBox.Text = settings.Shortcuts.ToggleLaserActivation;
+        ToggleCursorHighlightBox.Text = settings.Shortcuts.ToggleCursorHighlight;
         ToggleSpotlightBox.Text = settings.Shortcuts.ToggleSpotlight;
         ToggleMagnifierBox.Text = settings.Shortcuts.ToggleMagnifier;
         TogglePinnedLensBox.Text = settings.Shortcuts.TogglePinnedLens;
         ToggleRegionMaskBox.Text = settings.Shortcuts.ToggleRegionMask;
         ClearRegionMasksBox.Text = settings.Shortcuts.ClearRegionMasks;
+        ToggleRegionSpotlightBox.Text = settings.Shortcuts.ToggleRegionSpotlight;
+        ClearRegionSpotlightsBox.Text = settings.Shortcuts.ClearRegionSpotlights;
         ToggleFadingAnnotationsBox.Text = settings.Shortcuts.ToggleFadingAnnotations;
         ToggleTimerBox.Text = settings.Shortcuts.ToggleTimer;
         ToggleToolbarBox.Text = settings.Shortcuts.ToggleToolbar;
         TakeScreenshotBox.Text = settings.Shortcuts.TakeScreenshot;
+        TakeRegionScreenshotBox.Text = settings.Shortcuts.TakeRegionScreenshot;
         ToggleScreenBoardBox.Text = settings.Shortcuts.ToggleScreenBoard;
         ToggleBlackScreenBox.Text = settings.Shortcuts.ToggleBlackScreen;
         ToggleWhiteScreenBox.Text = settings.Shortcuts.ToggleWhiteScreen;
@@ -337,6 +419,7 @@ public partial class SettingsWindow : Window
         ToolHighlighterBox.Text = settings.Shortcuts.ToolHighlighter;
         ToolTextBox.Text = settings.Shortcuts.ToolText;
         ToolMoveBox.Text = settings.Shortcuts.ToolMove;
+        ToolStepBox.Text = settings.Shortcuts.ToolStep;
         Color1Box.Text = settings.Shortcuts.Color1;
         Color2Box.Text = settings.Shortcuts.Color2;
         Color3Box.Text = settings.Shortcuts.Color3;
@@ -357,17 +440,23 @@ public partial class SettingsWindow : Window
         var shortcuts = updated.Shortcuts.Clone();
 
         updated.LaserHoldShortcut = ReadShortcutText(LaserHoldBox);
+        updated.CursorHighlightHoldShortcut = ReadShortcutText(CursorHighlightHoldBox);
         shortcuts.ToggleAnnotate = ReadShortcutText(ToggleAnnotateBox);
+        shortcuts.PushToAnnotate = ReadShortcutText(PushToAnnotateBox);
         shortcuts.ToggleLaserActivation = ReadShortcutText(ToggleLaserActivationBox);
+        shortcuts.ToggleCursorHighlight = ReadShortcutText(ToggleCursorHighlightBox);
         shortcuts.ToggleSpotlight = ReadShortcutText(ToggleSpotlightBox);
         shortcuts.ToggleMagnifier = ReadShortcutText(ToggleMagnifierBox);
         shortcuts.TogglePinnedLens = ReadShortcutText(TogglePinnedLensBox);
         shortcuts.ToggleRegionMask = ReadShortcutText(ToggleRegionMaskBox);
         shortcuts.ClearRegionMasks = ReadShortcutText(ClearRegionMasksBox);
+        shortcuts.ToggleRegionSpotlight = ReadShortcutText(ToggleRegionSpotlightBox);
+        shortcuts.ClearRegionSpotlights = ReadShortcutText(ClearRegionSpotlightsBox);
         shortcuts.ToggleFadingAnnotations = ReadShortcutText(ToggleFadingAnnotationsBox);
         shortcuts.ToggleTimer = ReadShortcutText(ToggleTimerBox);
         shortcuts.ToggleToolbar = ReadShortcutText(ToggleToolbarBox);
         shortcuts.TakeScreenshot = ReadShortcutText(TakeScreenshotBox);
+        shortcuts.TakeRegionScreenshot = ReadShortcutText(TakeRegionScreenshotBox);
         shortcuts.ToggleScreenBoard = ReadShortcutText(ToggleScreenBoardBox);
         shortcuts.ToggleBlackScreen = ReadShortcutText(ToggleBlackScreenBox);
         shortcuts.ToggleWhiteScreen = ReadShortcutText(ToggleWhiteScreenBox);
@@ -380,6 +469,7 @@ public partial class SettingsWindow : Window
         shortcuts.ToolHighlighter = ReadShortcutText(ToolHighlighterBox);
         shortcuts.ToolText = ReadShortcutText(ToolTextBox);
         shortcuts.ToolMove = ReadShortcutText(ToolMoveBox);
+        shortcuts.ToolStep = ReadShortcutText(ToolStepBox);
         shortcuts.Color1 = ReadShortcutText(Color1Box);
         shortcuts.Color2 = ReadShortcutText(Color2Box);
         shortcuts.Color3 = ReadShortcutText(Color3Box);
@@ -395,17 +485,23 @@ public partial class SettingsWindow : Window
         shortcuts.ExitAnnotate = ReadShortcutText(ExitAnnotateBox);
 
         if ((updated.GetLaserActivationMode() == LaserActivationMode.Hold && !ValidateShortcut("Hold laser", updated.LaserHoldShortcut, allowMouseButton: true, allowDisabled: false))
+            || (updated.GetCursorHighlightActivationMode() == LaserActivationMode.Hold && !ValidateShortcut("Hold cursor highlight", updated.CursorHighlightHoldShortcut, allowMouseButton: true, allowDisabled: false))
             || !ValidateShortcut("Toggle annotate mode", shortcuts.ToggleAnnotate)
+            || !ValidateShortcut("Push annotate", shortcuts.PushToAnnotate)
             || !ValidateShortcut("Toggle laser mode", shortcuts.ToggleLaserActivation)
+            || !ValidateShortcut("Cursor highlight", shortcuts.ToggleCursorHighlight)
             || !ValidateShortcut("Toggle spotlight", shortcuts.ToggleSpotlight)
             || !ValidateShortcut("Toggle magnifier", shortcuts.ToggleMagnifier)
             || !ValidateShortcut("Pinned lens", shortcuts.TogglePinnedLens)
             || !ValidateShortcut("Region mask", shortcuts.ToggleRegionMask)
             || !ValidateShortcut("Clear region masks", shortcuts.ClearRegionMasks)
+            || !ValidateShortcut("Region spotlight", shortcuts.ToggleRegionSpotlight)
+            || !ValidateShortcut("Clear region spotlights", shortcuts.ClearRegionSpotlights)
             || !ValidateShortcut("Fading annotations", shortcuts.ToggleFadingAnnotations)
             || !ValidateShortcut("Timer", shortcuts.ToggleTimer)
             || !ValidateShortcut("Toggle toolbar", shortcuts.ToggleToolbar)
             || !ValidateShortcut("Screenshot", shortcuts.TakeScreenshot)
+            || !ValidateShortcut("Screenshot region", shortcuts.TakeRegionScreenshot)
             || !ValidateShortcut("Screen board", shortcuts.ToggleScreenBoard)
             || !ValidateShortcut("Black board", shortcuts.ToggleBlackScreen)
             || !ValidateShortcut("White board", shortcuts.ToggleWhiteScreen)
@@ -418,6 +514,7 @@ public partial class SettingsWindow : Window
             || !ValidateShortcut("Highlighter", shortcuts.ToolHighlighter)
             || !ValidateShortcut("Text", shortcuts.ToolText)
             || !ValidateShortcut("Move selection", shortcuts.ToolMove)
+            || !ValidateShortcut("Step marker", shortcuts.ToolStep)
             || !ValidateShortcut("Color 1", shortcuts.Color1)
             || !ValidateShortcut("Color 2", shortcuts.Color2)
             || !ValidateShortcut("Color 3", shortcuts.Color3)
@@ -477,16 +574,21 @@ public partial class SettingsWindow : Window
         var globalEntries = new List<(string Label, string Text)>
         {
             ("Toggle annotate mode", shortcuts.ToggleAnnotate),
+            ("Push annotate", shortcuts.PushToAnnotate),
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
+            ("Cursor highlight", shortcuts.ToggleCursorHighlight),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
             ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Region spotlight", shortcuts.ToggleRegionSpotlight),
+            ("Clear region spotlights", shortcuts.ClearRegionSpotlights),
             ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Timer", shortcuts.ToggleTimer),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
+            ("Screenshot region", shortcuts.TakeRegionScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
             ("Black board", shortcuts.ToggleBlackScreen),
             ("White board", shortcuts.ToggleWhiteScreen),
@@ -520,16 +622,21 @@ public partial class SettingsWindow : Window
         var entries = new List<(string Label, string Text)>
         {
             ("Toggle annotate mode", shortcuts.ToggleAnnotate),
+            ("Push annotate", shortcuts.PushToAnnotate),
             ("Toggle laser mode", shortcuts.ToggleLaserActivation),
+            ("Cursor highlight", shortcuts.ToggleCursorHighlight),
             ("Toggle spotlight", shortcuts.ToggleSpotlight),
             ("Toggle magnifier", shortcuts.ToggleMagnifier),
             ("Pinned lens", shortcuts.TogglePinnedLens),
             ("Region mask", shortcuts.ToggleRegionMask),
             ("Clear region masks", shortcuts.ClearRegionMasks),
+            ("Region spotlight", shortcuts.ToggleRegionSpotlight),
+            ("Clear region spotlights", shortcuts.ClearRegionSpotlights),
             ("Fading annotations", shortcuts.ToggleFadingAnnotations),
             ("Timer", shortcuts.ToggleTimer),
             ("Toggle toolbar", shortcuts.ToggleToolbar),
             ("Screenshot", shortcuts.TakeScreenshot),
+            ("Screenshot region", shortcuts.TakeRegionScreenshot),
             ("Screen board", shortcuts.ToggleScreenBoard),
             ("Black board", shortcuts.ToggleBlackScreen),
             ("White board", shortcuts.ToggleWhiteScreen),
@@ -542,6 +649,7 @@ public partial class SettingsWindow : Window
             ("Highlighter", shortcuts.ToolHighlighter),
             ("Text", shortcuts.ToolText),
             ("Move selection", shortcuts.ToolMove),
+            ("Step marker", shortcuts.ToolStep),
             ("Color 1", shortcuts.Color1),
             ("Color 2", shortcuts.Color2),
             ("Color 3", shortcuts.Color3),
@@ -560,6 +668,11 @@ public partial class SettingsWindow : Window
         if (updated.GetLaserActivationMode() == LaserActivationMode.Hold)
         {
             entries.Insert(0, ("Hold laser", updated.LaserHoldShortcut));
+        }
+
+        if (updated.GetCursorHighlightActivationMode() == LaserActivationMode.Hold)
+        {
+            entries.Insert(0, ("Hold cursor highlight", updated.CursorHighlightHoldShortcut));
         }
 
         var used = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -606,6 +719,8 @@ public partial class SettingsWindow : Window
         if (PointSizeValue is null
             || TrailLengthValue is null
             || FadeDurationValue is null
+            || CursorHighlightRadiusValue is null
+            || CursorHighlightThicknessValue is null
             || SpotlightRadiusValue is null
             || SpotlightOpacityValue is null
             || MagnifierRadiusValue is null
@@ -624,6 +739,8 @@ public partial class SettingsWindow : Window
         PointSizeValue.Text = $"{PointSizeSlider.Value:0}px";
         TrailLengthValue.Text = $"{TrailLengthSlider.Value:0} ms";
         FadeDurationValue.Text = $"{FadeDurationSlider.Value:0} ms";
+        CursorHighlightRadiusValue.Text = $"{CursorHighlightRadiusSlider.Value:0}px";
+        CursorHighlightThicknessValue.Text = $"{CursorHighlightThicknessSlider.Value:0}px";
         SpotlightRadiusValue.Text = $"{SpotlightRadiusSlider.Value:0}px";
         SpotlightOpacityValue.Text = $"{SpotlightOpacitySlider.Value:0}%";
         MagnifierRadiusValue.Text = $"{MagnifierRadiusSlider.Value:0}px";
@@ -642,6 +759,11 @@ public partial class SettingsWindow : Window
         UpdateSelectedSwatch(LaserColorBox, LaserColorPreview, GetLaserPresetButtons(), _selectedLaserPresetIndex);
     }
 
+    private void UpdateSelectedCursorHighlightSwatch()
+    {
+        UpdateSelectedSwatch(CursorHighlightColorBox, CursorHighlightColorPreview, GetCursorHighlightPresetButtons(), _selectedCursorHighlightPresetIndex);
+    }
+
     private void UpdateSelectedAnnotationSwatch()
     {
         UpdateSelectedSwatch(AnnotationPreset5Box, preview: null, GetAnnotationPresetButtons(), _selectedAnnotationPresetIndex);
@@ -650,6 +772,11 @@ public partial class SettingsWindow : Window
     private void UpdateSelectedRegionMaskSwatch()
     {
         UpdateSelectedSwatch(RegionMaskColorBox, RegionMaskColorPreview, GetRegionMaskPresetButtons(), _selectedRegionMaskPresetIndex);
+    }
+
+    private void UpdateCursorHighlightSwatch()
+    {
+        UpdateSelectedCursorHighlightSwatch();
     }
 
     private static void UpdateSelectedSwatch(
@@ -689,6 +816,11 @@ public partial class SettingsWindow : Window
         UpdateSwatchSelection(GetLaserPresetButtons(), _selectedLaserPresetIndex);
     }
 
+    private void UpdateCursorHighlightPresetSelection()
+    {
+        UpdateSwatchSelection(GetCursorHighlightPresetButtons(), _selectedCursorHighlightPresetIndex);
+    }
+
     private void UpdateAnnotationPresetSelection()
     {
         UpdateSwatchSelection(GetAnnotationPresetButtons(), _selectedAnnotationPresetIndex);
@@ -718,6 +850,15 @@ public partial class SettingsWindow : Window
         LaserPreset2Button,
         LaserPreset3Button,
         LaserPreset4Button
+    ];
+
+    private System.Windows.Controls.Button[] GetCursorHighlightPresetButtons() =>
+    [
+        CursorHighlightPreset0Button,
+        CursorHighlightPreset1Button,
+        CursorHighlightPreset2Button,
+        CursorHighlightPreset3Button,
+        CursorHighlightPreset4Button
     ];
 
     private System.Windows.Controls.Button[] GetAnnotationPresetButtons() =>
@@ -807,6 +948,20 @@ public partial class SettingsWindow : Window
         LaserActivationModeBox.SelectedIndex = 0;
     }
 
+    private void SelectCursorHighlightActivationMode(LaserActivationMode mode)
+    {
+        foreach (var item in CursorHighlightActivationModeBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag?.ToString()?.Equals(mode.ToString(), StringComparison.OrdinalIgnoreCase) == true)
+            {
+                CursorHighlightActivationModeBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        CursorHighlightActivationModeBox.SelectedIndex = 0;
+    }
+
     private LaserActivationMode ReadLaserActivationMode()
     {
         if (LaserActivationModeBox.SelectedItem is ComboBoxItem item
@@ -818,6 +973,45 @@ public partial class SettingsWindow : Window
         return LaserActivationMode.Hold;
     }
 
+    private LaserActivationMode ReadCursorHighlightActivationMode()
+    {
+        if (CursorHighlightActivationModeBox.SelectedItem is ComboBoxItem item
+            && Enum.TryParse<LaserActivationMode>(item.Tag?.ToString(), true, out var mode))
+        {
+            return mode;
+        }
+
+        return LaserActivationMode.Hold;
+    }
+
+    private void SelectRegionMaskStyle(string styleText)
+    {
+        var style = Enum.TryParse<RegionMaskStyle>(styleText, true, out var parsed)
+            ? parsed
+            : RegionMaskStyle.StripesWithLabel;
+        foreach (var item in RegionMaskStyleBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag?.ToString()?.Equals(style.ToString(), StringComparison.OrdinalIgnoreCase) == true)
+            {
+                RegionMaskStyleBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        RegionMaskStyleBox.SelectedIndex = 3;
+    }
+
+    private RegionMaskStyle ReadRegionMaskStyle()
+    {
+        if (RegionMaskStyleBox.SelectedItem is ComboBoxItem item
+            && Enum.TryParse<RegionMaskStyle>(item.Tag?.ToString(), true, out var style))
+        {
+            return style;
+        }
+
+        return RegionMaskStyle.StripesWithLabel;
+    }
+
     private void UpdateLaserHoldFieldState()
     {
         if (LaserHoldBox is null)
@@ -827,6 +1021,17 @@ public partial class SettingsWindow : Window
 
         var holdMode = ReadLaserActivationMode() == LaserActivationMode.Hold;
         LaserHoldBox.Opacity = holdMode ? 1 : 0.78;
+    }
+
+    private void UpdateCursorHighlightHoldFieldState()
+    {
+        if (CursorHighlightHoldBox is null)
+        {
+            return;
+        }
+
+        var holdMode = ReadCursorHighlightActivationMode() == LaserActivationMode.Hold;
+        CursorHighlightHoldBox.Opacity = holdMode ? 1 : 0.78;
     }
 
     private static void ApplyPresetBrushes(IReadOnlyList<System.Windows.Controls.Button> buttons, IReadOnlyList<string> colors)
