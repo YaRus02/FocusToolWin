@@ -106,6 +106,7 @@ public partial class SettingsWindow : Window
         UpdateAnnotationPresetSelection();
         UpdateRegionMaskPresetSelection();
         UpdateLaserHoldFieldState();
+        UpdateCursorHighlightHoldFieldState();
     }
 
     private void Apply_OnClick(object sender, RoutedEventArgs e)
@@ -295,6 +296,14 @@ public partial class SettingsWindow : Window
         if (!_loading)
         {
             UpdateLaserHoldFieldState();
+        }
+    }
+
+    private void CursorHighlightActivationMode_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            UpdateCursorHighlightHoldFieldState();
         }
     }
 
@@ -1012,6 +1021,17 @@ public partial class SettingsWindow : Window
 
         var holdMode = ReadLaserActivationMode() == LaserActivationMode.Hold;
         LaserHoldBox.Opacity = holdMode ? 1 : 0.78;
+    }
+
+    private void UpdateCursorHighlightHoldFieldState()
+    {
+        if (CursorHighlightHoldBox is null)
+        {
+            return;
+        }
+
+        var holdMode = ReadCursorHighlightActivationMode() == LaserActivationMode.Hold;
+        CursorHighlightHoldBox.Opacity = holdMode ? 1 : 0.78;
     }
 
     private static void ApplyPresetBrushes(IReadOnlyList<System.Windows.Controls.Button> buttons, IReadOnlyList<string> colors)

@@ -175,7 +175,7 @@
                                 </Grid>
 
                                 <TextBlock Text="Activation mode" Style="{StaticResource FieldLabelTextStyle}" Margin="0,14,0,0" />
-                                <ComboBox x:Name="CursorHighlightActivationModeBox" Margin="0,6,0,0">
+                                <ComboBox x:Name="CursorHighlightActivationModeBox" Margin="0,6,0,0" SelectionChanged="CursorHighlightActivationMode_OnSelectionChanged">
                                     <ComboBoxItem Content="Always on" Tag="Always" />
                                     <ComboBoxItem Content="Hold key / mouse button" Tag="Hold" />
                                 </ComboBox>

@@ -241,16 +241,10 @@ internal sealed class AnnotationRenderer
             return;
         }
 
-        var brush = new SolidColorBrush(color) { Opacity = (isDraft ? 0.28 : 0.36) * opacityScale };
-        brush.Freeze();
-        var pen = new WpfPen(brush, Math.Max(12, shape.Thickness * 4.2))
-        {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Round,
-            LineJoin = PenLineJoin.Round
-        };
-        pen.Freeze();
-        DrawPencil(drawingContext, shape, pen);
+        DrawPencil(
+            drawingContext,
+            shape,
+            _createPen(color, (isDraft ? 0.28 : 0.36) * opacityScale, Math.Max(12, shape.Thickness * 4.2)));
     }
 
     private void DrawPencil(DrawingContext drawingContext, AnnotationShape shape, WpfPen pen)
@@ -316,16 +310,7 @@ internal sealed class AnnotationRenderer
         var point1 = end + vector * headLength + normal * headWidth;
         var point2 = end + vector * headLength - normal * headWidth;
 
-        var penBrush = new SolidColorBrush(color) { Opacity = Math.Clamp(opacity, 0, 1) };
-        penBrush.Freeze();
-        var shaftPen = new WpfPen(penBrush, thickness)
-        {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Flat,
-            LineJoin = PenLineJoin.Round
-        };
-        shaftPen.Freeze();
-        drawingContext.DrawLine(shaftPen, start, shaftEnd);
+        drawingContext.DrawLine(_createPen(color, opacity, thickness), start, shaftEnd);
 
         var geometry = new StreamGeometry();
         using (var context = geometry.Open())
@@ -335,10 +320,8 @@ internal sealed class AnnotationRenderer
             context.LineTo(point2, isStroked: true, isSmoothJoin: true);
         }
 
-        var brush = new SolidColorBrush(color) { Opacity = opacity };
-        brush.Freeze();
         geometry.Freeze();
-        drawingContext.DrawGeometry(brush, null, geometry);
+        drawingContext.DrawGeometry(_getBrush(color, opacity), null, geometry);
     }
 
     private void DrawText(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, double opacity, Vector offset)

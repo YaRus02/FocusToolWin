@@ -6,7 +6,7 @@ namespace FocusTool.Win.Models;
 internal sealed class AnnotationShape
 {
     private const double TextLineHeightFactor = 1.12;
-    private const double TextAverageGlyphWidthFactor = 0.64;
+    private const double TextAverageGlyphWidthFactor = 0.78;
     private const double StepBadgeHeightFactor = 1.45;
     private const double StepBadgeWidthFactor = 2.2;
 
@@ -115,7 +115,7 @@ internal sealed class AnnotationShape
         var padding = Tool switch
         {
             AnnotationTool.Highlighter => Math.Max(6, Thickness * 2.1),
-            AnnotationTool.Text => 3,
+            AnnotationTool.Text => 6,
             AnnotationTool.Image => 3,
             AnnotationTool.StepOval or AnnotationTool.StepRect => 4,
             _ => Math.Max(3, Thickness / 2 + 2)
