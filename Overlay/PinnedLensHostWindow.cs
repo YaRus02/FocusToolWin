@@ -717,6 +717,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         private readonly ToolStripMenuItem _freezeItem;
         private readonly ToolStripMenuItem _zoomInItem;
         private readonly ToolStripMenuItem _zoomOutItem;
+        private readonly List<System.Windows.Forms.Timer> _topmostTimers = [];
         private bool _freezeTogglePending;
 
         public HostForm(PinnedLensHostWindow owner)
@@ -745,7 +746,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
             _menu.Items.Add(new ToolStripMenuItem("Close", null, (_, _) => Close()));
             _menu.Items.Add(new ToolStripMenuItem("Close all", null, (_, _) => _owner.CloseAllRequested?.Invoke()));
             _menu.Opening += (_, _) => UpdateMenuState();
-            _menu.Opened += (_, _) => ReassertContextMenuTopmost();
+            TopmostContextMenuHelper.Attach(_menu, _topmostTimers);
             ContextMenuStrip = _menu;
         }
 
@@ -840,6 +841,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         {
             if (disposing)
             {
+                TopmostContextMenuHelper.DisposeTimers(_topmostTimers);
                 _menu.Dispose();
             }
 
@@ -848,7 +850,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         private void UpdateMenuState()
         {
-            _freezeItem.Text = _owner.IsFrozen ? "Resume" : "Freeze";
+            _freezeItem.Text = _owner.IsFrozen ? "Unfreeze" : "Freeze";
             _freezeItem.Enabled = !_freezeTogglePending;
             _zoomInItem.Enabled = !_freezeTogglePending && _owner.Zoom < _owner._maximumZoom - 0.001;
             _zoomOutItem.Enabled = !_freezeTogglePending && _owner.Zoom > 1.0 + 0.001;
@@ -897,19 +899,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         public void ReassertContextMenuTopmost()
         {
-            if (!_menu.Visible || _menu.Handle == IntPtr.Zero)
-            {
-                return;
-            }
-
-            NativeMethods.SetWindowPos(
-                _menu.Handle,
-                NativeMethods.HwndTopmost,
-                0,
-                0,
-                0,
-                0,
-                NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+            TopmostContextMenuHelper.ReassertIfVisible(_menu);
         }
 
         protected override void WndProc(ref Message m)
