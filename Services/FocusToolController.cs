@@ -257,8 +257,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => Settings.MagnifierEnabled,
             CloseMagnifierHost,
             () => _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels),
-            _pinnedLenses.HideForBoard,
-            _pinnedLenses.RestoreAfterBoard,
             _pointerVisuals.SetLaserVisualActive,
             RegisterHotKeys,
             () => StateChanged?.Invoke(this, EventArgs.Empty));
@@ -1260,6 +1258,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ReassertFloatingChromeTopmost()
     {
+        if (IsVisualBoardMode(_mode))
+        {
+            _pinnedLenses.ReassertTopmost();
+        }
+
         _toolbar.ReassertTopmost();
         _timerController?.ReassertTopmost();
 
@@ -1269,7 +1272,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ReassertPinnedLensTopmost()
     {
-        _pinnedLenses.ReassertTopmost();
+        if (!IsVisualBoardMode(_mode))
+        {
+            _pinnedLenses.ReassertTopmost();
+        }
     }
 
     private ScreenPoint? GetSpotlightPoint()
