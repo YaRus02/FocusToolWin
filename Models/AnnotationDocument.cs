@@ -189,7 +189,7 @@ internal sealed class AnnotationDocument
 
             if (_selectedIndices.Count > 0)
             {
-                SelectionBounds = selectionRect;
+                RefreshSelectionBoundsCore();
             }
         }
 
@@ -346,7 +346,7 @@ internal sealed class AnnotationDocument
         _editingTextIndex = index;
         _editingTextOriginal = _shapes[index].Clone();
         _textEditUndoSnapshot = Snapshot(_clockProvider());
-        SelectSingleIndexCore(index);
+        SelectSingleIndexCore(index, objectEdit: true);
         OnChanged();
         return true;
     }
@@ -722,7 +722,7 @@ internal sealed class AnnotationDocument
         }
         else
         {
-            SelectSingleIndexCore(index);
+            SelectSingleIndexCore(index, objectEdit: true);
         }
 
         ClearTextEditCore(keepSelection: true);
@@ -741,7 +741,7 @@ internal sealed class AnnotationDocument
         if (_editingTextOriginal is not null)
         {
             _shapes[index] = _editingTextOriginal.Clone();
-            SelectSingleIndexCore(index);
+            SelectSingleIndexCore(index, objectEdit: true);
         }
 
         ClearTextEditCore(keepSelection: true);

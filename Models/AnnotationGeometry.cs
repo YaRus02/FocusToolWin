@@ -109,8 +109,8 @@ internal static class AnnotationGeometry
 
     private static ScreenPoint ApplyImageResizeConstraint(ScreenPoint anchor, ScreenPoint point, AnnotationShape shape)
     {
-        var width = Math.Max(1, shape.Image?.PixelWidth ?? 1);
-        var height = Math.Max(1, shape.Image?.PixelHeight ?? 1);
+        var width = Math.Max(1.0, shape.Image?.PixelWidth ?? 1);
+        var height = Math.Max(1.0, shape.Image?.PixelHeight ?? 1);
         var aspect = width / height;
         var dx = point.X - anchor.X;
         var dy = point.Y - anchor.Y;
@@ -128,6 +128,9 @@ internal static class AnnotationGeometry
             dx = Math.Sign(dx == 0 ? 1 : dx) * Math.Abs(dy) * aspect;
         }
 
-        return new ScreenPoint(anchor.X + dx, anchor.Y + dy);
+        var constrained = new ScreenPoint(anchor.X + dx, anchor.Y + dy);
+        return double.IsFinite(constrained.X) && double.IsFinite(constrained.Y)
+            ? constrained
+            : point;
     }
 }

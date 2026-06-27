@@ -65,7 +65,7 @@ internal sealed class AnnotationMouseController
         var currentTool = _currentToolProvider();
         var settings = _settingsProvider();
 
-        if (HandleTextObjectClick(point))
+        if (HandleTextObjectClick(point, currentTool))
         {
             return;
         }
@@ -239,7 +239,7 @@ internal sealed class AnnotationMouseController
         _tryCompletePushToAnnotateExit();
     }
 
-    private bool HandleTextObjectClick(ScreenPoint point)
+    private bool HandleTextObjectClick(ScreenPoint point, AnnotationTool currentTool)
     {
         if (_annotations.IsEditingText)
         {
@@ -275,7 +275,12 @@ internal sealed class AnnotationMouseController
         _lastTextClickMs = _clock();
         _hasLastTextClick = true;
         ResetObjectClickTracking();
-        return true;
+        if (_annotations.IsObjectEditing && _annotations.ObjectEditContains(point))
+        {
+            return false;
+        }
+
+        return currentTool != AnnotationTool.Move;
     }
 
     private bool HandleObjectEditClick(ScreenPoint point, AnnotationTool currentTool)
