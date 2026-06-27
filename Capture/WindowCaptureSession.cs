@@ -51,7 +51,10 @@ internal sealed class WindowCaptureSession : IDisposable
             _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(_winrtDevice, PixelFormat, BufferCount, _item.Size);
             _framePool.FrameArrived += OnFrameArrived;
             _session = _framePool.CreateCaptureSession(_item);
-            _session.IsCursorCaptureEnabled = false;
+            // Keep the real OS cursor in the mirror: it stays in sync with the
+            // overlay snapshot (cursor highlight / laser) frame-for-frame, unlike a
+            // separately drawn synthetic cursor which visibly lags/doubles.
+            _session.IsCursorCaptureEnabled = true;
             _session.StartCapture();
         }
     }

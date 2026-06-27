@@ -203,9 +203,13 @@ internal sealed class OverlaySurface : FrameworkElement
         }
 
         DrawAnnotations(drawingContext);
-        if (!options.SuppressPointerVisuals)
+        if (!options.SuppressCursorHighlight)
         {
             DrawCursorHighlight(drawingContext, _cursorHighlightProvider());
+        }
+
+        if (!options.SuppressLaser)
+        {
             DrawLaserTrail(drawingContext);
         }
 

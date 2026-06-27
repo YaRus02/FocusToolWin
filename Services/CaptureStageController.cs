@@ -25,6 +25,7 @@ internal sealed class CaptureStageController : IDisposable
     private readonly Func<ScreenRect, OverlaySnapshotData?> _overlayProvider;
     private readonly DispatcherTimer _overlayTimer;
     private Forms.Form? _pickerOwner;
+    private bool _pickerOpen;
     private bool _disposed;
 
     public CaptureStageController(Func<ScreenRect, OverlaySnapshotData?> overlayProvider)
@@ -34,21 +35,27 @@ internal sealed class CaptureStageController : IDisposable
         _overlayTimer.Tick += OnOverlayTimerTick;
     }
 
+    private static void ShowInfo(string text)
+    {
+        Forms.MessageBox.Show(text, "Capture Stage", Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Information);
+    }
+
     public bool HasStages => _stages.Count > 0;
 
     public async Task StartWithPickerAsync()
     {
-        if (_disposed)
+        if (_disposed || _pickerOpen)
         {
             return;
         }
 
         if (!GraphicsCaptureSession.IsSupported())
         {
-            AppLog.Error("Capture Stage: Windows Graphics Capture is not supported on this system.");
+            ShowInfo("Windows Graphics Capture isn't supported on this system.");
             return;
         }
 
+        _pickerOpen = true;
         GraphicsCaptureItem? item;
         try
         {
@@ -63,6 +70,7 @@ internal sealed class CaptureStageController : IDisposable
         finally
         {
             HidePickerOwner();
+            _pickerOpen = false;
         }
 
         if (item is null)
@@ -72,7 +80,7 @@ internal sealed class CaptureStageController : IDisposable
 
         if (!TryResolveWindowFromPickedItem(item, out var sourceWindow))
         {
-            AppLog.Error($"Capture Stage: could not resolve selected source '{item.DisplayName}' to a desktop window.");
+            ShowInfo($"Couldn't map \"{item.DisplayName}\" to an application window. Pick an application window — capturing a whole screen isn't supported yet.");
             return;
         }
 
@@ -198,9 +206,10 @@ internal sealed class CaptureStageController : IDisposable
         {
             score += 1000;
         }
-        else if (title.Contains(displayName, StringComparison.CurrentCultureIgnoreCase)
-            || displayName.Contains(title, StringComparison.CurrentCultureIgnoreCase))
+        else if ((displayName.Length >= 4 && title.Contains(displayName, StringComparison.CurrentCultureIgnoreCase))
+            || (title.Length >= 4 && displayName.Contains(title, StringComparison.CurrentCultureIgnoreCase)))
         {
+            // Require a non-trivial overlap so short/generic titles don't false-match.
             score += 500;
         }
         else

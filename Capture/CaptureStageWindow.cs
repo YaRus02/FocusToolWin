@@ -29,6 +29,7 @@ internal sealed class CaptureStageWindow : Form
 
     private readonly object _gate = new();
     private readonly IntPtr _sourceWindow;
+    private bool _deviceLost;
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
     private IDXGISwapChain1? _swapChain;
@@ -39,8 +40,6 @@ internal sealed class CaptureStageWindow : Form
     private ID2D1DeviceContext? _d2dContext;
     private ID2D1Bitmap1? _d2dTarget;
     private ID2D1Bitmap? _overlayBitmap;
-    private ID2D1SolidColorBrush? _cursorFillBrush;
-    private ID2D1SolidColorBrush? _cursorStrokeBrush;
     private readonly List<SpriteBitmap> _spriteBitmaps = [];
     private OverlaySnapshotData? _pendingOverlay;
     private WindowCaptureSession? _session;
@@ -156,8 +155,6 @@ internal sealed class CaptureStageWindow : Form
         using var dxgiDevice = _device!.QueryInterface<IDXGIDevice>();
         _d2dDevice = _d2dFactory.CreateDevice(dxgiDevice);
         _d2dContext = _d2dDevice.CreateDeviceContext(DeviceContextOptions.None);
-        _cursorFillBrush = _d2dContext.CreateSolidColorBrush(new Color4(1f, 1f, 1f, 0.96f));
-        _cursorStrokeBrush = _d2dContext.CreateSolidColorBrush(new Color4(0f, 0f, 0f, 0.86f));
     }
 
     // Wraps the current back buffer as a Direct2D render target so overlays can be
@@ -221,7 +218,7 @@ internal sealed class CaptureStageWindow : Form
             }
 
             _context.CopyResource(_sourceFrame, texture);
-            RenderCurrentFrame();
+            RenderCurrentFrame(syncInterval: 1);
         }
     }
 
@@ -259,16 +256,46 @@ internal sealed class CaptureStageWindow : Form
         });
     }
 
-    private void RenderCurrentFrame()
+    // syncInterval: 1 for WGC frames (vsync-paced on the pool thread); 0 for the
+    // UI-timer re-present so it never blocks the UI thread waiting for vblank.
+    private void RenderCurrentFrame(int syncInterval)
     {
-        if (_swapChain is null || _backBuffer is null || _sourceFrame is null || _context is null)
+        if (_deviceLost || _swapChain is null || _backBuffer is null || _sourceFrame is null || _context is null)
         {
             return;
         }
 
-        _context.CopyResource(_backBuffer, _sourceFrame);
-        DrawOverlay();
-        _swapChain.Present(1, PresentFlags.None);
+        try
+        {
+            _context.CopyResource(_backBuffer, _sourceFrame);
+            DrawOverlay();
+            var result = _swapChain.Present((uint)syncInterval, PresentFlags.None);
+            if (result.Failure)
+            {
+                HandleRenderFailure(new InvalidOperationException($"Present failed: 0x{result.Code:X8}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            HandleRenderFailure(ex);
+        }
+    }
+
+    // Device loss (TDR / GPU reset / device-removed) or any render error: stop
+    // rendering and close the stage rather than sit frozen on a dead device.
+    private void HandleRenderFailure(Exception ex)
+    {
+        if (_deviceLost)
+        {
+            return;
+        }
+
+        _deviceLost = true;
+        AppLog.Error("Capture Stage render failed; closing stage.", ex);
+        if (IsHandleCreated && !IsDisposed)
+        {
+            BeginInvoke(Close);
+        }
     }
 
     // Composites the latest overlay snapshot over the copied source frame. The
@@ -318,44 +345,7 @@ internal sealed class CaptureStageWindow : Form
             _d2dContext.DrawBitmap(sprite.Bitmap, spriteRect, 1f, BitmapInterpolationMode.Linear, new Vortice.Mathematics.Rect(0, 0, spriteSize.Width, spriteSize.Height));
         }
 
-        DrawStageCursor(left, top, width, height);
-
         _d2dContext.EndDraw();
-    }
-
-    private void DrawStageCursor(double sourceLeft, double sourceTop, double sourceWidth, double sourceHeight)
-    {
-        if (_d2dFactory is null || _d2dContext is null || _cursorFillBrush is null || _cursorStrokeBrush is null)
-        {
-            return;
-        }
-
-        if (!NativeMethods.GetCursorPos(out var cursor))
-        {
-            return;
-        }
-
-        if (cursor.X < sourceLeft || cursor.Y < sourceTop || cursor.X > sourceLeft + sourceWidth || cursor.Y > sourceTop + sourceHeight)
-        {
-            return;
-        }
-
-        var x = (float)((cursor.X - sourceLeft) / sourceWidth * _swapSize.Width);
-        var y = (float)((cursor.Y - sourceTop) / sourceHeight * _swapSize.Height);
-        using var geometry = _d2dFactory.CreatePathGeometry();
-        using var sink = geometry.Open();
-        sink.BeginFigure(new Vector2(x, y), FigureBegin.Filled);
-        sink.AddLine(new Vector2(x, y + 22));
-        sink.AddLine(new Vector2(x + 5, y + 17));
-        sink.AddLine(new Vector2(x + 8, y + 25));
-        sink.AddLine(new Vector2(x + 12, y + 23));
-        sink.AddLine(new Vector2(x + 9, y + 15));
-        sink.AddLine(new Vector2(x + 16, y + 15));
-        sink.EndFigure(FigureEnd.Closed);
-        sink.Close();
-
-        _d2dContext.FillGeometry(geometry, _cursorFillBrush);
-        _d2dContext.DrawGeometry(geometry, _cursorStrokeBrush, 1.35f);
     }
 
     private void RefreshOverlay(OverlaySnapshotData data)
@@ -452,7 +442,7 @@ internal sealed class CaptureStageWindow : Form
             if (!_graphicsDisposed)
             {
                 _pendingOverlay = data;
-                RenderCurrentFrame();
+                RenderCurrentFrame(syncInterval: 0);
             }
         }
     }
@@ -548,10 +538,6 @@ internal sealed class CaptureStageWindow : Form
             _d2dTarget = null;
             _overlayBitmap?.Dispose();
             _overlayBitmap = null;
-            _cursorFillBrush?.Dispose();
-            _cursorFillBrush = null;
-            _cursorStrokeBrush?.Dispose();
-            _cursorStrokeBrush = null;
             foreach (var sprite in _spriteBitmaps)
             {
                 sprite.Bitmap.Dispose();

@@ -99,7 +99,7 @@ internal sealed class InteractionModeTransitionController
         {
             var foreground = NativeMethods.GetForegroundWindow();
             _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
-            _previousForegroundWindow = processId != 0 && processId != (uint)Environment.ProcessId
+            _previousForegroundWindow = processId != 0 && processId != (uint)Environment.ProcessId && !IsShellWindow(foreground)
                 ? foreground
                 : _lastExternalForegroundWindow;
         }

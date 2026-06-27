@@ -214,28 +214,41 @@ internal sealed class OverlayManager : IDisposable
     // source rect. The Capture Stage can draw it straight onto its back buffer.
     public OverlayLayer? CaptureOverlayLayer(ScreenRect rect)
     {
-        foreach (var window in _windows)
+        var window = PickOverlayWindowForRect(rect);
+        var bitmap = window?.CaptureSurfaceRegion(rect, OverlayRenderOptions.CaptureStage);
+        if (bitmap is null)
         {
-            if (!window.Intersects(rect))
-            {
-                continue;
-            }
-
-            var bitmap = window.CaptureSurfaceRegion(rect, OverlayRenderOptions.CaptureStage);
-            if (bitmap is null)
-            {
-                return null;
-            }
-
-            var width = bitmap.PixelWidth;
-            var height = bitmap.PixelHeight;
-            var stride = width * 4;
-            var pixels = new byte[stride * height];
-            bitmap.CopyPixels(pixels, stride, 0);
-            return new OverlayLayer(pixels, width, height, stride);
+            return null;
         }
 
-        return null;
+        var width = bitmap.PixelWidth;
+        var height = bitmap.PixelHeight;
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+        bitmap.CopyPixels(pixels, stride, 0);
+        return new OverlayLayer(pixels, width, height, stride);
+    }
+
+    // Prefer the monitor containing the source rect's center (where the window
+    // mostly lives); fall back to the first intersecting monitor.
+    private OverlayWindow? PickOverlayWindowForRect(ScreenRect rect)
+    {
+        var center = new ScreenPoint((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2);
+        OverlayWindow? firstIntersecting = null;
+        foreach (var window in _windows)
+        {
+            if (window.Contains(center))
+            {
+                return window;
+            }
+
+            if (firstIntersecting is null && window.Intersects(rect))
+            {
+                firstIntersecting = window;
+            }
+        }
+
+        return firstIntersecting;
     }
 
     public void Dispose()
