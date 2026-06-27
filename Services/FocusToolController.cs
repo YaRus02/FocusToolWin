@@ -32,8 +32,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly PushToAnnotateController _pushToAnnotate;
     private readonly PointerVisualController _pointerVisuals;
     private readonly VisualEffectsController _visualEffects;
+    private readonly SettingsCommandController _settingsCommands;
+    private readonly OverlayTickController _overlayTick;
     private readonly OverlayToolbarController _toolbar;
     private readonly CaptureController _capture;
+    private readonly BoardController _boards;
     private readonly PinnedLensController _pinnedLenses;
     private readonly MagnifierController _magnifier;
     private readonly GlobalHotKeyController _hotKeys;
@@ -45,11 +48,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private TimerController? _timerController;
     private TrayIconController? _trayIcon;
     private SettingsWindow? _settingsWindow;
-    private ScreenBoardFrame? _screenBoardFrame;
     private readonly RegionMaskContextMenuController _regionMaskContextMenu;
     private bool _disposed;
     private InteractionMode _mode = InteractionMode.Passthrough;
-    private AnnotationTool _lastStepTool = AnnotationTool.StepOval;
 
     public event EventHandler? StateChanged;
 
@@ -110,6 +111,20 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             Interval = IdleInterval
         };
         _timer.Tick += OnTimerTick;
+        _visualEffects = new VisualEffectsController(
+            GetCursorOrNull,
+            () => _overlayManager?.Invalidate(),
+            (current, previous) => _overlayManager?.InvalidateForCursor(current, previous),
+            MovementThresholdPixels);
+        _settingsCommands = new SettingsCommandController(
+            () => Settings,
+            ApplySettings,
+            () => _mode,
+            SetInteractionMode,
+            _annotations,
+            _regionMasks,
+            _visualEffects,
+            () => _overlayManager?.Invalidate());
         _pushToAnnotate = new PushToAnnotateController(
             () => Settings,
             () => _mode,
@@ -118,9 +133,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => _annotations.HasTextInput,
             ActiveInterval,
             ClearAnnotations,
-            SetAnnotationTool,
-            SelectStepTool,
-            SetAnnotationPresetColor);
+            _settingsCommands.SetAnnotationTool,
+            _settingsCommands.SelectStepTool,
+            _settingsCommands.SetAnnotationPresetColor);
         _annotationInput = new AnnotationInputController(
             _annotations,
             () => Settings,
@@ -134,9 +149,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ClearAnnotations,
             DeleteSelectedAnnotations,
             AdjustAnnotationThickness,
-            SetAnnotationTool,
-            SelectStepTool,
-            SetAnnotationPresetColor);
+            _settingsCommands.SetAnnotationTool,
+            _settingsCommands.SelectStepTool,
+            _settingsCommands.SetAnnotationPresetColor);
         _annotationMouse = new AnnotationMouseController(
             _annotations,
             () => Settings,
@@ -157,11 +172,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ActiveInterval,
             FadeInterval,
             IdleInterval);
-        _visualEffects = new VisualEffectsController(
-            GetCursorOrNull,
-            () => _overlayManager?.Invalidate(),
-            (current, previous) => _overlayManager?.InvalidateForCursor(current, previous),
-            MovementThresholdPixels);
         _pinnedLenses = new PinnedLensController(
             () => Settings,
             GetPinnedLensExcludedWindows,
@@ -210,6 +220,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => IsVisualBoardMode(_mode),
             frame => _overlayManager?.CaptureScreenBoardFrame(frame),
             (title, text) => _trayIcon?.ShowMessage(title, text));
+        _boards = new BoardController(
+            _capture,
+            () => _mode,
+            SetInteractionMode);
         _magnifier = new MagnifierController(
             () => Settings,
             () => _disposed,
@@ -235,8 +249,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
                 _regionMasks.CancelEdit();
                 _regionMasks.ClearSelection();
             },
-            SaveScreenBoardSnapshot,
-            () => _screenBoardFrame = null,
+            _boards.SaveSnapshot,
+            _boards.ClearFrame,
             () => _overlayManager?.Show(),
             mode => _overlayManager?.SetInteractionMode(mode),
             () => _overlayManager?.Invalidate(),
@@ -248,6 +262,23 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _pointerVisuals.SetLaserVisualActive,
             RegisterHotKeys,
             () => StateChanged?.Invoke(this, EventArgs.Empty));
+        _overlayTick = new OverlayTickController(
+            () => _disposed,
+            () => _mode,
+            () => ActivationMode,
+            () => Settings.MagnifierEnabled,
+            CanExitPushToAnnotate,
+            UpdateFadingAnnotations,
+            _modeTransitions.TrackExternalForegroundWindow,
+            _pushToAnnotate,
+            _pointerVisuals,
+            _magnifier,
+            _visualEffects,
+            () => _overlayManager?.Invalidate(),
+            interval => _timer.Interval = interval,
+            ActiveInterval,
+            FadeInterval,
+            MovementThresholdPixels);
         _hotKeys = new GlobalHotKeyController(
             (title, text) => _trayIcon?.ShowMessage(title, text),
             ToggleLaserActivationMode,
@@ -272,10 +303,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             Exit,
             ExitVisualEffects);
         CacheParsedSettings();
-        if (IsStepTool(CurrentTool))
-        {
-            _lastStepTool = CurrentTool;
-        }
 
         Settings.SpotlightEnabled = false;
         Settings.MagnifierEnabled = false;
@@ -340,7 +367,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_pointerVisuals.Trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, _pointerVisuals.GetCursorHighlightFrame, () => _screenBoardFrame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_pointerVisuals.Trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, _pointerVisuals.GetCursorHighlightFrame, () => _boards.Frame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         RegisterHotKeys();
@@ -393,64 +420,32 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetCursorHighlightEnabled(bool enabled)
     {
-        if (Settings.CursorHighlightEnabled == enabled)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.CursorHighlightEnabled = enabled;
-        ApplySettings(updated);
+        _settingsCommands.SetCursorHighlightEnabled(enabled);
     }
 
     public void SetCursorHighlightActivationMode(LaserActivationMode mode)
     {
-        if (Settings.GetCursorHighlightActivationMode() == mode)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.SetCursorHighlightActivationMode(mode);
-        ApplySettings(updated);
+        _settingsCommands.SetCursorHighlightActivationMode(mode);
     }
 
     public void SetCursorHighlightPresetColor(int index)
     {
-        if (index < 0 || index >= Settings.LaserColorPresets.Count)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.CursorHighlightColor = Settings.LaserColorPresets[index];
-        ApplySettings(updated);
+        _settingsCommands.SetCursorHighlightPresetColor(index);
     }
 
     public void SetClickPulseEnabled(bool enabled)
     {
-        if (Settings.ClickPulseEnabled == enabled)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.ClickPulseEnabled = enabled;
-        ApplySettings(updated);
+        _settingsCommands.SetClickPulseEnabled(enabled);
     }
 
     public void AdjustCursorHighlightRadius(double delta)
     {
-        var updated = Settings.Clone();
-        updated.CursorHighlightRadius += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustCursorHighlightRadius(delta);
     }
 
     public void AdjustCursorHighlightThickness(double delta)
     {
-        var updated = Settings.Clone();
-        updated.CursorHighlightThickness += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustCursorHighlightThickness(delta);
     }
 
     public void TogglePinnedLens()
@@ -603,13 +598,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ToggleScreenBoard()
     {
-        if (_mode == InteractionMode.ScreenBoard)
-        {
-            SetInteractionMode(InteractionMode.Passthrough);
-            return;
-        }
-
-        _ = EnterScreenBoardAsync();
+        _boards.ToggleScreenBoard();
     }
 
     public void ToggleToolbar()
@@ -629,12 +618,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ToggleBlackScreen()
     {
-        SetInteractionMode(_mode == InteractionMode.BlackScreen ? InteractionMode.Passthrough : InteractionMode.BlackScreen);
+        _boards.ToggleBlackScreen();
     }
 
     public void ToggleWhiteScreen()
     {
-        SetInteractionMode(_mode == InteractionMode.WhiteScreen ? InteractionMode.Passthrough : InteractionMode.WhiteScreen);
+        _boards.ToggleWhiteScreen();
     }
 
     private void BeginPinnedLensSelection()
@@ -656,9 +645,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         if (_visualEffects.SpotlightEnabled)
         {
-            var updated = Settings.Clone();
-            updated.SpotlightEnabled = false;
-            ApplySettings(updated);
+            _settingsCommands.SetSpotlightEnabled(false);
         }
 
         _regionSpotlights.SelectLast();
@@ -705,33 +692,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         await _capture.TakeRegionScreenshotAsync(sourceRect, restoreToolbar);
     }
 
-    private async Task EnterScreenBoardAsync()
-    {
-        var previousMode = _mode;
-        await _capture.EnterScreenBoardAsync(
-            frame =>
-            {
-                _screenBoardFrame = frame;
-                SetInteractionMode(InteractionMode.ScreenBoard);
-            },
-            () => SetInteractionMode(previousMode));
-    }
-
-    private void SaveScreenBoardSnapshot()
-    {
-        _ = _capture.SaveScreenBoardSnapshotAsync(_screenBoardFrame);
-    }
-
     public void SetMagnifierEnabled(bool enabled)
     {
-        if (Settings.MagnifierEnabled == enabled)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.MagnifierEnabled = enabled;
-        ApplySettings(updated);
+        _settingsCommands.SetMagnifierEnabled(enabled);
     }
 
     public void SetInteractionMode(InteractionMode mode)
@@ -822,175 +785,97 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetPresetColor(string color)
     {
-        var updated = Settings.Clone();
-        updated.Color = color;
-        ApplySettings(updated);
+        _settingsCommands.SetPresetColor(color);
     }
 
     public void SetLaserPresetColor(int index)
     {
-        if (index < 0 || index >= Settings.LaserColorPresets.Count)
-        {
-            return;
-        }
-
-        SetPresetColor(Settings.LaserColorPresets[index]);
+        _settingsCommands.SetLaserPresetColor(index);
     }
 
     public void SetAnnotationColor(string color)
     {
-        var updated = Settings.Clone();
-        updated.AnnotationColor = color;
-        ApplySettings(updated);
-        _annotations.ApplyColorToSelection(color);
+        _settingsCommands.SetAnnotationColor(color);
     }
 
     public void SetAnnotationPresetColor(int index)
     {
-        if (index < 0 || index >= Settings.AnnotationColorPresets.Count)
-        {
-            return;
-        }
-
-        SetAnnotationColor(Settings.AnnotationColorPresets[index]);
+        _settingsCommands.SetAnnotationPresetColor(index);
     }
 
     public void SetAnnotationTool(AnnotationTool tool)
     {
-        if (_annotations.IsEditingText)
-        {
-            _annotations.CommitTextInput();
-        }
-
-        if (IsStepTool(tool))
-        {
-            _lastStepTool = tool;
-        }
-
-        var updated = Settings.Clone();
-        updated.SetAnnotationTool(tool);
-        ApplySettings(updated);
-
-        if (tool != AnnotationTool.Move)
-        {
-            _annotations.ClearSelection();
-        }
+        _settingsCommands.SetAnnotationTool(tool);
     }
 
     public void SelectStepTool()
     {
-        SetAnnotationTool(_lastStepTool);
-        if (_mode == InteractionMode.Passthrough)
-        {
-            SetInteractionMode(InteractionMode.Annotate);
-        }
+        _settingsCommands.SelectStepTool();
     }
 
     public void AdjustAnnotationThickness(double delta)
     {
-        var updated = Settings.Clone();
-        updated.AnnotationThickness += delta;
-        ApplySettings(updated);
-        _annotations.AdjustSelectedThickness(delta);
+        _settingsCommands.AdjustAnnotationThickness(delta);
     }
 
     public void AdjustAnnotationFontSize(double delta)
     {
-        var updated = Settings.Clone();
-        updated.AnnotationFontSize += delta;
-        ApplySettings(updated);
-        _annotations.AdjustSelectedTextFontSize(delta);
+        _settingsCommands.AdjustAnnotationFontSize(delta);
     }
 
     public void AdjustLaserTrailLength(int delta)
     {
-        var updated = Settings.Clone();
-        updated.TrailLengthMs += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustLaserTrailLength(delta);
     }
 
     public void AdjustSpotlightRadius(double delta)
     {
-        var updated = Settings.Clone();
-        updated.SpotlightRadius += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustSpotlightRadius(delta);
     }
 
     public void AdjustSpotlightOpacity(double delta)
     {
-        var updated = Settings.Clone();
-        updated.SpotlightOpacity += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustSpotlightOpacity(delta);
     }
 
     public void AdjustMagnifierZoom(double delta)
     {
-        var updated = Settings.Clone();
-        updated.MagnifierZoom += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustMagnifierZoom(delta);
     }
 
     public void AdjustMagnifierRadius(double delta)
     {
-        var updated = Settings.Clone();
-        updated.MagnifierRadius += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustMagnifierRadius(delta);
     }
 
     public void AdjustPinnedLensZoom(double delta)
     {
-        var updated = Settings.Clone();
-        updated.PinnedLensZoom += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustPinnedLensZoom(delta);
     }
 
     public void AdjustPinnedLensRefreshFps(int delta)
     {
-        var updated = Settings.Clone();
-        updated.PinnedLensRefreshFps += delta;
-        ApplySettings(updated);
+        _settingsCommands.AdjustPinnedLensRefreshFps(delta);
     }
 
     public void AdjustRegionMaskOpacity(double delta)
     {
-        var hasSelectedMask = _regionMasks.TryGetSelected(out var mask);
-        var updated = Settings.Clone();
-        updated.RegionMaskOpacity = (hasSelectedMask ? mask.Opacity : Settings.RegionMaskOpacity) + delta;
-        ApplySettings(updated);
-        if (hasSelectedMask)
-        {
-            mask.SetOpacity(Settings.RegionMaskOpacity);
-            _overlayManager?.Invalidate();
-        }
+        _settingsCommands.AdjustRegionMaskOpacity(delta);
     }
 
     public void SetRegionMaskColor(string color)
     {
-        var updated = Settings.Clone();
-        updated.RegionMaskColor = color;
-        ApplySettings(updated);
-        if (_regionMasks.TryGetSelected(out var mask))
-        {
-            mask.SetColor(Settings.RegionMaskColor);
-            _overlayManager?.Invalidate();
-        }
+        _settingsCommands.SetRegionMaskColor(color);
     }
 
     public void SetRegionMaskPresetColor(int index)
     {
-        if (index < 0 || index >= Settings.RegionMaskColorPresets.Count)
-        {
-            return;
-        }
-
-        SetRegionMaskColor(Settings.RegionMaskColorPresets[index]);
+        _settingsCommands.SetRegionMaskPresetColor(index);
     }
 
     public void SetGlowEnabled(bool enabled)
     {
-        var updated = Settings.Clone();
-        updated.GlowEnabled = enabled;
-        ApplySettings(updated);
+        _settingsCommands.SetGlowEnabled(enabled);
     }
 
     public void ToggleFadingAnnotations()
@@ -1000,57 +885,27 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void SetFadingAnnotationsEnabled(bool enabled)
     {
-        if (Settings.FadingAnnotationsEnabled == enabled)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.FadingAnnotationsEnabled = enabled;
-        ApplySettings(updated);
+        _settingsCommands.SetFadingAnnotationsEnabled(enabled);
     }
 
     public void AdjustFadingAnnotationVisibleMs(int deltaMs)
     {
-        var updated = Settings.Clone();
-        updated.FadingAnnotationVisibleMs += deltaMs;
-        ApplySettings(updated);
+        _settingsCommands.AdjustFadingAnnotationVisibleMs(deltaMs);
     }
 
     public void AdjustFadingAnnotationFadeMs(int deltaMs)
     {
-        var updated = Settings.Clone();
-        updated.FadingAnnotationFadeMs += deltaMs;
-        ApplySettings(updated);
+        _settingsCommands.AdjustFadingAnnotationFadeMs(deltaMs);
     }
 
     public void SetLaserActivationMode(LaserActivationMode mode)
     {
-        if (ActivationMode == mode)
-        {
-            return;
-        }
-
-        var updated = Settings.Clone();
-        updated.SetLaserActivationMode(mode);
-        ApplySettings(updated);
+        _settingsCommands.SetLaserActivationMode(mode);
     }
 
     public void SetSpotlightEnabled(bool enabled)
     {
-        if (_visualEffects.SpotlightEnabled == enabled)
-        {
-            return;
-        }
-
-        if (enabled && _mode == InteractionMode.RegionSpotlightSelect)
-        {
-            SetInteractionMode(InteractionMode.Passthrough);
-        }
-
-        var updated = Settings.Clone();
-        updated.SpotlightEnabled = enabled;
-        ApplySettings(updated);
+        _settingsCommands.SetSpotlightEnabled(enabled);
     }
 
     public void UndoAnnotation()
@@ -1228,61 +1083,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _modeTransitions.TrackExternalForegroundWindow();
-        _pushToAnnotate.Update(CanExitPushToAnnotate());
-
-        var fadingAnnotationsAnimating = UpdateFadingAnnotations();
-        var cursorHighlightAnimating = _pointerVisuals.UpdateCursorHighlight(force: false);
-        var magnifierActive = Settings.MagnifierEnabled;
-        var spotlightActive = _visualEffects.IsSpotlightVisibleInMode(_mode);
-        var holdActive = _pointerVisuals.IsLaserHoldActive(ActivationMode);
-
-        _pointerVisuals.SetLaserVisualActive(holdActive || IsAnnotationMode(_mode));
-        if (magnifierActive)
-        {
-            if (!_magnifier.IsRenderingSubscribed)
-            {
-                _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: false, MovementThresholdPixels);
-                _overlayManager?.Invalidate();
-            }
-        }
-        else if (spotlightActive)
-        {
-            _visualEffects.UpdateSpotlightCursor(force: false);
-        }
-
-        if (holdActive)
-        {
-            _pointerVisuals.TrackLaserWhileHeld(ActivationMode);
-            return;
-        }
-
-        _pointerVisuals.FadeLaserAfterRelease();
-        if (_pushToAnnotate.Active)
-        {
-            _timer.Interval = ActiveInterval;
-        }
-        else if (magnifierActive && !_magnifier.IsRenderingSubscribed)
-        {
-            _timer.Interval = ActiveInterval;
-        }
-        else if (spotlightActive)
-        {
-            _timer.Interval = ActiveInterval;
-        }
-        else if (fadingAnnotationsAnimating)
-        {
-            _timer.Interval = FadeInterval;
-        }
-        else if (cursorHighlightAnimating)
-        {
-            _timer.Interval = FadeInterval;
-        }
+        _overlayTick.Tick();
     }
 
     private void TryCompletePushToAnnotateExit()
@@ -1492,11 +1293,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             or InteractionMode.RegionMaskSelect
             or InteractionMode.ScreenshotRegionSelect
             or InteractionMode.RegionSpotlightSelect;
-    }
-
-    private static bool IsStepTool(AnnotationTool tool)
-    {
-        return tool is AnnotationTool.StepOval or AnnotationTool.StepRect;
     }
 
     private static bool IsVisualBoardMode(InteractionMode mode)

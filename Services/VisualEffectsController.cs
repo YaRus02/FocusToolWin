@@ -1,4 +1,5 @@
 using FocusTool.Win.Models;
+using FocusTool.Win.Overlay;
 
 namespace FocusTool.Win.Services;
 
