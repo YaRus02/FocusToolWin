@@ -42,6 +42,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly GlobalHotKeyController _hotKeys;
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
+    private readonly CaptureStageController _captureStage = new();
     private readonly RectSelectionController _rectSelection;
     private readonly RectToolsInputController _rectTools;
     private readonly InteractionModeTransitionController _modeTransitions;
@@ -1070,6 +1071,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _regionMaskContextMenu.Dispose();
         _hotKeys.Dispose();
         CloseMagnifierHost();
+        _captureStage.Dispose();
         _pinnedLenses.Dispose();
         _timerController?.Dispose();
         _trayIcon?.Dispose();
@@ -1223,6 +1225,24 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public void ClosePinnedLenses()
     {
         _pinnedLenses.CloseAll();
+    }
+
+    public bool HasCaptureStages => _captureStage.HasStages;
+
+    public void StartCaptureStageForLastWindow()
+    {
+        var source = _modeTransitions.LastExternalForegroundWindow;
+        if (source == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _captureStage.StartForWindow(source);
+    }
+
+    public void CloseCaptureStages()
+    {
+        _captureStage.CloseAll();
     }
 
     private void ResetSpotlightRegionEditState()

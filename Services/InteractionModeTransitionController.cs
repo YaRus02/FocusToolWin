@@ -1,3 +1,4 @@
+using System.Text;
 using FocusTool.Win.Models;
 using FocusTool.Win.Native;
 
@@ -167,6 +168,8 @@ internal sealed class InteractionModeTransitionController
         _notifyStateChanged();
     }
 
+    public IntPtr LastExternalForegroundWindow => _lastExternalForegroundWindow;
+
     public void TrackExternalForegroundWindow()
     {
         var foreground = NativeMethods.GetForegroundWindow();
@@ -176,10 +179,35 @@ internal sealed class InteractionModeTransitionController
         }
 
         _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
-        if (processId != 0 && processId != (uint)Environment.ProcessId)
+        if (processId != 0 && processId != (uint)Environment.ProcessId && !IsShellWindow(foreground))
         {
             _lastExternalForegroundWindow = foreground;
         }
+    }
+
+    // The taskbar, tray overflow flyout, Start menu and other shell surfaces are
+    // separate processes, so a click on them would otherwise be recorded as the
+    // "last external window" and clobber the real app the user was on. They are
+    // also not capturable by Windows Graphics Capture, so skip them entirely.
+    private static readonly HashSet<string> NonAppWindowClasses = new(StringComparer.Ordinal)
+    {
+        "Shell_TrayWnd",
+        "Shell_SecondaryTrayWnd",
+        "TopLevelWindowForOverflowXamlIsland",
+        "NotifyIconOverflowWindow",
+        "Windows.UI.Core.CoreWindow",
+        "XamlExplorerHostIslandWindow",
+        "Progman",
+        "WorkerW",
+        "ForegroundStaging",
+        "MultitaskingViewFrame",
+    };
+
+    private static bool IsShellWindow(IntPtr hwnd)
+    {
+        var buffer = new StringBuilder(256);
+        return NativeMethods.GetClassName(hwnd, buffer, buffer.Capacity) > 0
+            && NonAppWindowClasses.Contains(buffer.ToString());
     }
 
     private static bool IsAnnotationMode(InteractionMode mode)
