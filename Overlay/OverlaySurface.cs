@@ -34,8 +34,6 @@ internal sealed class OverlaySurface : FrameworkElement
     private const double LaserFastThicknessFactor = 0.8;
     private const double LaserSpeedEasing = 0.2;
     private const double RegionMaskHandleSize = 8;
-    private const double CursorPulseDurationMs = 360;
-    private const double CursorPulseExtraRadius = 26;
     private readonly TrailModel _trailModel;
     private readonly AnnotationDocument _annotations;
     private readonly Func<AppSettings> _settingsProvider;
@@ -61,8 +59,6 @@ internal sealed class OverlaySurface : FrameworkElement
     // cursor, fade frames, other elements animating).
     private Geometry? _spotlightDimGeometry;
     private (double Width, double Height, double X, double Y, double Radius) _spotlightDimKey;
-    private Geometry? _regionSpotlightDimGeometry;
-    private string? _regionSpotlightDimKey;
     // Reusable scratch buffers for the laser pipeline, cleared and refilled every
     // frame instead of allocating fresh Lists. UI-thread only and never re-entrant
     // (OnRender is synchronous), so the geometry/visual output is byte-identical to
@@ -77,6 +73,8 @@ internal sealed class OverlaySurface : FrameworkElement
     private double[] _laserLifeScratch = [];
     private readonly RegionMaskRenderer _regionMaskRenderer;
     private readonly RectSelectionRenderer _rectSelectionRenderer;
+    private readonly RegionSpotlightRenderer _regionSpotlightRenderer;
+    private readonly CursorEffectsRenderer _cursorEffectsRenderer;
 
     public OverlaySurface(
         TrailModel trailModel,
@@ -122,6 +120,17 @@ internal sealed class OverlaySurface : FrameworkElement
             CreatePen,
             GetFormattedText,
             SelectionDashPen);
+        _regionSpotlightRenderer = new RegionSpotlightRenderer(
+            ToRect,
+            DrawRectHandles,
+            GetBrush,
+            CreatePen);
+        _cursorEffectsRenderer = new CursorEffectsRenderer(
+            ToLocal,
+            GetBrush,
+            CreatePen,
+            DrawRadialGlow,
+            _clockProvider);
         _annotations.Changed += OnAnnotationsChanged;
         SnapsToDevicePixels = false;
         Focusable = false;
@@ -705,103 +714,7 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawCursorHighlight(DrawingContext drawingContext, CursorHighlightFrame frame)
     {
-        if (frame.Cursor is null && frame.Pulses.Count == 0)
-        {
-            return;
-        }
-
-        var settings = _settingsProvider();
-        var color = AppSettings.TryParseColor(settings.CursorHighlightColor, out var parsedColor)
-            ? parsedColor
-            : MediaColor.FromArgb(0xBF, 0xFF, 0xD4, 0x00);
-        var radius = settings.CursorHighlightRadius;
-        var thickness = settings.CursorHighlightThickness;
-
-        if (frame.Cursor is { } cursor
-            && CursorEffectTouchesScreen(cursor, radius + CursorPulseExtraRadius))
-        {
-            DrawCursorHighlightCore(
-                drawingContext,
-                ToLocal(cursor),
-                color,
-                radius,
-                thickness);
-        }
-
-        if (frame.Pulses.Count == 0)
-        {
-            return;
-        }
-
-        var nowMs = _clockProvider();
-        foreach (var pulse in frame.Pulses)
-        {
-            var progress = Math.Clamp((nowMs - pulse.StartedAtMs) / CursorPulseDurationMs, 0, 1);
-            if (progress >= 1 || !CursorEffectTouchesScreen(pulse.Point, radius + CursorPulseExtraRadius + 4))
-            {
-                continue;
-            }
-
-            DrawCursorClickPulse(
-                drawingContext,
-                pulse,
-                color,
-                radius,
-                thickness,
-                progress);
-        }
-    }
-
-    private void DrawCursorHighlightCore(
-        DrawingContext drawingContext,
-        WpfPoint center,
-        MediaColor color,
-        double radius,
-        double thickness)
-    {
-        var innerRadius = Math.Max(1, radius - thickness * 1.45);
-        DrawRadialGlow(drawingContext, center, color, 0.24, radius * 1.55);
-        drawingContext.DrawEllipse(GetBrush(color, 0.052), null, center, radius * 0.9, radius * 0.9);
-        drawingContext.DrawEllipse(null, CreatePen(Colors.Black, 0.30, thickness + 2.4), center, radius, radius);
-        drawingContext.DrawEllipse(null, CreatePen(color, 0.95, thickness), center, radius, radius);
-        drawingContext.DrawEllipse(null, CreatePen(Colors.White, 0.16, 1.0), center, innerRadius, innerRadius);
-    }
-
-    private void DrawCursorClickPulse(
-        DrawingContext drawingContext,
-        CursorClickPulse pulse,
-        MediaColor highlightColor,
-        double baseRadius,
-        double thickness,
-        double progress)
-    {
-        var eased = EaseOutCubic(progress);
-        var fade = Math.Pow(1 - progress, 1.65);
-        var radius = baseRadius * 0.82 + eased * (CursorPulseExtraRadius + baseRadius * 0.14);
-        var color = pulse.Button == CursorClickButton.Right
-            ? MediaColor.FromArgb(highlightColor.A, 0x66, 0xCC, 0xFF)
-            : highlightColor;
-        var center = ToLocal(pulse.Point);
-        var line = Math.Max(1.3, thickness * (0.78 + 0.25 * (1 - progress)));
-
-        DrawRadialGlow(drawingContext, center, color, 0.14 * fade, radius + 7);
-        drawingContext.DrawEllipse(null, CreatePen(Colors.Black, 0.18 * fade, line + 1.4), center, radius, radius);
-        drawingContext.DrawEllipse(null, CreatePen(color, 0.74 * fade, line), center, radius, radius);
-    }
-
-    private bool CursorEffectTouchesScreen(ScreenPoint point, double radius)
-    {
-        return new ScreenRect(
-            point.X - radius,
-            point.Y - radius,
-            point.X + radius,
-            point.Y + radius).Intersects(_screenBounds);
-    }
-
-    private static double EaseOutCubic(double value)
-    {
-        var inverse = 1 - Math.Clamp(value, 0, 1);
-        return 1 - inverse * inverse * inverse;
+        _cursorEffectsRenderer.Draw(drawingContext, frame, _settingsProvider(), _screenBounds);
     }
 
     // FormattedText glyph layout is one of the most expensive WPF objects to build;
@@ -1302,86 +1215,14 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawRegionSpotlights(DrawingContext drawingContext)
     {
-        var settings = _settingsProvider();
-        if (settings.SpotlightEnabled)
-        {
-            return;
-        }
-
-        var regions = _spotlightRegionProvider();
-        if (regions.Count == 0)
-        {
-            return;
-        }
-
-        var localRects = new List<Rect>();
-        var keyParts = new List<string>
-        {
-            ActualWidth.ToString("0.0", CultureInfo.InvariantCulture),
-            ActualHeight.ToString("0.0", CultureInfo.InvariantCulture)
-        };
-
-        var selectedIndex = _modeProvider() == InteractionMode.RegionSpotlightSelect
-            ? _spotlightRegionSelectionProvider()
-            : -1;
-
-        foreach (var region in regions)
-        {
-            keyParts.Add(region.Left.ToString("0.0", CultureInfo.InvariantCulture));
-            keyParts.Add(region.Top.ToString("0.0", CultureInfo.InvariantCulture));
-            keyParts.Add(region.Right.ToString("0.0", CultureInfo.InvariantCulture));
-            keyParts.Add(region.Bottom.ToString("0.0", CultureInfo.InvariantCulture));
-
-            if (region.Intersects(_screenBounds))
-            {
-                var rect = ToRect(region);
-                if (rect.Width > 0.5 && rect.Height > 0.5)
-                {
-                    localRects.Add(rect);
-                }
-            }
-        }
-
-        var key = string.Join("|", keyParts);
-        if (_regionSpotlightDimGeometry is null || !string.Equals(_regionSpotlightDimKey, key, StringComparison.Ordinal))
-        {
-            Geometry dimGeometry = new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight));
-            foreach (var rect in localRects)
-            {
-                dimGeometry = new CombinedGeometry(
-                    GeometryCombineMode.Exclude,
-                    dimGeometry,
-                    new RectangleGeometry(rect));
-            }
-
-            dimGeometry.Freeze();
-            _regionSpotlightDimGeometry = dimGeometry;
-            _regionSpotlightDimKey = key;
-        }
-
-        drawingContext.DrawGeometry(GetBrush(Colors.Black, settings.SpotlightOpacity), null, _regionSpotlightDimGeometry);
-
-        var edgePen = CreatePen(Colors.White, 0.30, 1.2);
-        for (var i = 0; i < regions.Count; i++)
-        {
-            var region = regions[i];
-            if (!region.Intersects(_screenBounds))
-            {
-                continue;
-            }
-
-            var rect = ToRect(region);
-            if (rect.Width <= 0.5 || rect.Height <= 0.5)
-            {
-                continue;
-            }
-
-            drawingContext.DrawRectangle(null, edgePen, rect);
-            if (i == selectedIndex)
-            {
-                DrawRectHandles(drawingContext, rect);
-            }
-        }
+        _regionSpotlightRenderer.Draw(
+            drawingContext,
+            _settingsProvider(),
+            _spotlightRegionProvider(),
+            _modeProvider() == InteractionMode.RegionSpotlightSelect ? _spotlightRegionSelectionProvider() : -1,
+            _screenBounds,
+            ActualWidth,
+            ActualHeight);
     }
 
     private void DrawMagnifierFrame(DrawingContext drawingContext, WpfPoint center, double radius)
