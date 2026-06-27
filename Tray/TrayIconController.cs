@@ -120,7 +120,7 @@ internal sealed class TrayIconController : IDisposable
             }
         };
 
-        _regionSpotlightItem = new ToolStripMenuItem("Region spotlight");
+        _regionSpotlightItem = new ToolStripMenuItem("Region Spotlight");
         _regionSpotlightItem.Click += (_, _) =>
         {
             if (!_updating)
@@ -151,7 +151,7 @@ internal sealed class TrayIconController : IDisposable
 
         _closePinnedLensesItem = new ToolStripMenuItem("Close all pins", null, (_, _) => _controller.ClosePinnedLenses());
 
-        _regionMaskItem = new ToolStripMenuItem("Region mask");
+        _regionMaskItem = new ToolStripMenuItem("Mask");
         _regionMaskItem.Click += (_, _) =>
         {
             if (!_updating)
@@ -160,7 +160,7 @@ internal sealed class TrayIconController : IDisposable
             }
         };
 
-        _clearRegionMasksItem = new ToolStripMenuItem("Clear region masks", null, (_, _) => _controller.ClearRegionMasks());
+        _clearRegionMasksItem = new ToolStripMenuItem("Clear masks", null, (_, _) => _controller.ClearRegionMasks());
 
         _fadingAnnotationsItem = new ToolStripMenuItem("Fading annotations") { CheckOnClick = true };
         _fadingAnnotationsItem.Click += (_, _) =>
@@ -180,8 +180,8 @@ internal sealed class TrayIconController : IDisposable
             }
         };
 
-        _screenshotItem = new ToolStripMenuItem("Screenshot", null, (_, _) => _controller.TakeScreenshot());
-        _regionScreenshotItem = new ToolStripMenuItem("Region screenshot", null, (_, _) => _controller.TakeRegionScreenshot());
+        _screenshotItem = new ToolStripMenuItem("Monitor", null, (_, _) => _controller.TakeScreenshot());
+        _regionScreenshotItem = new ToolStripMenuItem("Region Screenshot", null, (_, _) => _controller.TakeRegionScreenshot());
 
         _newTimerItem = new ToolStripMenuItem("New timer");
         _newTimerItem.Click += (_, _) =>
@@ -313,6 +313,10 @@ internal sealed class TrayIconController : IDisposable
         boardMenu.DropDownItems.Add(_blackScreenItem);
         boardMenu.DropDownItems.Add(_whiteScreenItem);
 
+        var screenshotMenu = new ToolStripMenuItem("Screenshot");
+        screenshotMenu.DropDownItems.Add(_screenshotItem);
+        screenshotMenu.DropDownItems.Add(_regionScreenshotItem);
+
         _contextMenu = new ContextMenuStrip();
         _contextMenu.Items.Add(_statusItem);
         _contextMenu.Items.Add(new ToolStripSeparator());
@@ -328,8 +332,7 @@ internal sealed class TrayIconController : IDisposable
         _contextMenu.Items.Add(new ToolStripSeparator());
         _contextMenu.Items.Add(regionMaskMenu);
         _contextMenu.Items.Add(boardMenu);
-        _contextMenu.Items.Add(_screenshotItem);
-        _contextMenu.Items.Add(_regionScreenshotItem);
+        _contextMenu.Items.Add(screenshotMenu);
 
         var timerMenu = new ToolStripMenuItem("Timer");
         timerMenu.DropDownItems.Add(_newTimerItem);
@@ -388,8 +391,8 @@ internal sealed class TrayIconController : IDisposable
             InteractionMode.Annotate => "Mode: Annotate",
             InteractionMode.PinnedLensSelect => "Mode: Select pin area",
             InteractionMode.RegionMaskSelect => "Mode: Select mask areas",
-            InteractionMode.ScreenshotRegionSelect => "Mode: Select region screenshot",
-            InteractionMode.RegionSpotlightSelect => "Mode: Select region spotlight",
+            InteractionMode.ScreenshotRegionSelect => "Mode: Select Region Screenshot",
+            InteractionMode.RegionSpotlightSelect => "Mode: Select Region Spotlight",
             InteractionMode.ScreenBoard => "Mode: Screen board",
             InteractionMode.BlackScreen => "Mode: Black board",
             InteractionMode.WhiteScreen => "Mode: White board",
@@ -415,10 +418,10 @@ internal sealed class TrayIconController : IDisposable
         _spotlightItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleSpotlight;
         _regionSpotlightItem.Checked = _controller.RegionSpotlightSelectionActive || _controller.RegionSpotlightActive;
         _regionSpotlightItem.Text = _controller.RegionSpotlightSelectionActive
-            ? "Region spotlight: select area"
+            ? "Region Spotlight: select area"
             : _controller.RegionSpotlightCount > 0
-                ? $"Region spotlight ({_controller.RegionSpotlightCount} active)"
-                : "Region spotlight";
+                ? $"Region Spotlight ({_controller.RegionSpotlightCount} active)"
+                : "Region Spotlight";
         _regionSpotlightItem.ShortcutKeyDisplayString = _controller.RegionSpotlightShortcut;
         _clearRegionSpotlightsItem.Enabled = _controller.RegionSpotlightActive;
         _clearRegionSpotlightsItem.ShortcutKeyDisplayString = _controller.ClearRegionSpotlightsShortcut;
@@ -502,11 +505,11 @@ internal sealed class TrayIconController : IDisposable
             : _controller.RegionMaskActive
                 ? $"FocusTool: {_controller.RegionMaskCount} region masks"
             : _controller.ScreenshotRegionSelectionActive
-                ? "FocusTool: Select region screenshot"
+                ? "FocusTool: Select Region Screenshot"
             : _controller.RegionSpotlightSelectionActive
-                ? "FocusTool: Select region spotlight"
+                ? "FocusTool: Select Region Spotlight"
             : _controller.RegionSpotlightActive
-                ? $"FocusTool: {_controller.RegionSpotlightCount} spotlight regions"
+                ? $"FocusTool: {_controller.RegionSpotlightCount} region spotlights"
             : _controller.BlackScreenEnabled
                 ? "FocusTool: Black board"
             : _controller.WhiteScreenEnabled

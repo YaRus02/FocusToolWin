@@ -213,7 +213,7 @@ internal sealed class OverlayToolbarWindow : Window
         _laserButton = AddSplitButton(primary, "Laser", "Toggle laser always/hold", 45, (_, _) => _controller.ToggleLaserActivationMode(), "laser");
         _highlightButton = AddSplitButton(primary, "Cursor", "Toggle cursor highlight", 48, (_, _) => _controller.ToggleCursorHighlight(), "highlight");
         _spotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
-        _zoomButton = AddSplitButton(primary, "Zoom", "Toggle magnifier", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
+        _zoomButton = AddSplitButton(primary, "Zoom", "Toggle zoom", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
         primary.Children.Add(CreateSeparator());
         _drawButton = AddSplitButton(primary, "Draw", "Toggle annotation mode", 42, (_, _) => ToggleMode(InteractionMode.Annotate), "draw");
         primary.Children.Add(CreateSeparator());
@@ -223,7 +223,7 @@ internal sealed class OverlayToolbarWindow : Window
         primary.Children.Add(CreateSeparator());
         _timerButton = AddSplitButton(primary, "Timer", "New timer (multiple allowed)", 44, (_, _) => _controller.NewTimer(), "timer");
         primary.Children.Add(CreateSeparator());
-        AddSplitButton(primary, "⋯", "More toolbar actions", 30, (_, _) => ShowContextualRow("more"), "more");
+        AddSplitButton(primary, "...", "More toolbar actions", 30, (_, _) => ShowContextualRow("more"), "more");
 
         _contextualHost = new Border
         {
@@ -415,7 +415,7 @@ internal sealed class OverlayToolbarWindow : Window
         _pinZoomText = CreateStepper(pinRow, "Zoom", () => _controller.AdjustPinnedLensZoom(-0.25), () => _controller.AdjustPinnedLensZoom(0.25));
         _pinFpsText = CreateStepper(pinRow, "Fps", () => _controller.AdjustPinnedLensRefreshFps(-5), () => _controller.AdjustPinnedLensRefreshFps(5));
         pinRow.Children.Add(CreateSeparator());
-        _closePinsButton = CreateButton("Close all", "Close all pinned lenses", (_, _) => _controller.ClosePinnedLenses(), width: 64);
+        _closePinsButton = CreateButton("Close all", "Close all pins", (_, _) => _controller.ClosePinnedLenses(), width: 64);
         pinRow.Children.Add(_closePinsButton);
         return pinRow;
     }
@@ -427,7 +427,7 @@ internal sealed class OverlayToolbarWindow : Window
         row.Children.Add(CreateSeparator());
         _maskOpacityText = CreateStepper(row, "Opacity", () => _controller.AdjustRegionMaskOpacity(-0.1), () => _controller.AdjustRegionMaskOpacity(0.1));
         row.Children.Add(CreateSeparator());
-        _clearMaskButton = CreateButton("Clear", "Clear region masks", (_, _) => _controller.ClearRegionMasks(), width: 48);
+        _clearMaskButton = CreateButton("Clear", "Clear masks", (_, _) => _controller.ClearRegionMasks(), width: 48);
         row.Children.Add(_clearMaskButton);
         return row;
     }
@@ -448,7 +448,7 @@ internal sealed class OverlayToolbarWindow : Window
     {
         var row = CreateRow();
         row.Children.Add(CreateButton("Monitor", "Screenshot current monitor", (_, _) => _controller.TakeScreenshot(), width: 58));
-        _shotRegionButton = CreateButton("Region", "Screenshot selected region", (_, _) => _controller.TakeRegionScreenshot(), width: 52);
+        _shotRegionButton = CreateButton("Region", "Region screenshot", (_, _) => _controller.TakeRegionScreenshot(), width: 52);
         row.Children.Add(_shotRegionButton);
         return row;
     }
