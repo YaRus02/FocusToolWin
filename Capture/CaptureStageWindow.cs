@@ -55,6 +55,9 @@ internal sealed class CaptureStageWindow : Form
         StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
         FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
         ShowInTaskbar = true;
+        // Non-minimizable: a minimized window stops rendering, so the capture would
+        // freeze. It may still go behind other windows (WGC captures it occluded).
+        MinimizeBox = false;
         MinimumSize = new DrawingSize(160, 120);
         ClientSize = new DrawingSize(640, 360);
         SetStyle(System.Windows.Forms.ControlStyles.AllPaintingInWmPaint | System.Windows.Forms.ControlStyles.Opaque, true);
@@ -72,6 +75,20 @@ internal sealed class CaptureStageWindow : Form
             AppLog.Error("Capture Stage could not start.", ex);
             BeginInvoke(Close);
         }
+    }
+
+    protected override void WndProc(ref System.Windows.Forms.Message m)
+    {
+        // Swallow minimize requests (the button is already gone; this also blocks
+        // the taskbar button, Win+M, and the system menu's Minimize).
+        const int WmSysCommand = 0x0112;
+        const int ScMinimize = 0xF020;
+        if (m.Msg == WmSysCommand && (m.WParam.ToInt32() & 0xFFF0) == ScMinimize)
+        {
+            return;
+        }
+
+        base.WndProc(ref m);
     }
 
     protected override void OnShown(EventArgs e)
