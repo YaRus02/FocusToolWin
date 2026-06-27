@@ -75,7 +75,8 @@ internal sealed class OverlaySurface : FrameworkElement
     // (the head index is the live count, not the buffer length).
     private WpfPoint[] _laserLocalScratch = [];
     private double[] _laserLifeScratch = [];
-    private bool _regionMasksWereVisibleOnSurface;
+    private readonly RegionMaskRenderer _regionMaskRenderer;
+    private readonly RectSelectionRenderer _rectSelectionRenderer;
 
     public OverlaySurface(
         TrailModel trailModel,
@@ -107,6 +108,20 @@ internal sealed class OverlaySurface : FrameworkElement
         _spotlightRegionProvider = spotlightRegionProvider;
         _spotlightRegionSelectionProvider = spotlightRegionSelectionProvider;
         _screenBounds = screenBounds;
+        _regionMaskRenderer = new RegionMaskRenderer(
+            ToRect,
+            DrawRectHandles,
+            GetBrush,
+            CreatePen,
+            GetReadableTextColor,
+            GetFormattedText);
+        _rectSelectionRenderer = new RectSelectionRenderer(
+            ToRect,
+            DrawRectHandles,
+            GetBrush,
+            CreatePen,
+            GetFormattedText,
+            SelectionDashPen);
         _annotations.Changed += OnAnnotationsChanged;
         SnapsToDevicePixels = false;
         Focusable = false;
@@ -281,7 +296,7 @@ internal sealed class OverlaySurface : FrameworkElement
 
         if (_annotations.SelectionBounds is { } selectionBounds)
         {
-            DrawSelectionRectangle(drawingContext, selectionBounds, isDraft: false);
+            _rectSelectionRenderer.DrawSelectionRectangle(drawingContext, selectionBounds, isDraft: false);
         }
 
         if (_annotations.ObjectEditShape is { } objectEditShape)
@@ -291,7 +306,7 @@ internal sealed class OverlaySurface : FrameworkElement
 
         if (_annotations.SelectionDraftBounds is { } draftBounds)
         {
-            DrawSelectionRectangle(drawingContext, draftBounds, isDraft: true);
+            _rectSelectionRenderer.DrawSelectionRectangle(drawingContext, draftBounds, isDraft: true);
         }
     }
 
@@ -404,157 +419,32 @@ internal sealed class OverlaySurface : FrameworkElement
         return pen;
     }
 
-    private void DrawSelectionRectangle(DrawingContext drawingContext, ScreenRect screenRect, bool isDraft)
-    {
-        var rect = ToRect(screenRect);
-        if (rect.Width < 1 || rect.Height < 1)
-        {
-            return;
-        }
-
-        drawingContext.DrawRectangle(GetBrush(Colors.DeepSkyBlue, isDraft ? 0.045 : 0.07), null, rect);
-        drawingContext.DrawRectangle(null, CreatePen(Colors.Black, 0.32, 3.2), rect);
-        drawingContext.DrawRectangle(null, SelectionDashPen, rect);
-    }
-
     private void DrawRectSelection(DrawingContext drawingContext)
     {
-        if (_rectOverlayProvider() is not { } visual || !visual.Rect.Intersects(_screenBounds))
+        if (_rectOverlayProvider() is not { } visual)
         {
             return;
         }
 
-        var rect = ToRect(visual.Rect);
-        DrawSelectionRectangle(drawingContext, visual.Rect, visual.IsDraft);
-        if (visual.ShowHandles)
-        {
-            DrawRectHandles(drawingContext, rect);
-        }
-
-        if (visual.ShowReadout)
-        {
-            DrawRectReadout(drawingContext, visual.Rect, rect);
-        }
+        _rectSelectionRenderer.Draw(
+            drawingContext,
+            visual,
+            _screenBounds,
+            ActualWidth,
+            ActualHeight);
     }
 
     private void DrawRegionMasks(DrawingContext drawingContext)
     {
-        var masks = _regionMaskProvider();
         var showHandles = _modeProvider() == InteractionMode.RegionMaskSelect;
-        var selectedId = showHandles ? _regionMaskSelectionProvider() : -1;
-        var drewMask = false;
-
-        foreach (var mask in masks)
-        {
-            if (!mask.Rect.Intersects(_screenBounds))
-            {
-                continue;
-            }
-
-            var color = AppSettings.TryParseColor(mask.Color, out var parsed) ? parsed : Colors.Black;
-            var rect = ToRect(mask.Rect);
-            DrawRegionMask(drawingContext, mask, color, rect);
-            if (showHandles && mask.Id == selectedId)
-            {
-                DrawRectHandles(drawingContext, rect);
-            }
-
-            drewMask = true;
-        }
-
-        if (drewMask)
-        {
-            _regionMasksWereVisibleOnSurface = true;
-            return;
-        }
-
-        if (_regionMasksWereVisibleOnSurface)
-        {
-            // Transparent layered windows can retain the previous non-empty frame
-            // when the next scene is completely empty. Submit one imperceptible
-            // full-surface frame so deleted masks do not linger visually.
-            drawingContext.DrawRectangle(GetBrush(MediaColor.FromArgb(1, 0, 0, 0), 1), null, new Rect(0, 0, ActualWidth, ActualHeight));
-            _regionMasksWereVisibleOnSurface = false;
-        }
-    }
-
-    private void DrawRegionMask(DrawingContext drawingContext, RegionMask mask, MediaColor color, Rect rect)
-    {
-        if (rect.Width < 1 || rect.Height < 1)
-        {
-            return;
-        }
-
-        drawingContext.DrawRectangle(GetBrush(color, mask.Opacity), null, rect);
-        var contrast = GetReadableTextColor(color);
-        if (mask.Style is RegionMaskStyle.Stripes or RegionMaskStyle.StripesWithLabel)
-        {
-            DrawRegionMaskStripes(drawingContext, rect, contrast, mask.Opacity);
-        }
-
-        drawingContext.DrawRectangle(null, CreatePen(contrast, 0.62, 1.35), rect);
-        if (mask.Style is RegionMaskStyle.Label or RegionMaskStyle.StripesWithLabel)
-        {
-            DrawRegionMaskLabel(drawingContext, rect, contrast);
-        }
-    }
-
-    private static void DrawRegionMaskStripes(DrawingContext drawingContext, Rect rect, MediaColor color, double maskOpacity)
-    {
-        if (rect.Width < 8 || rect.Height < 8)
-        {
-            return;
-        }
-
-        var clip = new RectangleGeometry(rect);
-        clip.Freeze();
-        drawingContext.PushClip(clip);
-
-        var spacing = Math.Clamp(Math.Min(rect.Width, rect.Height) / 4.2, 16, 28);
-        var span = rect.Width + rect.Height;
-        var opacity = Math.Clamp(0.16 + maskOpacity * 0.12, 0.18, 0.32);
-        var pen = CreatePen(color, opacity, 1.65);
-        for (var x = rect.Left - rect.Height; x <= rect.Left + span; x += spacing)
-        {
-            drawingContext.DrawLine(
-                pen,
-                new WpfPoint(x, rect.Bottom),
-                new WpfPoint(x + rect.Height, rect.Top));
-        }
-
-        drawingContext.Pop();
-    }
-
-    private void DrawRegionMaskLabel(DrawingContext drawingContext, Rect rect, MediaColor color)
-    {
-        if (rect.Width < 42 || rect.Height < 24)
-        {
-            return;
-        }
-
-        var fontSize = Math.Clamp(Math.Min(rect.Height * 0.32, rect.Width / 3.2), 10, 42);
-        if (fontSize < 9)
-        {
-            return;
-        }
-
-        var lineHeight = fontSize * 1.05;
-        var text = GetFormattedText("HIDE", color, 0.86, fontSize, lineHeight);
-        if (text.WidthIncludingTrailingWhitespace + 12 > rect.Width || text.Height + 6 > rect.Height)
-        {
-            return;
-        }
-
-        var point = new WpfPoint(
-            rect.Left + (rect.Width - text.WidthIncludingTrailingWhitespace) / 2,
-            rect.Top + (rect.Height - text.Height) / 2);
-        var haloColor = color == Colors.White ? Colors.Black : Colors.White;
-        var halo = GetFormattedText("HIDE", haloColor, 0.26, fontSize, lineHeight);
-        drawingContext.DrawText(halo, point + new Vector(-1, 0));
-        drawingContext.DrawText(halo, point + new Vector(1, 0));
-        drawingContext.DrawText(halo, point + new Vector(0, -1));
-        drawingContext.DrawText(halo, point + new Vector(0, 1));
-        drawingContext.DrawText(text, point);
+        _regionMaskRenderer.Draw(
+            drawingContext,
+            _regionMaskProvider(),
+            showHandles,
+            showHandles ? _regionMaskSelectionProvider() : -1,
+            _screenBounds,
+            ActualWidth,
+            ActualHeight);
     }
 
     private static void DrawRectHandles(DrawingContext drawingContext, Rect rect)
@@ -610,35 +500,6 @@ internal sealed class OverlaySurface : FrameworkElement
         drawingContext.PushOpacity(opacity);
         drawingContext.DrawImage(shape.Image, rect);
         drawingContext.Pop();
-    }
-
-    private void DrawRectReadout(DrawingContext drawingContext, ScreenRect screenRect, Rect localRect)
-    {
-        if (localRect.Width < 1 || localRect.Height < 1)
-        {
-            return;
-        }
-
-        var width = Math.Max(1, (int)Math.Round(screenRect.Width));
-        var height = Math.Max(1, (int)Math.Round(screenRect.Height));
-        var x = (int)Math.Round(screenRect.Left);
-        var y = (int)Math.Round(screenRect.Top);
-        var text = $"{width} x {height}px  X {x}  Y {y}";
-        var formatted = GetFormattedText(text, Colors.White, 0.96, 12.5, 15);
-        var paddingX = 8.0;
-        var paddingY = 4.0;
-        var bubbleWidth = formatted.WidthIncludingTrailingWhitespace + paddingX * 2;
-        var bubbleHeight = formatted.Height + paddingY * 2;
-        var bubbleLeft = Math.Clamp(localRect.Left, 4, Math.Max(4, ActualWidth - bubbleWidth - 4));
-        var bubbleTop = localRect.Top - bubbleHeight - 8;
-        if (bubbleTop < 4)
-        {
-            bubbleTop = Math.Min(ActualHeight - bubbleHeight - 4, localRect.Bottom + 8);
-        }
-
-        var bubble = new Rect(bubbleLeft, Math.Max(4, bubbleTop), bubbleWidth, bubbleHeight);
-        drawingContext.DrawRoundedRectangle(GetBrush(Colors.Black, 0.78), CreatePen(Colors.White, 0.18, 1), bubble, 4, 4);
-        drawingContext.DrawText(formatted, new WpfPoint(bubble.Left + paddingX, bubble.Top + paddingY));
     }
 
     private static Rect CenteredRect(WpfPoint center, double size)
