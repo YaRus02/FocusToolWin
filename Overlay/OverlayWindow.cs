@@ -137,6 +137,15 @@ internal sealed class OverlayWindow : Window
         return new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom).Intersects(rect);
     }
 
+    public ScreenRect ScreenBounds
+    {
+        get
+        {
+            var bounds = _screen.Bounds;
+            return new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+        }
+    }
+
     public double DistanceSquaredTo(ScreenPoint point)
     {
         var bounds = _screen.Bounds;
@@ -251,6 +260,51 @@ internal sealed class OverlayWindow : Window
             96 * dpi.DpiScaleY,
             PixelFormats.Pbgra32);
         bitmap.Render(_surface);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    // Like CaptureSurface but cropped to a screen rect (physical px), so the Capture
+    // Stage snapshots only the source window's area instead of the whole monitor
+    // (far less per-frame work and GC pressure). Uses a VisualBrush viewbox to
+    // select the sub-region of the overlay surface.
+    public BitmapSource? CaptureSurfaceRegion(ScreenRect sourceRect)
+    {
+        if (_surface.ActualWidth <= 1 || _surface.ActualHeight <= 1)
+        {
+            return null;
+        }
+
+        _surface.UpdateLayout();
+        var dpi = VisualTreeHelper.GetDpi(_surface);
+        var bounds = _screen.Bounds;
+
+        var widthPx = (int)Math.Round(sourceRect.Right - sourceRect.Left);
+        var heightPx = (int)Math.Round(sourceRect.Bottom - sourceRect.Top);
+        if (widthPx <= 0 || heightPx <= 0)
+        {
+            return null;
+        }
+
+        var viewLeftDip = (sourceRect.Left - bounds.Left) / dpi.DpiScaleX;
+        var viewTopDip = (sourceRect.Top - bounds.Top) / dpi.DpiScaleY;
+        var viewWidthDip = widthPx / dpi.DpiScaleX;
+        var viewHeightDip = heightPx / dpi.DpiScaleY;
+
+        var bitmap = new RenderTargetBitmap(widthPx, heightPx, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var brush = new VisualBrush(_surface)
+            {
+                ViewboxUnits = BrushMappingMode.Absolute,
+                Viewbox = new System.Windows.Rect(viewLeftDip, viewTopDip, viewWidthDip, viewHeightDip),
+                Stretch = Stretch.Fill,
+            };
+            dc.DrawRectangle(brush, null, new System.Windows.Rect(0, 0, viewWidthDip, viewHeightDip));
+        }
+
+        bitmap.Render(visual);
         bitmap.Freeze();
         return bitmap;
     }

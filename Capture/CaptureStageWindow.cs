@@ -1,7 +1,11 @@
+using System.Runtime.InteropServices;
+using Vortice.Direct2D1;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Windows.Graphics;
+using FocusTool.Win.Native;
+using FocusTool.Win.Overlay;
 using FocusTool.Win.Services;
 using DrawingSize = System.Drawing.Size;
 using Form = System.Windows.Forms.Form;
@@ -14,7 +18,7 @@ namespace FocusTool.Win.Capture;
 /// A normal, resizable window that mirrors a captured source window. Because it
 /// is an ordinary top-level window with real swap-chain pixels, screen-share and
 /// recording tools (OBS, Zoom, Discord, Teams) can grab it via "Share window"
-/// while it carries the source content. v1 is view-only (no overlays yet).
+/// while it carries the source content plus FocusTool overlay snapshots.
 /// </summary>
 internal sealed class CaptureStageWindow : Form
 {
@@ -27,6 +31,13 @@ internal sealed class CaptureStageWindow : Form
     private ID3D11DeviceContext? _context;
     private IDXGISwapChain1? _swapChain;
     private ID3D11Texture2D? _backBuffer;
+    private ID2D1Factory1? _d2dFactory;
+    private ID2D1Device? _d2dDevice;
+    private ID2D1DeviceContext? _d2dContext;
+    private ID2D1Bitmap1? _d2dTarget;
+    private ID2D1Bitmap? _overlayBitmap;
+    private readonly List<SpriteBitmap> _spriteBitmaps = [];
+    private OverlaySnapshotData? _pendingOverlay;
     private WindowCaptureSession? _session;
     private SizeInt32 _swapSize;
     private bool _graphicsDisposed;
@@ -62,6 +73,7 @@ internal sealed class CaptureStageWindow : Form
     {
         _device = CreateDevice();
         _context = _device.ImmediateContext;
+        CreateD2DDevice();
         _session = new WindowCaptureSession(_device, _sourceWindow);
 
         var size = _session.SourceSize;
@@ -117,6 +129,36 @@ internal sealed class CaptureStageWindow : Form
         factory.MakeWindowAssociation(Handle, WindowAssociationFlags.IgnoreAltEnter);
         _backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
         _swapSize = new SizeInt32 { Width = width, Height = height };
+        BindBackBufferTarget();
+    }
+
+    private void CreateD2DDevice()
+    {
+        _d2dFactory = D2D1.D2D1CreateFactory<ID2D1Factory1>(Vortice.Direct2D1.FactoryType.MultiThreaded);
+        using var dxgiDevice = _device!.QueryInterface<IDXGIDevice>();
+        _d2dDevice = _d2dFactory.CreateDevice(dxgiDevice);
+        _d2dContext = _d2dDevice.CreateDeviceContext(DeviceContextOptions.None);
+    }
+
+    // Wraps the current back buffer as a Direct2D render target so overlays can be
+    // composited on top of the copied source frame before Present.
+    private void BindBackBufferTarget()
+    {
+        _d2dTarget?.Dispose();
+        _d2dTarget = null;
+        if (_d2dContext is null || _backBuffer is null)
+        {
+            return;
+        }
+
+        using var surface = _backBuffer.QueryInterface<IDXGISurface>();
+        var properties = new BitmapProperties1(
+            new Vortice.DCommon.PixelFormat(SwapFormat, Vortice.DCommon.AlphaMode.Ignore),
+            96f,
+            96f,
+            BitmapOptions.Target | BitmapOptions.CannotDraw);
+        _d2dTarget = _d2dContext.CreateBitmapFromDxgiSurface(surface, properties);
+        _d2dContext.Target = _d2dTarget;
     }
 
     private void ApplyInitialClientSize(int sourceWidth, int sourceHeight)
@@ -153,17 +195,200 @@ internal sealed class CaptureStageWindow : Form
             }
 
             _context.CopyResource(_backBuffer, texture);
+            DrawOverlay();
             _swapChain.Present(1, PresentFlags.None);
         }
     }
 
+    // Composites the latest overlay snapshot over the copied source frame. The
+    // overlay snapshot is already cropped to the source window's screen rect, so
+    // it maps directly onto the stage back buffer. Called while holding _gate.
+    private void DrawOverlay()
+    {
+        if (_d2dContext is null || _d2dTarget is null)
+        {
+            return;
+        }
+
+        if (_pendingOverlay is { } pending)
+        {
+            _pendingOverlay = null;
+            RefreshOverlay(pending);
+        }
+
+        if ((_overlayBitmap is null && _spriteBitmaps.Count == 0)
+            || !TryGetSourceContentRect(out var left, out var top, out var width, out var height))
+        {
+            return;
+        }
+
+        var destination = new Vortice.Mathematics.Rect(0, 0, _swapSize.Width, _swapSize.Height);
+
+        _d2dContext.BeginDraw();
+
+        if (_overlayBitmap is not null)
+        {
+            var overlaySize = _overlayBitmap.Size;
+            _d2dContext.DrawBitmap(
+                _overlayBitmap,
+                destination,
+                1f,
+                BitmapInterpolationMode.Linear,
+                new Vortice.Mathematics.Rect(0, 0, overlaySize.Width, overlaySize.Height));
+        }
+
+        foreach (var sprite in _spriteBitmaps)
+        {
+            var spriteRect = new Vortice.Mathematics.Rect(
+                (float)((sprite.Left - left) / width * _swapSize.Width),
+                (float)((sprite.Top - top) / height * _swapSize.Height),
+                (float)(sprite.Width / width * _swapSize.Width),
+                (float)(sprite.Height / height * _swapSize.Height));
+            var spriteSize = sprite.Bitmap.Size;
+            _d2dContext.DrawBitmap(sprite.Bitmap, spriteRect, 1f, BitmapInterpolationMode.Linear, new Vortice.Mathematics.Rect(0, 0, spriteSize.Width, spriteSize.Height));
+        }
+
+        _d2dContext.EndDraw();
+    }
+
+    private void RefreshOverlay(OverlaySnapshotData data)
+    {
+        _overlayBitmap?.Dispose();
+        _overlayBitmap = null;
+        foreach (var sprite in _spriteBitmaps)
+        {
+            sprite.Bitmap.Dispose();
+        }
+
+        _spriteBitmaps.Clear();
+
+        if (_d2dContext is null)
+        {
+            return;
+        }
+
+        if (data.Surface is { } surface)
+        {
+            _overlayBitmap = CreateBitmap(surface.Pixels, surface.Width, surface.Height, surface.Stride);
+        }
+
+        foreach (var sprite in data.Sprites)
+        {
+            if (CreateBitmap(sprite.Pixels, sprite.Width, sprite.Height, sprite.Stride) is { } bitmap)
+            {
+                _spriteBitmaps.Add(new SpriteBitmap(bitmap, sprite.ScreenLeft, sprite.ScreenTop, sprite.ScreenWidth, sprite.ScreenHeight));
+            }
+        }
+    }
+
+    private ID2D1Bitmap? CreateBitmap(byte[] pixels, int width, int height, int stride)
+    {
+        if (_d2dContext is null)
+        {
+            return null;
+        }
+
+        var properties = new BitmapProperties1(
+            new Vortice.DCommon.PixelFormat(SwapFormat, Vortice.DCommon.AlphaMode.Premultiplied),
+            96f,
+            96f,
+            BitmapOptions.None);
+        var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        try
+        {
+            return _d2dContext.CreateBitmap(
+                new Vortice.Mathematics.SizeI(width, height),
+                handle.AddrOfPinnedObject(),
+                (uint)stride,
+                properties);
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    private sealed class SpriteBitmap
+    {
+        public SpriteBitmap(ID2D1Bitmap bitmap, double left, double top, double width, double height)
+        {
+            Bitmap = bitmap;
+            Left = left;
+            Top = top;
+            Width = width;
+            Height = height;
+        }
+
+        public ID2D1Bitmap Bitmap { get; }
+        public double Left { get; }
+        public double Top { get; }
+        public double Width { get; }
+        public double Height { get; }
+    }
+
+    public bool TryGetSourceRect(out ScreenRect rect)
+    {
+        if (TryGetSourceContentRect(out var left, out var top, out var width, out var height))
+        {
+            rect = new ScreenRect(left, top, left + width, top + height);
+            return true;
+        }
+
+        rect = default;
+        return false;
+    }
+
+    public void UpdateOverlaySnapshot(OverlaySnapshotData data)
+    {
+        lock (_gate)
+        {
+            if (!_graphicsDisposed)
+            {
+                _pendingOverlay = data;
+            }
+        }
+    }
+
+    // The rectangle (screen physical px) the captured texture corresponds to.
+    // DWM extended frame bounds match the composited window better than GetWindowRect
+    // (which includes the invisible resize border on Win10+).
+    private bool TryGetSourceContentRect(out double left, out double top, out double width, out double height)
+    {
+        left = top = width = height = 0;
+        if (NativeMethods.DwmGetWindowAttribute(_sourceWindow, NativeMethods.DwmwaExtendedFrameBounds, out var bounds, Marshal.SizeOf<NativeMethods.Rect>()) != 0
+            && !NativeMethods.GetWindowRect(_sourceWindow, out bounds))
+        {
+            return false;
+        }
+
+        width = bounds.Right - bounds.Left;
+        height = bounds.Bottom - bounds.Top;
+        if (width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        left = bounds.Left;
+        top = bounds.Top;
+        return true;
+    }
+
     private void ResizeSwapChain(int width, int height)
     {
+        // All back-buffer references (incl. the D2D target) must be released before ResizeBuffers.
+        if (_d2dContext is not null)
+        {
+            _d2dContext.Target = null;
+        }
+
+        _d2dTarget?.Dispose();
+        _d2dTarget = null;
         _backBuffer?.Dispose();
         _backBuffer = null;
         _swapChain!.ResizeBuffers(BufferCount, (uint)width, (uint)height, SwapFormat, SwapChainFlags.None);
         _backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
         _swapSize = new SizeInt32 { Width = width, Height = height };
+        BindBackBufferTarget();
     }
 
     private void OnSourceClosed(object? sender, EventArgs e)
@@ -204,6 +429,28 @@ internal sealed class CaptureStageWindow : Form
 
         lock (_gate)
         {
+            if (_d2dContext is not null)
+            {
+                _d2dContext.Target = null;
+            }
+
+            _d2dTarget?.Dispose();
+            _d2dTarget = null;
+            _overlayBitmap?.Dispose();
+            _overlayBitmap = null;
+            foreach (var sprite in _spriteBitmaps)
+            {
+                sprite.Bitmap.Dispose();
+            }
+
+            _spriteBitmaps.Clear();
+            _pendingOverlay = null;
+            _d2dContext?.Dispose();
+            _d2dContext = null;
+            _d2dDevice?.Dispose();
+            _d2dDevice = null;
+            _d2dFactory?.Dispose();
+            _d2dFactory = null;
             _backBuffer?.Dispose();
             _backBuffer = null;
             _swapChain?.Dispose();

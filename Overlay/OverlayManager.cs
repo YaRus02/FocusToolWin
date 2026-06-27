@@ -210,6 +210,34 @@ internal sealed class OverlayManager : IDisposable
         return null;
     }
 
+    // Snapshot only the part of the overlay surface that overlaps the captured
+    // source rect. The Capture Stage can draw it straight onto its back buffer.
+    public OverlayLayer? CaptureOverlayLayer(ScreenRect rect)
+    {
+        foreach (var window in _windows)
+        {
+            if (!window.Intersects(rect))
+            {
+                continue;
+            }
+
+            var bitmap = window.CaptureSurfaceRegion(rect);
+            if (bitmap is null)
+            {
+                return null;
+            }
+
+            var width = bitmap.PixelWidth;
+            var height = bitmap.PixelHeight;
+            var stride = width * 4;
+            var pixels = new byte[stride * height];
+            bitmap.CopyPixels(pixels, stride, 0);
+            return new OverlayLayer(pixels, width, height, stride);
+        }
+
+        return null;
+    }
+
     public void Dispose()
     {
         if (_disposed)

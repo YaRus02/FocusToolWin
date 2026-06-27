@@ -188,6 +188,47 @@ internal sealed class TimerWindow : Window
         Activate();
     }
 
+    // Snapshot the timer as a premultiplied-BGRA sprite plus its screen rect, so a
+    // Capture Stage can composite it over the source frame by screen overlap. The
+    // content (_block) is drawn via a VisualBrush stretched to the window's client
+    // size, which reproduces the on-screen scale transform.
+    public OverlaySprite? CaptureSprite()
+    {
+        if (!IsVisible || ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return null;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero || !NativeMethods.GetWindowRect(handle, out var rect))
+        {
+            return null;
+        }
+
+        var widthPx = rect.Right - rect.Left;
+        var heightPx = rect.Bottom - rect.Top;
+        if (widthPx <= 0 || heightPx <= 0)
+        {
+            return null;
+        }
+
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            widthPx, heightPx, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, System.Windows.Media.PixelFormats.Pbgra32);
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var brush = new System.Windows.Media.VisualBrush(_block) { Stretch = System.Windows.Media.Stretch.Fill };
+            dc.DrawRectangle(brush, null, new System.Windows.Rect(0, 0, ActualWidth, ActualHeight));
+        }
+
+        bitmap.Render(visual);
+        var stride = widthPx * 4;
+        var pixels = new byte[stride * heightPx];
+        bitmap.CopyPixels(pixels, stride, 0);
+        return new OverlaySprite(pixels, widthPx, heightPx, stride, rect.Left, rect.Top, widthPx, heightPx);
+    }
+
     public void MoveToPhysical(int x, int y)
     {
         var handle = new WindowInteropHelper(this).Handle;

@@ -42,7 +42,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly GlobalHotKeyController _hotKeys;
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
-    private readonly CaptureStageController _captureStage = new();
+    private CaptureStageController _captureStage = null!;
     private readonly RectSelectionController _rectSelection;
     private readonly RectToolsInputController _rectTools;
     private readonly InteractionModeTransitionController _modeTransitions;
@@ -367,6 +367,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public void Start()
     {
         _overlayManager = new OverlayManager(_pointerVisuals.Trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, _pointerVisuals.GetCursorHighlightFrame, () => _boards.Frame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _captureStage = new CaptureStageController(CaptureOverlaySnapshot);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         RegisterHotKeys();
@@ -1243,6 +1244,18 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public void CloseCaptureStages()
     {
         _captureStage.CloseAll();
+    }
+
+    private OverlaySnapshotData? CaptureOverlaySnapshot(ScreenRect rect)
+    {
+        var surface = _overlayManager?.CaptureOverlayLayer(rect);
+        var sprites = _timerController?.CaptureSprites() ?? [];
+        if (surface is null && sprites.Count == 0)
+        {
+            return null;
+        }
+
+        return new OverlaySnapshotData(surface, sprites);
     }
 
     private void ResetSpotlightRegionEditState()

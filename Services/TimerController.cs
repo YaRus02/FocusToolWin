@@ -76,6 +76,25 @@ internal sealed class TimerController : IDisposable
         }
     }
 
+    public IReadOnlyList<OverlaySprite> CaptureSprites()
+    {
+        if (_timers.Count == 0)
+        {
+            return [];
+        }
+
+        var sprites = new List<OverlaySprite>(_timers.Count);
+        foreach (var window in _timers)
+        {
+            if (window.CaptureSprite() is { } sprite)
+            {
+                sprites.Add(sprite);
+            }
+        }
+
+        return sprites;
+    }
+
     public void ReassertTopmost()
     {
         foreach (var window in _timers)
