@@ -15,13 +15,15 @@ public partial class SettingsWindow : Window
     private AppSettings _settings;
     private bool _loading = true;
     private readonly string[] _laserPresets = new string[5];
+    private readonly string[] _cursorHighlightPresets = new string[5];
     private readonly string[] _annotationPresets = new string[5];
     private readonly string[] _regionMaskPresets = new string[5];
     private string _laserColor = "#FFFF2020";
+    private string _cursorHighlightColor = "#BFFFD400";
     private string _annotationColor = "#FFFF2020";
     private string _regionMaskColor = "#FF000000";
-    private string _cursorHighlightColor = "#BFFFD400";
     private int _selectedLaserPresetIndex;
+    private int _selectedCursorHighlightPresetIndex;
     private int _selectedAnnotationPresetIndex;
     private int _selectedRegionMaskPresetIndex;
 
@@ -43,8 +45,6 @@ public partial class SettingsWindow : Window
         FadeDurationSlider.Value = settings.FadeDurationMs;
         GlowCheckBox.IsChecked = settings.GlowEnabled;
         SelectLaserActivationMode(settings.GetLaserActivationMode());
-        _cursorHighlightColor = settings.CursorHighlightColor;
-        CursorHighlightColorBox.Text = settings.CursorHighlightColor;
         SelectCursorHighlightActivationMode(settings.GetCursorHighlightActivationMode());
         CursorHighlightRadiusSlider.Value = settings.CursorHighlightRadius;
         CursorHighlightThicknessSlider.Value = settings.CursorHighlightThickness;
@@ -56,6 +56,7 @@ public partial class SettingsWindow : Window
         PinnedLensZoomSlider.Value = settings.PinnedLensZoom;
         PinnedLensRefreshFpsSlider.Value = settings.PinnedLensRefreshFps;
         RegionMaskOpacitySlider.Value = settings.RegionMaskOpacity * 100;
+        SelectRegionMaskStyle(settings.RegionMaskStyle);
         FadingAnnotationsCheckBox.IsChecked = settings.FadingAnnotationsEnabled;
         FadingAnnotationVisibleSlider.Value = settings.FadingAnnotationVisibleMs / 1000.0;
         FadingAnnotationFadeSlider.Value = settings.FadingAnnotationFadeMs / 1000.0;
@@ -65,6 +66,12 @@ public partial class SettingsWindow : Window
         SelectColorSlot(settings.Color, _laserPresets, ref _selectedLaserPresetIndex, fallbackIndex: 4);
         _laserColor = _laserPresets[_selectedLaserPresetIndex];
         LaserColorBox.Text = _laserPresets[_selectedLaserPresetIndex];
+
+        var cursorHighlightPresets = GetPresetValues(settings.CursorHighlightColorPresets, AppSettings.DefaultCursorHighlightColorPresets());
+        Array.Copy(cursorHighlightPresets, _cursorHighlightPresets, _cursorHighlightPresets.Length);
+        SelectColorSlot(settings.CursorHighlightColor, _cursorHighlightPresets, ref _selectedCursorHighlightPresetIndex, fallbackIndex: 0);
+        _cursorHighlightColor = _cursorHighlightPresets[_selectedCursorHighlightPresetIndex];
+        CursorHighlightColorBox.Text = _cursorHighlightPresets[_selectedCursorHighlightPresetIndex];
 
         var regionMaskPresets = GetPresetValues(settings.RegionMaskColorPresets, AppSettings.DefaultRegionMaskColorPresets());
         Array.Copy(regionMaskPresets, _regionMaskPresets, _regionMaskPresets.Length);
@@ -83,16 +90,19 @@ public partial class SettingsWindow : Window
         LoadShortcutFields(settings);
 
         ApplyPresetBrushes(GetLaserPresetButtons(), _laserPresets);
+        ApplyPresetBrushes(GetCursorHighlightPresetButtons(), _cursorHighlightPresets);
         ApplyPresetBrushes(GetRegionMaskPresetButtons(), _regionMaskPresets);
         ApplyPresetBrushes(GetAnnotationPresetButtons(), _annotationPresets);
 
         _loading = false;
         UpdateLabels();
         UpdateSelectedLaserSwatch();
+        UpdateSelectedCursorHighlightSwatch();
         UpdateSelectedAnnotationSwatch();
         UpdateSelectedRegionMaskSwatch();
         UpdateCursorHighlightSwatch();
         UpdateLaserPresetSelection();
+        UpdateCursorHighlightPresetSelection();
         UpdateAnnotationPresetSelection();
         UpdateRegionMaskPresetSelection();
         UpdateLaserHoldFieldState();
@@ -171,6 +181,24 @@ public partial class SettingsWindow : Window
         UpdateAnnotationPresetSelection();
     }
 
+    private void CursorHighlightPreset_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button button
+            || !int.TryParse(button.Tag?.ToString(), out var index)
+            || index < 0 || index >= _cursorHighlightPresets.Length)
+        {
+            return;
+        }
+
+        _selectedCursorHighlightPresetIndex = index;
+        _cursorHighlightColor = _cursorHighlightPresets[index];
+        _loading = true;
+        CursorHighlightColorBox.Text = _cursorHighlightPresets[index];
+        _loading = false;
+        UpdateSelectedCursorHighlightSwatch();
+        UpdateCursorHighlightPresetSelection();
+    }
+
     private void Slider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!_loading)
@@ -237,10 +265,11 @@ public partial class SettingsWindow : Window
         var hex = CursorHighlightColorBox.Text.Trim();
         if (AppSettings.TryParseColor(hex, out _))
         {
+            _cursorHighlightPresets[_selectedCursorHighlightPresetIndex] = hex;
             _cursorHighlightColor = hex;
         }
 
-        UpdateCursorHighlightSwatch();
+        UpdateSelectedCursorHighlightSwatch();
     }
 
     private void MaskColorPreset_OnClick(object sender, RoutedEventArgs e)
@@ -323,11 +352,13 @@ public partial class SettingsWindow : Window
         updated.PinnedLensRefreshFps = (int)PinnedLensRefreshFpsSlider.Value;
         updated.RegionMaskColor = _regionMaskColor;
         updated.RegionMaskOpacity = RegionMaskOpacitySlider.Value / 100.0;
+        updated.RegionMaskStyle = ReadRegionMaskStyle().ToString();
         updated.FadingAnnotationsEnabled = FadingAnnotationsCheckBox.IsChecked == true;
         updated.FadingAnnotationVisibleMs = (int)Math.Round(FadingAnnotationVisibleSlider.Value * 1000);
         updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
         updated.AnnotationColor = _annotationColor;
         WritePresetValues(updated.LaserColorPresets, _laserPresets);
+        WritePresetValues(updated.CursorHighlightColorPresets, _cursorHighlightPresets);
         WritePresetValues(updated.AnnotationColorPresets, _annotationPresets);
         WritePresetValues(updated.RegionMaskColorPresets, _regionMaskPresets);
 
@@ -719,6 +750,11 @@ public partial class SettingsWindow : Window
         UpdateSelectedSwatch(LaserColorBox, LaserColorPreview, GetLaserPresetButtons(), _selectedLaserPresetIndex);
     }
 
+    private void UpdateSelectedCursorHighlightSwatch()
+    {
+        UpdateSelectedSwatch(CursorHighlightColorBox, CursorHighlightColorPreview, GetCursorHighlightPresetButtons(), _selectedCursorHighlightPresetIndex);
+    }
+
     private void UpdateSelectedAnnotationSwatch()
     {
         UpdateSelectedSwatch(AnnotationPreset5Box, preview: null, GetAnnotationPresetButtons(), _selectedAnnotationPresetIndex);
@@ -731,21 +767,7 @@ public partial class SettingsWindow : Window
 
     private void UpdateCursorHighlightSwatch()
     {
-        if (CursorHighlightColorBox is null || CursorHighlightColorPreview is null)
-        {
-            return;
-        }
-
-        if (AppSettings.TryParseColor(CursorHighlightColorBox.Text.Trim(), out var color))
-        {
-            CursorHighlightColorPreview.Background = new SolidColorBrush(color);
-            CursorHighlightColorBox.ClearValue(BorderBrushProperty);
-        }
-        else
-        {
-            CursorHighlightColorPreview.Background = System.Windows.Media.Brushes.Transparent;
-            CursorHighlightColorBox.BorderBrush = System.Windows.Media.Brushes.Firebrick;
-        }
+        UpdateSelectedCursorHighlightSwatch();
     }
 
     private static void UpdateSelectedSwatch(
@@ -785,6 +807,11 @@ public partial class SettingsWindow : Window
         UpdateSwatchSelection(GetLaserPresetButtons(), _selectedLaserPresetIndex);
     }
 
+    private void UpdateCursorHighlightPresetSelection()
+    {
+        UpdateSwatchSelection(GetCursorHighlightPresetButtons(), _selectedCursorHighlightPresetIndex);
+    }
+
     private void UpdateAnnotationPresetSelection()
     {
         UpdateSwatchSelection(GetAnnotationPresetButtons(), _selectedAnnotationPresetIndex);
@@ -814,6 +841,15 @@ public partial class SettingsWindow : Window
         LaserPreset2Button,
         LaserPreset3Button,
         LaserPreset4Button
+    ];
+
+    private System.Windows.Controls.Button[] GetCursorHighlightPresetButtons() =>
+    [
+        CursorHighlightPreset0Button,
+        CursorHighlightPreset1Button,
+        CursorHighlightPreset2Button,
+        CursorHighlightPreset3Button,
+        CursorHighlightPreset4Button
     ];
 
     private System.Windows.Controls.Button[] GetAnnotationPresetButtons() =>
@@ -936,7 +972,35 @@ public partial class SettingsWindow : Window
             return mode;
         }
 
-        return LaserActivationMode.Always;
+        return LaserActivationMode.Hold;
+    }
+
+    private void SelectRegionMaskStyle(string styleText)
+    {
+        var style = Enum.TryParse<RegionMaskStyle>(styleText, true, out var parsed)
+            ? parsed
+            : RegionMaskStyle.StripesWithLabel;
+        foreach (var item in RegionMaskStyleBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag?.ToString()?.Equals(style.ToString(), StringComparison.OrdinalIgnoreCase) == true)
+            {
+                RegionMaskStyleBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        RegionMaskStyleBox.SelectedIndex = 3;
+    }
+
+    private RegionMaskStyle ReadRegionMaskStyle()
+    {
+        if (RegionMaskStyleBox.SelectedItem is ComboBoxItem item
+            && Enum.TryParse<RegionMaskStyle>(item.Tag?.ToString(), true, out var style))
+        {
+            return style;
+        }
+
+        return RegionMaskStyle.StripesWithLabel;
     }
 
     private void UpdateLaserHoldFieldState()

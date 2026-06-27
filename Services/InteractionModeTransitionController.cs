@@ -23,8 +23,6 @@ internal sealed class InteractionModeTransitionController
     private readonly Func<bool> _magnifierEnabledProvider;
     private readonly Action _closeMagnifierHost;
     private readonly Action _refreshMagnifierAfterVisualBoard;
-    private readonly Action _hidePinnedLensesForBoard;
-    private readonly Action _restorePinnedLensesAfterBoard;
     private readonly Action<bool> _setLaserVisualActive;
     private readonly Action _registerHotKeys;
     private readonly Action _notifyStateChanged;
@@ -50,8 +48,6 @@ internal sealed class InteractionModeTransitionController
         Func<bool> magnifierEnabledProvider,
         Action closeMagnifierHost,
         Action refreshMagnifierAfterVisualBoard,
-        Action hidePinnedLensesForBoard,
-        Action restorePinnedLensesAfterBoard,
         Action<bool> setLaserVisualActive,
         Action registerHotKeys,
         Action notifyStateChanged)
@@ -74,8 +70,6 @@ internal sealed class InteractionModeTransitionController
         _magnifierEnabledProvider = magnifierEnabledProvider;
         _closeMagnifierHost = closeMagnifierHost;
         _refreshMagnifierAfterVisualBoard = refreshMagnifierAfterVisualBoard;
-        _hidePinnedLensesForBoard = hidePinnedLensesForBoard;
-        _restorePinnedLensesAfterBoard = restorePinnedLensesAfterBoard;
         _setLaserVisualActive = setLaserVisualActive;
         _registerHotKeys = registerHotKeys;
         _notifyStateChanged = notifyStateChanged;
@@ -155,15 +149,6 @@ internal sealed class InteractionModeTransitionController
             }
         }
 
-        if (enteringVisualBoard)
-        {
-            _hidePinnedLensesForBoard();
-        }
-        else if (leavingVisualBoard)
-        {
-            _restorePinnedLensesAfterBoard();
-        }
-
         _invalidateOverlay();
 
         if (leavingAnnotationInput && _previousForegroundWindow != IntPtr.Zero)
@@ -172,7 +157,7 @@ internal sealed class InteractionModeTransitionController
             _previousForegroundWindow = IntPtr.Zero;
         }
 
-        _setLaserVisualActive(_activationModeProvider() == LaserActivationMode.Always || IsAnnotationMode(mode));
+        _setLaserVisualActive(_activationModeProvider() == LaserActivationMode.Always);
         var exitVisualHotKeyIsNeeded = _exitVisualHotKeyNeededProvider(mode);
         if (exitVisualHotKeyWasNeeded != exitVisualHotKeyIsNeeded)
         {

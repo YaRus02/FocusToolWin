@@ -42,13 +42,7 @@ internal sealed class SettingsCommandController
 
     public void SetCursorHighlightEnabled(bool enabled)
     {
-        var settings = _settingsProvider();
-        if (settings.CursorHighlightEnabled == enabled)
-        {
-            return;
-        }
-
-        Update(updated => updated.CursorHighlightEnabled = enabled);
+        SetCursorHighlightActivationMode(enabled ? LaserActivationMode.Always : LaserActivationMode.Hold);
     }
 
     public void SetCursorHighlightActivationMode(LaserActivationMode mode)
@@ -65,12 +59,12 @@ internal sealed class SettingsCommandController
     public void SetCursorHighlightPresetColor(int index)
     {
         var settings = _settingsProvider();
-        if (index < 0 || index >= settings.LaserColorPresets.Count)
+        if (index < 0 || index >= settings.CursorHighlightColorPresets.Count)
         {
             return;
         }
 
-        Update(updated => updated.CursorHighlightColor = settings.LaserColorPresets[index]);
+        Update(updated => updated.CursorHighlightColor = settings.CursorHighlightColorPresets[index]);
     }
 
     public void SetClickPulseEnabled(bool enabled)

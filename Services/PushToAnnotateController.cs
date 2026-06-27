@@ -59,7 +59,7 @@ internal sealed class PushToAnnotateController
         if (!Shortcut.TryParse(settings.Shortcuts.PushToAnnotate, out _shortcut)
             || _shortcut.IsMouseButton)
         {
-            settings.Shortcuts.PushToAnnotate = "Ctrl+Space";
+            settings.Shortcuts.PushToAnnotate = "Alt+A";
             Shortcut.TryParse(settings.Shortcuts.PushToAnnotate, out _shortcut);
         }
     }

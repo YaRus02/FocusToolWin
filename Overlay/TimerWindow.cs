@@ -878,7 +878,10 @@ internal sealed class TimerWindow : Window
         foreach (var value in Enum.GetValues<TimerMode>())
         {
             var captured = value;
-            mode.Items.Add(NewItem(ModeName(value), (_, _) => { _model.SetMode(captured, _clock()); DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); }));
+            var modeItem = NewItem(ModeName(value), (_, _) => { _model.SetMode(captured, _clock()); DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); });
+            modeItem.IsCheckable = true;
+            modeItem.IsChecked = value == _model.Mode;
+            mode.Items.Add(modeItem);
         }
 
         menu.Items.Add(mode);
@@ -969,7 +972,10 @@ internal sealed class TimerWindow : Window
         foreach (var option in new[] { "Light", "Dark", "Auto" })
         {
             var captured = option;
-            theme.Items.Add(NewItem(option, (_, _) => { _theme = captured; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); }));
+            var themeItem = NewItem(option, (_, _) => { _theme = captured; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); });
+            themeItem.IsCheckable = true;
+            themeItem.IsChecked = string.Equals(_theme, option, StringComparison.OrdinalIgnoreCase);
+            theme.Items.Add(themeItem);
         }
 
         style.Items.Add(theme);
@@ -986,8 +992,16 @@ internal sealed class TimerWindow : Window
         timeFormat.Items.Add(twelveHourItem);
 
         style.Items.Add(timeFormat);
-        style.Items.Add(NewItem("Progress on/off", (_, _) => { _progressVisible = !_progressVisible; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); }));
-        style.Items.Add(NewItem("Label on/off", (_, _) => { _model.LabelVisible = !_model.LabelVisible; DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); }));
+        var progressItem = NewItem("Show progress", (_, _) => { _progressVisible = !_progressVisible; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); });
+        progressItem.IsCheckable = true;
+        progressItem.IsChecked = _progressVisible;
+        style.Items.Add(progressItem);
+
+        var labelItem = NewItem("Show label", (_, _) => { _model.LabelVisible = !_model.LabelVisible; DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); });
+        labelItem.IsCheckable = true;
+        labelItem.IsChecked = _model.LabelVisible;
+        style.Items.Add(labelItem);
+
         var blinkItem = NewItem("Blink on finish", (_, _) => { _blinkOnFinish = !_blinkOnFinish; DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); });
         blinkItem.IsCheckable = true;
         blinkItem.IsChecked = _blinkOnFinish;
@@ -1053,6 +1067,21 @@ internal sealed class TimerWindow : Window
                         formatOption.IsChecked = !_model.Use24HourTime;
                     }
                 }
+            }
+            else if (item is WpfMenuItem { Header: "Theme" } themeItem)
+            {
+                foreach (var themeOption in themeItem.Items.OfType<WpfMenuItem>())
+                {
+                    themeOption.IsChecked = string.Equals(themeOption.Header?.ToString(), _theme, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            else if (item is WpfMenuItem { Header: "Show progress" } progressItem)
+            {
+                progressItem.IsChecked = _progressVisible;
+            }
+            else if (item is WpfMenuItem { Header: "Show label" } labelItem)
+            {
+                labelItem.IsChecked = _model.LabelVisible;
             }
             else if (item is WpfMenuItem { Header: "Blink on finish" } blinkItem)
             {

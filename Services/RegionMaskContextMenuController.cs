@@ -1,6 +1,4 @@
-using System.Windows.Threading;
 using FocusTool.Win.Models;
-using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
 using DrawingPoint = System.Drawing.Point;
 using Forms = System.Windows.Forms;
@@ -41,14 +39,13 @@ internal sealed class RegionMaskContextMenuController : IDisposable
         _maskId = maskId;
         _actionTaken = false;
         menu.Show(new DrawingPoint((int)Math.Round(point.X), (int)Math.Round(point.Y)));
-        ReassertToolStripDropDownTopmostRepeated(menu);
     }
 
     public void ReassertTopmostIfVisible()
     {
         if (_menu is { Visible: true } menu)
         {
-            ReassertToolStripDropDownTopmost(menu);
+            TopmostContextMenuHelper.ReassertIfVisible(menu);
         }
     }
 
@@ -65,18 +62,14 @@ internal sealed class RegionMaskContextMenuController : IDisposable
         AddStyleItem(styleMenu, "Stripes", RegionMaskStyle.Stripes);
         AddStyleItem(styleMenu, "HIDE label", RegionMaskStyle.Label);
         AddStyleItem(styleMenu, "Stripes + HIDE", RegionMaskStyle.StripesWithLabel);
-        styleMenu.DropDownOpened += (_, _) =>
-        {
-            ReassertToolStripDropDownTopmostRepeated(styleMenu.DropDown);
-        };
         menu.Items.Add(styleMenu);
         menu.Items.Add(new Forms.ToolStripSeparator());
 
-        var deleteItem = menu.Items.Add("Delete mask");
+        var deleteItem = menu.Items.Add("Delete");
         deleteItem.Click += (_, _) => DeleteMask();
         menu.Opening += (_, _) => UpdateMenuState(menu);
-        menu.Opened += (_, _) => ReassertToolStripDropDownTopmostRepeated(menu);
         menu.Closed += (_, _) => _actionTaken = false;
+        TopmostContextMenuHelper.Attach(menu, _topmostTimers);
 
         _menu = menu;
         return menu;
@@ -133,79 +126,10 @@ internal sealed class RegionMaskContextMenuController : IDisposable
         _deleteMask(_maskId);
     }
 
-    private void ReassertToolStripDropDownTopmostRepeated(Forms.ToolStripDropDown menu)
-    {
-        ReassertToolStripDropDownTopmost(menu);
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            () => ReassertToolStripDropDownTopmost(menu),
-            DispatcherPriority.Send);
-        System.Windows.Application.Current?.Dispatcher.BeginInvoke(
-            () => ReassertToolStripDropDownTopmost(menu),
-            DispatcherPriority.ContextIdle);
-
-        _topmostTimers.RemoveAll(timer =>
-        {
-            if (timer.Enabled)
-            {
-                return false;
-            }
-
-            timer.Dispose();
-            return true;
-        });
-
-        var timer = new Forms.Timer
-        {
-            Interval = 16
-        };
-        timer.Tick += (_, _) =>
-        {
-            if (menu.IsDisposed || !menu.Visible)
-            {
-                timer.Stop();
-                _topmostTimers.Remove(timer);
-                timer.Dispose();
-                return;
-            }
-
-            ReassertToolStripDropDownTopmost(menu);
-        };
-        _topmostTimers.Add(timer);
-        timer.Start();
-    }
-
-    private static void ReassertToolStripDropDownTopmost(Forms.ToolStripDropDown menu)
-    {
-        if (menu.IsDisposed || menu.Disposing)
-        {
-            return;
-        }
-
-        if (menu.Handle == IntPtr.Zero)
-        {
-            return;
-        }
-
-        NativeMethods.SetWindowPos(
-            menu.Handle,
-            NativeMethods.HwndTopmost,
-            0,
-            0,
-            0,
-            0,
-            NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
-    }
-
     public void Dispose()
     {
+        TopmostContextMenuHelper.DisposeTimers(_topmostTimers);
         _menu?.Dispose();
         _menu = null;
-        foreach (var timer in _topmostTimers)
-        {
-            timer.Stop();
-            timer.Dispose();
-        }
-
-        _topmostTimers.Clear();
     }
 }

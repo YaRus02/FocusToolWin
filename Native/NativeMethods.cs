@@ -37,6 +37,9 @@ internal static class NativeMethods
     public const int WmRButtonDown = 0x0204;
     public const int WmRButtonUp = 0x0205;
     public const int WmMouseWheel = 0x020A;
+    public const int WmKeyDown = 0x0100;
+    public const int WmSysKeyDown = 0x0104;
+    public const int WhKeyboardLl = 13;
     public const int WhMouseLl = 14;
     public const int WmCancelMode = 0x001F;
     public const int WmCaptureChanged = 0x0215;
@@ -111,6 +114,18 @@ internal static class NativeMethods
 
     public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct KeyboardHookStruct
+    {
+        public uint VkCode;
+        public uint ScanCode;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
+    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool GetCursorPos(out Point point);
 
@@ -152,6 +167,9 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool UnhookWindowsHookEx(IntPtr hhk);

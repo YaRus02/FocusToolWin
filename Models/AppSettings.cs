@@ -24,21 +24,31 @@ public sealed class AppSettings
         "#FF2080FF"
     ];
 
+    private static readonly string[] DefaultCursorHighlightColorSlots =
+    [
+        "#BFFFD400",
+        "#BF20D6FF",
+        "#BFFF4FD8",
+        "#BFFFFFFF",
+        "#BF00D26A"
+    ];
+
     public string Color { get; set; } = "#FFFF2020";
     public List<string> LaserColorPresets { get; set; } = [.. DefaultColorSlots];
     public double PointSize { get; set; } = 12;
     public int TrailLengthMs { get; set; } = 400;
     public int FadeDurationMs { get; set; } = 500;
     public bool GlowEnabled { get; set; } = true;
-    public string LaserActivationMode { get; set; } = string.Empty;
-    public string LaserHoldShortcut { get; set; } = "XButton2";
+    public string LaserActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Hold.ToString();
+    public string LaserHoldShortcut { get; set; } = "Alt+Z";
     [JsonIgnore]
     public bool CursorHighlightEnabled { get; set; }
     public string CursorHighlightColor { get; set; } = "#BFFFD400";
+    public List<string> CursorHighlightColorPresets { get; set; } = [.. DefaultCursorHighlightColorSlots];
     public double CursorHighlightRadius { get; set; } = 30;
     public double CursorHighlightThickness { get; set; } = 3;
-    public string CursorHighlightActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Always.ToString();
-    public string CursorHighlightHoldShortcut { get; set; } = "XButton1";
+    public string CursorHighlightActivationMode { get; set; } = FocusTool.Win.Models.LaserActivationMode.Hold.ToString();
+    public string CursorHighlightHoldShortcut { get; set; } = "Alt+X";
     public bool ClickPulseEnabled { get; set; }
     [JsonIgnore]
     public bool SpotlightEnabled { get; set; }
@@ -77,6 +87,7 @@ public sealed class AppSettings
         LaserHoldShortcut = LaserHoldShortcut,
         CursorHighlightEnabled = CursorHighlightEnabled,
         CursorHighlightColor = CursorHighlightColor,
+        CursorHighlightColorPresets = [.. CursorHighlightColorPresets],
         CursorHighlightRadius = CursorHighlightRadius,
         CursorHighlightThickness = CursorHighlightThickness,
         CursorHighlightActivationMode = CursorHighlightActivationMode,
@@ -118,6 +129,7 @@ public sealed class AppSettings
         LaserHoldShortcut = other.LaserHoldShortcut;
         CursorHighlightEnabled = other.CursorHighlightEnabled;
         CursorHighlightColor = other.CursorHighlightColor;
+        CursorHighlightColorPresets = [.. other.CursorHighlightColorPresets];
         CursorHighlightRadius = other.CursorHighlightRadius;
         CursorHighlightThickness = other.CursorHighlightThickness;
         CursorHighlightActivationMode = other.CursorHighlightActivationMode;
@@ -156,6 +168,7 @@ public sealed class AppSettings
         }
 
         LaserColorPresets = NormalizeColorPresets(LaserColorPresets, DefaultColorSlots);
+        CursorHighlightColorPresets = NormalizeColorPresets(CursorHighlightColorPresets, DefaultCursorHighlightColorSlots);
         AnnotationColorPresets = NormalizeColorPresets(AnnotationColorPresets, DefaultColorSlots);
         RegionMaskColorPresets = NormalizeColorPresets(RegionMaskColorPresets, DefaultRegionMaskColorSlots);
         EnsureColorInPresets(Color, LaserColorPresets, fallbackIndex: 4);
@@ -173,33 +186,32 @@ public sealed class AppSettings
 
         if (!Enum.TryParse<LaserActivationMode>(LaserActivationMode, true, out var laserActivationMode))
         {
-            laserActivationMode = IsLaserHoldShortcutDisabled(LaserHoldShortcut)
-                ? FocusTool.Win.Models.LaserActivationMode.Always
-                : FocusTool.Win.Models.LaserActivationMode.Hold;
+            laserActivationMode = FocusTool.Win.Models.LaserActivationMode.Hold;
         }
 
         LaserActivationMode = laserActivationMode.ToString();
         if (laserActivationMode == FocusTool.Win.Models.LaserActivationMode.Hold
             && IsLaserHoldShortcutDisabled(LaserHoldShortcut))
         {
-            LaserHoldShortcut = "XButton2";
+            LaserHoldShortcut = "Alt+Z";
         }
 
         if (!TryParseColor(CursorHighlightColor, out _))
         {
             CursorHighlightColor = "#BFFFD400";
         }
+        EnsureColorInPresets(CursorHighlightColor, CursorHighlightColorPresets, fallbackIndex: 0);
 
         if (!Enum.TryParse<LaserActivationMode>(CursorHighlightActivationMode, true, out var cursorHighlightActivationMode))
         {
-            cursorHighlightActivationMode = FocusTool.Win.Models.LaserActivationMode.Always;
+            cursorHighlightActivationMode = FocusTool.Win.Models.LaserActivationMode.Hold;
         }
 
         CursorHighlightActivationMode = cursorHighlightActivationMode.ToString();
         if (cursorHighlightActivationMode == FocusTool.Win.Models.LaserActivationMode.Hold
             && IsLaserHoldShortcutDisabled(CursorHighlightHoldShortcut))
         {
-            CursorHighlightHoldShortcut = "XButton1";
+            CursorHighlightHoldShortcut = "Alt+X";
         }
 
         PointSize = Math.Clamp(PointSize, 4, 64);
@@ -237,6 +249,8 @@ public sealed class AppSettings
     }
 
     public static string[] DefaultLaserColorPresets() => [.. DefaultColorSlots];
+
+    public static string[] DefaultCursorHighlightColorPresets() => [.. DefaultCursorHighlightColorSlots];
 
     public static string[] DefaultAnnotationColorPresets() => [.. DefaultColorSlots];
 
@@ -326,7 +340,7 @@ public sealed class AppSettings
     {
         return Enum.TryParse<LaserActivationMode>(CursorHighlightActivationMode, true, out var mode)
             ? mode
-            : FocusTool.Win.Models.LaserActivationMode.Always;
+            : FocusTool.Win.Models.LaserActivationMode.Hold;
     }
 
     internal void SetCursorHighlightActivationMode(LaserActivationMode mode)
@@ -384,7 +398,7 @@ public sealed class ShortcutSettings
 
     public string ToggleLaserActivation { get; set; } = "Ctrl+Alt+L";
     public string ToggleAnnotate { get; set; } = "Ctrl+Alt+D";
-    public string PushToAnnotate { get; set; } = "Ctrl+Space";
+    public string PushToAnnotate { get; set; } = "Alt+A";
     public string ToggleCursorHighlight { get; set; } = "Ctrl+Alt+U";
     public string ToggleSpotlight { get; set; } = "Ctrl+Alt+S";
     public string ToggleMagnifier { get; set; } = "Ctrl+Alt+M";
@@ -475,7 +489,7 @@ public sealed class ShortcutSettings
     {
         ToggleLaserActivation = NormalizeShortcut(ToggleLaserActivation, "Ctrl+Alt+L");
         ToggleAnnotate = NormalizeShortcut(ToggleAnnotate, "Ctrl+Alt+D");
-        PushToAnnotate = NormalizeShortcut(PushToAnnotate, "Ctrl+Space");
+        PushToAnnotate = NormalizeShortcut(PushToAnnotate, "Alt+A");
         ToggleCursorHighlight = NormalizeShortcut(ToggleCursorHighlight, "Ctrl+Alt+U");
         ToggleSpotlight = NormalizeShortcut(ToggleSpotlight, "Ctrl+Alt+S");
         ToggleMagnifier = NormalizeShortcut(ToggleMagnifier, "Ctrl+Alt+M");

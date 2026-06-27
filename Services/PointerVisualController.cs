@@ -88,7 +88,7 @@ internal sealed class PointerVisualController : IDisposable
         else if (AppSettings.IsLaserHoldShortcutDisabled(settings.LaserHoldShortcut)
             || !Shortcut.TryParse(settings.LaserHoldShortcut, out _laserHoldShortcut))
         {
-            settings.LaserHoldShortcut = "XButton2";
+            settings.LaserHoldShortcut = "Alt+Z";
             Shortcut.TryParse(settings.LaserHoldShortcut, out _laserHoldShortcut);
         }
 
@@ -99,7 +99,7 @@ internal sealed class PointerVisualController : IDisposable
         else if (AppSettings.IsLaserHoldShortcutDisabled(settings.CursorHighlightHoldShortcut)
             || !Shortcut.TryParse(settings.CursorHighlightHoldShortcut, out _cursorHighlightHoldShortcut))
         {
-            settings.CursorHighlightHoldShortcut = "XButton1";
+            settings.CursorHighlightHoldShortcut = "Alt+X";
             Shortcut.TryParse(settings.CursorHighlightHoldShortcut, out _cursorHighlightHoldShortcut);
         }
     }
@@ -204,6 +204,18 @@ internal sealed class PointerVisualController : IDisposable
 
         _cursorClickPulses.Clear();
         _invalidate();
+    }
+
+    public void ClearLaser()
+    {
+        var hadTrail = _trail.Points.Count > 0;
+        _trail.Clear();
+        _hasLastCursor = false;
+        SetLaserVisualActive(false);
+        if (hadTrail)
+        {
+            _invalidate();
+        }
     }
 
     public bool IsLaserHoldActive(LaserActivationMode activationMode)
@@ -323,11 +335,6 @@ internal sealed class PointerVisualController : IDisposable
     private bool IsCursorHighlightVisuallyActive()
     {
         var settings = _settingsProvider();
-        if (!settings.CursorHighlightEnabled)
-        {
-            return false;
-        }
-
         return settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always
             || _cursorHighlightHoldShortcut.IsPressed();
     }

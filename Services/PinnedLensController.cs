@@ -1,5 +1,6 @@
 using System.Windows.Threading;
 using FocusTool.Win.Models;
+using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
 
 namespace FocusTool.Win.Services;
@@ -15,6 +16,9 @@ internal sealed class PinnedLensController : IDisposable
     private readonly Action _reassertOverlayTopmost;
     private readonly Action<string, string> _showMessage;
     private readonly Action _stateChanged;
+    private readonly KeyboardHook _deleteKeyHook = new();
+    private readonly MouseHook _selectionMouseHook = new();
+    private PinnedLensHostWindow? _selectedHost;
 
     public PinnedLensController(
         Func<AppSettings> settingsProvider,
@@ -34,6 +38,8 @@ internal sealed class PinnedLensController : IDisposable
         _stateChanged = stateChanged;
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Render);
         _refreshTimer.Tick += OnRefreshTick;
+        _deleteKeyHook.KeyDown += OnDeleteKeyHookKeyDown;
+        _selectionMouseHook.Clicked += OnSelectionMouseHookClicked;
         UpdateRefreshInterval();
     }
 
@@ -54,6 +60,7 @@ internal sealed class PinnedLensController : IDisposable
         _hosts.Add(host);
         host.Closed += OnHostClosed;
         host.FreezeStateChanged += OnHostFreezeStateChanged;
+        host.Selected += OnHostSelected;
         host.Show();
         UpdateHosts();
         UpdateRefreshTimer();
@@ -66,6 +73,7 @@ internal sealed class PinnedLensController : IDisposable
         _refreshTimer.Stop();
         if (_hosts.Count == 0)
         {
+            ClearSelection();
             return;
         }
 
@@ -157,6 +165,24 @@ internal sealed class PinnedLensController : IDisposable
         }
     }
 
+    public bool DeleteSelected()
+    {
+        if (_selectedHost is null || !_hosts.Contains(_selectedHost))
+        {
+            ClearSelection();
+            return false;
+        }
+
+        RemoveHost(_selectedHost);
+        ClearSelection();
+        if (!_isDisposed())
+        {
+            _stateChanged();
+        }
+
+        return true;
+    }
+
     private async Task<bool> CaptureFreezeFrameAsync(PinnedLensHostWindow target, Func<bool> capture)
     {
         if (_isDisposed() || !_hosts.Contains(target))
@@ -210,6 +236,14 @@ internal sealed class PinnedLensController : IDisposable
         }
     }
 
+    private void OnHostSelected(object? sender, EventArgs e)
+    {
+        if (sender is PinnedLensHostWindow host)
+        {
+            SelectHost(host);
+        }
+    }
+
     private void OnHostFreezeStateChanged(object? sender, EventArgs e)
     {
         UpdateRefreshTimer();
@@ -238,8 +272,105 @@ internal sealed class PinnedLensController : IDisposable
 
         host.Closed -= OnHostClosed;
         host.FreezeStateChanged -= OnHostFreezeStateChanged;
+        host.Selected -= OnHostSelected;
+        if (ReferenceEquals(_selectedHost, host))
+        {
+            ClearSelection();
+        }
+
         host.Dispose();
         UpdateRefreshTimer();
+    }
+
+    private void SelectHost(PinnedLensHostWindow host)
+    {
+        if (!_hosts.Contains(host))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_selectedHost, host))
+        {
+            host.SetSelected(true);
+            EnsureSelectionHooks();
+            return;
+        }
+
+        _selectedHost?.SetSelected(false);
+        _selectedHost = host;
+        _selectedHost.SetSelected(true);
+        EnsureSelectionHooks();
+        _stateChanged();
+    }
+
+    private void ClearSelection()
+    {
+        if (_selectedHost is not null)
+        {
+            _selectedHost.SetSelected(false);
+            _selectedHost = null;
+        }
+
+        _deleteKeyHook.Uninstall();
+        _selectionMouseHook.Uninstall();
+    }
+
+    private void EnsureSelectionHooks()
+    {
+        if (!_deleteKeyHook.Install())
+        {
+            AppLog.Error("Could not install low-level keyboard hook for pinned lens deletion.");
+        }
+
+        if (!_selectionMouseHook.Install())
+        {
+            AppLog.Error("Could not install low-level mouse hook for pinned lens selection.");
+        }
+    }
+
+    private void OnDeleteKeyHookKeyDown(object? sender, KeyboardHookKeyEventArgs e)
+    {
+        if (_selectedHost is null)
+        {
+            return;
+        }
+
+        if (e.VirtualKey is 0x08 or 0x2E)
+        {
+            e.Handled = true;
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is not null)
+            {
+                dispatcher.BeginInvoke(DeleteSelected);
+            }
+            else
+            {
+                DeleteSelected();
+            }
+        }
+    }
+
+    private void OnSelectionMouseHookClicked(object? sender, MouseHookClickEventArgs e)
+    {
+        if (_selectedHost is null)
+        {
+            return;
+        }
+
+        if (_hosts.Any(host => host.Contains(e.Point)))
+        {
+            return;
+        }
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(ClearSelection);
+        }
+        else
+        {
+            ClearSelection();
+        }
     }
 
     private void UpdateRefreshTimer()
@@ -257,6 +388,10 @@ internal sealed class PinnedLensController : IDisposable
     {
         _refreshTimer.Stop();
         _refreshTimer.Tick -= OnRefreshTick;
+        _deleteKeyHook.KeyDown -= OnDeleteKeyHookKeyDown;
+        _selectionMouseHook.Clicked -= OnSelectionMouseHookClicked;
+        _deleteKeyHook.Dispose();
+        _selectionMouseHook.Dispose();
         foreach (var host in _hosts.ToArray())
         {
             RemoveHost(host);

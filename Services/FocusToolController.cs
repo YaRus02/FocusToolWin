@@ -61,7 +61,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public AnnotationTool CurrentTool => Settings.GetAnnotationTool();
     public AnnotationDocument Annotations => _annotations;
     public bool LaserVisuallyActive => _pointerVisuals.LaserVisuallyActive;
-    public bool CursorHighlightEnabled => Settings.CursorHighlightEnabled;
+    public bool CursorHighlightEnabled => Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always;
     public bool ClickPulseEnabled => Settings.ClickPulseEnabled;
     public bool SpotlightEnabled => _visualEffects.SpotlightEnabled;
     public bool MagnifierEnabled => Settings.MagnifierEnabled;
@@ -257,8 +257,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => Settings.MagnifierEnabled,
             CloseMagnifierHost,
             () => _magnifier.RefreshFromCurrentCursor(forceCursorInvalidation: true, MovementThresholdPixels),
-            _pinnedLenses.HideForBoard,
-            _pinnedLenses.RestoreAfterBoard,
             _pointerVisuals.SetLaserVisualActive,
             RegisterHotKeys,
             () => StateChanged?.Invoke(this, EventArgs.Empty));
@@ -415,7 +413,9 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void ToggleCursorHighlight()
     {
-        SetCursorHighlightEnabled(!Settings.CursorHighlightEnabled);
+        SetCursorHighlightActivationMode(Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always
+            ? LaserActivationMode.Hold
+            : LaserActivationMode.Always);
     }
 
     public void SetCursorHighlightEnabled(bool enabled)
@@ -705,7 +705,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public void ApplySettings(AppSettings settings)
     {
         var previousActivationMode = ActivationMode;
-        var cursorHighlightWasEnabled = Settings.CursorHighlightEnabled;
+        var previousCursorHighlightActivationMode = Settings.GetCursorHighlightActivationMode();
         var clickPulseWasEnabled = Settings.ClickPulseEnabled;
         var magnifierWasEnabled = Settings.MagnifierEnabled;
         var globalHotKeysChanged = !GlobalHotKeyController.HaveSameGlobalHotKeys(Settings.Shortcuts, settings.Shortcuts);
@@ -721,12 +721,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _visualEffects.SpotlightEnabled = Settings.SpotlightEnabled;
         _pointerVisuals.UpdateMouseHook();
 
-        if (Settings.CursorHighlightEnabled)
+        if (Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Always)
         {
             _timer.Interval = ActiveInterval;
             _pointerVisuals.UpdateCursorHighlight(force: true);
         }
-        else if (cursorHighlightWasEnabled || _pointerVisuals.HasCursorHighlightPoint)
+        else if (previousCursorHighlightActivationMode == LaserActivationMode.Always || _pointerVisuals.HasCursorHighlightPoint)
         {
             _pointerVisuals.ClearCursorHighlightPoint();
         }
@@ -949,7 +949,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ApplyPersistentSettings(AppSettings settings)
     {
-        settings.CursorHighlightEnabled = Settings.CursorHighlightEnabled;
         settings.SpotlightEnabled = _visualEffects.SpotlightEnabled;
         settings.MagnifierEnabled = Settings.MagnifierEnabled;
         ApplySettings(settings);
@@ -1259,6 +1258,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ReassertFloatingChromeTopmost()
     {
+        if (IsVisualBoardMode(_mode))
+        {
+            _pinnedLenses.ReassertTopmost();
+        }
+
         _toolbar.ReassertTopmost();
         _timerController?.ReassertTopmost();
 
@@ -1268,7 +1272,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void ReassertPinnedLensTopmost()
     {
-        _pinnedLenses.ReassertTopmost();
+        if (!IsVisualBoardMode(_mode))
+        {
+            _pinnedLenses.ReassertTopmost();
+        }
     }
 
     private ScreenPoint? GetSpotlightPoint()
