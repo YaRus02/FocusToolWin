@@ -972,7 +972,7 @@ public partial class SettingsWindow : Window
             return mode;
         }
 
-        return LaserActivationMode.Always;
+        return LaserActivationMode.Hold;
     }
 
     private void SelectRegionMaskStyle(string styleText)

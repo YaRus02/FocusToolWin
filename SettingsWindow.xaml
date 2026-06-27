@@ -386,7 +386,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Text="Use names like A, Ctrl+Alt+D, Delete, Esc, Backspace, [, ], XButton2. Leave a shortcut empty or type None to disable it. Toggle laser mode switches Always/Hold; Hold laser is used only in Hold key / mouse button mode." Foreground="#666666" TextWrapping="Wrap" Margin="0,0,0,12" />
+                        <TextBlock Grid.Row="0" Text="Use names like A, Alt+A, Ctrl+Alt+D, Delete, Esc, Backspace, [, ]. Leave a shortcut empty or type None to disable it. Toggle laser / cursor mode switches Always/Hold; hold shortcuts are used only in Hold mode." Foreground="#666666" TextWrapping="Wrap" Margin="0,0,0,12" />
 
                         <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
