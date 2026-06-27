@@ -2,13 +2,17 @@
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**FocusTool** is a lightweight Windows utility for **drawing and annotating over the screen**. It provides a virtual **laser pointer** with a smooth trail, a **screen magnifier**, **live pinned zoom areas**, **region masks**, **spotlight mode**, **floating overlay timers**, **screenshots with annotations**, and drawing boards that work over any application.
+# FocusTool
 
-It is built for **presentations, webinars, online lessons, screen recordings, streams, code reviews, remote support, and quick visual explanations**. The main idea is simple: keep the interface quiet, use hotkeys first, and show the overlay toolbar only when mouse, pen, touch, or whiteboard control is useful.
+**FocusTool** is a minimalist Windows utility for **presentations, online lessons, calls, screen recording, interface walkthroughs, and working over the screen**. It adds, on top of the desktop, a laser pointer, cursor highlight, click pulse, spotlight, rectangular region spotlight, magnifier, live pinned lens, region masks, drawing tools, numbered step markers, fading annotations, image/text paste, an overlay timer, screen boards, screenshots, and **Capture Stage** for window/share capture.
 
-> Keywords: screen annotation, draw on screen, drawing over screen, presentation laser pointer, screen magnifier, live pinned lens, pinned zoom, region mask, hide screen area, fading annotations, overlay timer, floating timer, countdown timer, stopwatch overlay, spotlight overlay, screenshot with annotations, whiteboard, blackboard, screen board, teaching tool, webinar tool, streaming overlay.
+The main idea of FocusTool: minimum visual noise and fast access to actions through hotkeys, the tray menu, and a compact overlay panel.
 
-> Development note: FocusTool was built with AI assistance. The functionality has been manually tested across the main workflows: laser pointer, annotations, fading annotations, spotlight, magnifier, pinned lens, region masks, overlay timers, boards, screenshots, hotkeys, toolbar, tray menu, and multi-monitor scenarios.
+Documentation is current for version **3.0.0**.
+
+> Keywords: draw over screen, screen annotation, presentation laser pointer, cursor highlight, click pulse, spotlight, region spotlight, screen magnifier, pinned lens, pinned zoom, region mask, hide screen area, fading annotations, overlay timer, countdown, stopwatch, screen board, whiteboard, region screenshot, step markers, push-to-annotate, capture stage, OBS window capture, teaching, webinars, screen recording, streaming.
+
+> Development note: FocusTool was built with AI assistance and manually tested across the main workflows: laser, annotations, fading annotations, spotlight, magnifier, pinned lens, region masks, overlay timers, boards, screenshots, hotkeys, toolbar, tray menu, Capture Stage, and multi-monitor / DPI scenarios.
 
 ---
 
@@ -20,74 +24,71 @@ It is built for **presentations, webinars, online lessons, screen recordings, st
 
 ## Use Cases
 
-- **Presentations and talks**: point, highlight, draw arrows, and add quick notes over slides, PDFs, or browser content.
-- **Online lessons, webinars, and tutoring**: draw directly over any application while explaining a topic.
-- **Streaming and screen recording**: make cursor focus, selected regions, and small details easier to follow.
-- **Code demos and reviews**: highlight a line, circle a block, magnify small text, or pin a live output fragment.
-- **Privacy during demos**: hide rectangular areas of the screen with Region Mask.
-- **Remote support**: show exactly where to click or what to inspect.
-- **Quick annotated screenshots**: capture the current monitor, copy it to the clipboard, and save it automatically.
+- **Presentations and talks** - pointer, spotlight, quick arrows, frames, text, and numbered steps over slides.
+- **Online lessons and webinars** - draw over any application, boards, timers, screenshots, and pasted material.
+- **Screen recording** - cursor highlight, click pulse, magnifier, pinned lens, and region screenshots.
+- **Code and interface reviews** - highlight lines, magnify small areas, pin live fragments of the screen.
+- **Working with private data** - Region Mask hides selected areas and stays visible in screenshots, magnifier, and pinned lens.
+- **Timeboxing and exercises** - a floating timer that does not take over the whole screen.
+- **Bug reports and docs** - a quick capture of the whole monitor or a precise region with annotations.
 
 ## Features
 
-- **Laser pointer** with a smooth comet-like trail, configurable color, size, glow, trail length, and fade timing.
-- **Laser activation modes**: always on, or hold a configured key/mouse button.
-- **Screen annotations**: pen, marker, arrow, line, rectangle, oval, text, selection, and move.
-- **Fading annotations**: new annotations can stay visible for a configured time and then fade out smoothly without leaving empty undo/redo steps.
-- **Overlay Timer**: floating timers above the desktop with Countdown, Stopwatch, Clock, and Until time modes.
-- **Live Pinned Lens**: select any screen rectangle and show it enlarged in a separate live floating window. Multiple pinned lenses are supported.
-- **Region Mask**: hide selected rectangular screen areas. Existing masks can be moved, resized from corners, and deleted from a context menu.
-- **Spotlight mode**: dims the screen while keeping a circular area around the cursor visible.
-- **Magnifier**: magnifies the area under the cursor using the Windows Magnification API.
-- **Screen Board**: freezes the current screen as a board background so you can draw over it. The final image is saved and copied to the clipboard when you exit.
-- **Black Board and White Board**: clean drawing backgrounds for quick explanations.
-- **Screenshot capture**: captures the current monitor, saves the image, and copies it to the clipboard.
-- **Overlay toolbar**: compact floating toolbar with mode buttons and contextual rows for laser, drawing, spotlight, zoom, pinned lens, masks, timers, boards, and actions.
-- **Configurable color slots**: laser, annotation, and region mask colors use editable Color 1-5 slots shared by Settings, toolbar, and tray menu.
-- **System tray menu** with quick actions and settings.
-- **Global hotkeys** for fast, low-noise control.
-- **Multi-monitor and per-monitor DPI support**, including 125% / 150% scaling scenarios.
+### Pointer / Focus
 
-## Overlay Toolbar
+- **Laser Pointer** - colored dot with a smooth trail, glow, size, trail length, and `Always` / `Hold` modes.
+- **Cursor Highlight** - a stable ring around the cursor with no trail and no flicker. A calm alternative to the laser for recording and calls.
+- **Click Pulse** - a short click animation around the cursor. Enabled separately; can be used with or without the highlight ring.
+- **Spotlight** - dims the whole screen except a circular area around the cursor.
+- **Region Spotlight** - a rectangular spotlight: the selected area stays visible, the rest dims. Regions can be moved, resized, nudged with arrows, and deleted with `Backspace`.
+- **Magnifier** - a screen magnifier around the cursor based on the Windows Magnification API.
+- **Live Pinned Lens** - a selected screen area is shown enlarged in a separate floating live window. Multiple windows, `Freeze / Resume`, zoom, close one or all.
 
-Show or hide the toolbar:
+### Draw / Annotations
 
-```text
-Ctrl+Alt+T
-```
+- **Pen**, **Highlighter**, **Arrow**, **Line**, **Rectangle**, **Oval**, **Text**, **Move**.
+- **Numbered step markers** - markers for step-by-step explanations. Oval-by-click and rect-by-selection; numbering runs separately per color slot.
+- **Text editing** - double-click text to edit it in place. `Enter` commits, `Esc` cancels/closes, `Shift+Enter` adds a line.
+- **Object edit by double-click** - single objects are edited only after an explicit double-click, reducing accidental moves while drawing near existing annotations.
+- **Live color / size changes** - selected objects can get a new color, line thickness, or text size without re-creating them.
+- **Undo / Redo / Clear / Delete selected** - history is not polluted by already-faded temporary annotations.
+- **Fading annotations** - new annotations can live for a set time and then fade out smoothly.
+- **Paste image / text** - `Ctrl+V` pastes an image or text from the clipboard as an annotation object that can be moved, scaled, and included in screenshots/boards.
 
-Main toolbar row:
+### Privacy / Masking
 
-- `Laser`: laser pointer and quick laser settings.
-- `Draw`: annotation mode, tools, colors, line size, text size, Fade, Undo, Redo, Clear.
-- `Spot`: spotlight and its parameters.
-- `Zoom`: screen magnifier and its parameters.
-- `Pin`: select an area for Live Pinned Lens and tune defaults for new lenses.
-- `Mask`: select an area for Region Mask, color, opacity, and clear action.
-- `Board`: Screen Board, Black Board, White Board.
-- `Shot`: screenshot the current monitor.
-- `Timer`: create floating timers and close all active timers.
-- `...`: hide toolbar, open settings, or close the app.
+- **Region Mask** - rectangular privacy masks over the screen.
+- Masks work as a top privacy layer and appear in screenshots, screen board, magnifier, and pinned lens.
+- Styles: solid fill, diagonal stripes, `HIDE` label, and stripes + label.
+- The create-mask mode is designed for adding several areas in a row.
+- A selected mask can be moved, resized, deleted with `Backspace/Delete`, and have its color and opacity changed. New masks remember the last chosen style.
 
-The toolbar can collapse into a small `FT` grip. The grip can be dragged, and a normal click opens the toolbar again.
+### Boards / Capture
 
-## Color Slots
+- **Screen Board** - snapshots the current monitor and turns it into a board background for annotations. On exit, the result is saved and copied to the clipboard.
+- **Black Board / White Board** - a clean black or white background for explanations.
+- **Screenshot** - a snapshot of the current monitor, auto-saved to `Pictures\FocusTool` and copied to the clipboard.
+- **Region Screenshot** - select an arbitrary area, tune the frame before saving, live `WxH` size, PNG output, and clipboard copy.
+- Annotations, region masks, and board content are included in screenshots. The toolbar is hidden temporarily.
+- **Capture Stage** - a separate window that mirrors a chosen application together with FocusTool's overlays (annotations, laser, cursor highlight, spotlight, masks, timer). Capture tools take it as an ordinary window (OBS Window Capture, Zoom / Discord / Teams `Share window`), so the overlays end up in the frame even with window capture. The source is chosen with the system picker; this version supports windows (not the whole screen), view-only.
 
-FocusTool uses configurable color slots instead of hard-coded color names.
+### Overlay Timer
 
-- Laser: `Color 1`-`Color 5`.
-- Annotation: `Color 1`-`Color 5`.
-- Region Mask: `Color 1`-`Color 5`.
+- Several floating timers at once.
+- Modes: `Countdown`, `Stopwatch`, `Clock`, `Until time`.
+- The timer label is edited with a double-click and saved in a label history.
+- Time is edited with a double-click in modes where it applies.
+- 12/24-hour format, progress bar, blink on finish, scale, opacity, light/dark/auto theme.
+- Controls live in the timer's own context menu so the main settings window stays light.
+- No sound, by design.
 
-Colors are edited in Settings using HEX values, for example:
+### Control
 
-```text
-#FFFF2020
-#FF2080FF
-#FFFFFFFF
-```
-
-After `Apply` / `OK`, the same slots are used by the toolbar and tray menu. If an older settings file contains a custom current color that is not present in the slots, FocusTool keeps it by placing it into `Color 5`.
+- **Overlay toolbar** - a compact panel over the screen with the main modes and contextual settings rows.
+- **Tray menu** - access to modes, settings, colors, tools, and exit.
+- **Settings** - split into tabs: pointer, focus, draw, mask, shortcuts.
+- **Global hotkeys** - every main shortcut can be changed or disabled.
+- **Push-to-annotate** - a quick temporary Draw mode: hold the hotkey, make a note, release - the app returns to passthrough.
 
 ## Default Hotkeys
 
@@ -95,143 +96,157 @@ After `Apply` / `OK`, the same slots are used by the toolbar and tray menu. If a
 
 | Action | Shortcut |
 |---|---|
-| Toggle annotation mode | `Ctrl+Alt+D` |
-| Toggle laser activation Always / Hold | `Ctrl+Alt+L` |
-| Toggle spotlight | `Ctrl+Alt+S` |
-| Toggle magnifier | `Ctrl+Alt+M` |
-| Live Pinned Lens: select area | `Ctrl+Alt+P` |
-| Region Mask: select area | `Ctrl+Alt+H` |
-| Clear all Region Masks | `Ctrl+Alt+Shift+H` |
-| Toggle fading annotations | `Ctrl+Alt+F` |
-| New overlay timer | `Ctrl+Alt+N` |
-| Toggle overlay toolbar | `Ctrl+Alt+T` |
-| Screenshot current monitor | `Ctrl+Alt+C` |
+| Laser mode `Always / Hold` | `Ctrl+Alt+L` |
+| Draw mode | `Ctrl+Alt+D` |
+| Push-to-annotate | `Alt+A` |
+| Cursor Highlight | `Ctrl+Alt+U` |
+| Spotlight | `Ctrl+Alt+S` |
+| Magnifier | `Ctrl+Alt+M` |
+| Live Pinned Lens | `Ctrl+Alt+P` |
+| Region Mask | `Ctrl+Alt+H` |
+| Clear Region Masks | `Ctrl+Alt+Shift+H` |
+| Region Spotlight | `Ctrl+Alt+Shift+S` |
+| Clear Region Spotlights | `Ctrl+Alt+Shift+X` |
+| Fading annotations | `Ctrl+Alt+F` |
+| Overlay Timer | `Ctrl+Alt+N` |
+| Overlay toolbar | `Ctrl+Alt+T` |
+| Screenshot | `Ctrl+Alt+C` |
+| Region Screenshot | `Ctrl+Alt+Shift+C` |
 | Screen Board | `Ctrl+Alt+G` |
 | Black Board | `Ctrl+Alt+B` |
 | White Board | `Ctrl+Alt+W` |
 | Exit FocusTool | `Ctrl+Alt+Q` |
-| Hold laser in Hold mode | `XButton2` |
+| Laser hold key | `Alt+Z` |
+| Cursor Highlight hold key | `Alt+X` |
 
-### Annotation Mode
+### In Draw mode
 
 | Action | Shortcut |
 |---|---|
-| Tools | `A` Arrow · `R` Rectangle · `C` Circle/Oval · `L` Line · `P` Pen · `H` Marker · `T` Text · `M` Move |
-| Color slots | `1`-`5` |
-| Line thickness | `[` and `]` |
-| Undo / redo | `Ctrl+Z` / `Ctrl+Y` |
-| Delete selected object | `Backspace` |
-| Clear all annotations | `Delete` or `E` |
+| Arrow | `A` |
+| Rectangle | `R` |
+| Oval / Circle | `C` |
+| Line | `L` |
+| Pen | `P` |
+| Highlighter | `H` |
+| Text | `T` |
+| Move | `M` |
+| Step marker | `N` |
+| Color slot 1-5 | `1`-`5` |
+| Line thickness | `[` / `]` |
+| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
+| Delete selected | `Backspace` |
+| Clear annotations | `Delete` or `E` |
 | Exit visual mode | `Esc` |
+| Paste image/text | `Ctrl+V` |
 
-Hotkeys can be changed or disabled in **Settings** from the tray menu.
+Any hotkey can be changed in `Settings -> Shortcuts`. To disable a hotkey, leave the field empty or set `None`.
 
-## Live Pinned Lens
+## Important: keyboard ghosting
 
-**Live Pinned Lens** is a live enlarged floating copy of any selected screen rectangle. Select a small area, move the enlarged window to a free place, and keep working in the original application while the pinned lens updates in real time.
+Some keyboards physically cannot send certain combinations of simultaneously held keys to the system. This is called **keyboard ghosting** (or limited key rollover). It is a hardware trait of the keyboard, not a FocusTool bug: Windows simply never receives the keypress.
 
-Supported behavior:
+For example, with `Ctrl+Space` held, the keys `3` or `E` may not arrive on one keyboard while other keys work fine. Which keys are "blocked" depends on the matrix of the specific keyboard.
 
-- multiple pinned lenses at the same time;
-- drag the lens window with the mouse;
-- thin border without the standard system frame;
-- `Freeze / Resume`;
-- zoom through the context menu or `Ctrl + mouse wheel`;
-- close one lens or close all lenses.
+It is more common on laptop and membrane keyboards. Mechanical keyboards with full N-key rollover (NKRO) usually do not have this problem.
 
-Laser and annotations are drawn above pinned lens windows. Region Masks remain visible inside the enlarged image so a hidden area cannot be revealed through zoom.
+Practical guidance:
 
-## Region Mask
+- for hold triggers, prefer single keys or short combinations - the fewer keys held at once, the lower the chance of ghosting;
+- for this reason Push-to-annotate defaults to `Alt+A`, and laser / Cursor Highlight hold default to `Alt+Z` and `Alt+X`;
+- if a specific combination does not work on your keyboard, assign a different (or simpler) one in `Settings -> Shortcuts`.
 
-**Region Mask** hides selected rectangular areas of the screen.
+## Mode Behavior
 
-Behavior:
+### Live Pinned Lens
 
-- one selection creates one mask and returns FocusTool to normal passthrough mode;
-- in `Mask` mode, existing masks can be moved by dragging their body;
-- masks can be resized from corner handles;
-- right-click a mask to open its delete menu;
-- deleting one mask does not exit `Mask` mode;
-- all masks can be cleared through the hotkey or tray menu;
-- new masks use the current mask color slot and opacity from Settings.
+`Ctrl+Alt+P` starts area selection. After selecting, a live window appears with an enlarged copy of the chosen fragment. The window can be dragged, scaled via the context menu or `Ctrl + mouse wheel`, frozen, and closed individually or all at once.
 
-Masks are visible in the magnifier, pinned lens, screenshots, and Screen Board. This is intentional: if an area is hidden, helper tools should not reveal it.
+Annotations are drawn over pinned lens windows. Region masks stay visible inside the enlarged image so a hidden area cannot be revealed through zoom.
 
-## Fading Annotations
+### Region Spotlight
 
-Fading annotations are controlled by a global mode. When enabled, newly created annotations stay fully visible for a configured time and then fade out smoothly.
+`Ctrl+Alt+Shift+S` starts rectangular focus selection. After it is created, the region can be moved, resized from corners, nudged with arrows, and deleted with `Backspace`. `Enter` and `Esc` leave edit mode without deleting the region.
 
-Toggle:
+### Region Screenshot
+
+`Ctrl+Alt+Shift+C` starts area selection for a screenshot. After selecting, the frame can be refined before saving. `Enter` saves the area, `Esc` cancels. The image is saved to `Pictures\FocusTool` and copied to the clipboard.
+
+### Push-to-annotate
+
+`Alt+A` temporarily enables Draw mode while held. The last selected tool is used. If you release the hotkey during a drag/stroke, the current shape is not cut off: exit happens after the action completes.
+
+### Text and object editing
+
+A double-click on an object enters edit mode. For text it opens input; for shapes it shows move/resize handles where applicable. Outside edit mode, normal tools create new objects instead of accidentally moving existing ones.
+
+### Capture Stage
+
+The source is chosen with the Windows system picker. A separate window appears that mirrors the chosen application together with the overlays; capture tools take it as an ordinary window.
+
+- You keep working in the **real** source window - the Stage only mirrors it.
+- The source must not be **minimized** - a minimized window stops rendering and the frame freezes. It can be covered by other windows.
+- The Stage window itself **cannot be minimized**, so you do not accidentally lose the picture in the recording.
+- In the capture tool, disable its own cursor drawing (`Capture Cursor` in OBS), otherwise the cursor is doubled.
+
+## Color Slots
+
+FocusTool uses configurable color slots instead of hard-coded colors:
+
+- Laser: `Color 1`-`Color 5`;
+- Cursor Highlight: `Color 1`-`Color 5`;
+- Annotation: `Color 1`-`Color 5`;
+- Region Mask: `Color 1`-`Color 5`.
+
+Colors are set in HEX. Alpha is supported:
 
 ```text
-Ctrl+Alt+F
+#FFFF2020
+#80FFFFFF
+#BFFFD400
 ```
 
-Toolbar: `Draw -> Fade`. The small button next to `Fade` opens quick controls for visible time and fade duration.
-
-Existing annotations do not change behavior when the mode is toggled. Automatic removal does not create empty undo/redo steps.
-
-## Overlay Timer
-
-**Overlay Timer** is a live floating timer above the desktop. It does not open a full-screen mode and does not interrupt the current application.
-
-Create a new timer:
-
-```text
-Ctrl+Alt+N
-```
-
-Supported behavior:
-
-- multiple timers at the same time;
-- Countdown, Stopwatch, Clock, and Until time modes;
-- drag the timer window by its body;
-- double-click the label to edit it;
-- double-click the time to edit it in modes where direct time input is available;
-- size and opacity controls visible only while the timer is focused;
-- context menu for mode, style, 12/24-hour format, progress bar, label, and blink on finish;
-- Light, Dark, and Auto themes. Auto follows the Windows app theme.
-
-Keyboard controls while a timer is focused:
-
-| Action | Shortcut |
-|---|---|
-| Start / pause | `Space` |
-| Reset | `R` |
-| Cycle mode | `Tab` |
-| Adjust time by 1 second | `Left` / `Right` |
-| Adjust time by 1 minute | `Up` / `Down` |
-| Adjust time by 5 minutes | `Shift+Up` / `Shift+Down` |
-| Return focus to previous window | `Esc` |
-
-Active timer settings are saved as defaults for newly created timers. Open timer windows are not restored after application restart.
+Format `#AARRGGBB`: the first two characters after `#` set transparency. For example, `#80FFFFFF` is white at roughly 50% transparency.
 
 ## Installation
 
-FocusTool runs on **Windows 10 / 11**.
+Requires **Windows 10 / 11**.
 
-Download one of the release packages:
+A release usually has two builds:
 
-- `self-contained.zip`: recommended for most users. It includes the required runtime and does not require a separate .NET installation.
-- `framework-dependent.zip`: smaller package, but requires the **.NET 10 Desktop Runtime** to be installed.
+- `self-contained.zip` - standalone build. Does not require an installed .NET Runtime.
+- `framework-dependent.zip` - smaller build. Requires the installed **.NET 10 Desktop Runtime**.
 
-Unzip the package and run `FocusTool.exe`. The application starts in the system tray.
+For most users `self-contained.zip` is recommended: unzip the archive and run `FocusTool.exe`. After launch, the app appears in the system tray.
 
-## Recording and Streaming
-
-FocusTool draws its overlays above the desktop as separate top-level windows. Because of that, recording only a single application window may not include the overlay.
-
-For OBS and similar tools, use **Display Capture** to capture the full monitor together with laser, annotations, spotlight, magnifier, pinned lenses, masks, timers, and toolbar. If you need only part of the screen, crop the display capture source.
+The executable is not yet code-signed. Windows SmartScreen may show a warning on the first launch of a new unsigned application.
 
 ## Data Locations
 
 | Data | Location |
 |---|---|
 | Settings | `%APPDATA%\FocusTool\settings.json` |
-| Log file | `%APPDATA%\FocusTool\log.txt` |
-| Screenshots and board captures | `Pictures\FocusTool` |
+| Error log | `%APPDATA%\FocusTool\log.txt` |
+| Screenshots and saved boards | `Pictures\FocusTool` |
 
-If `Pictures` is unavailable, FocusTool uses `Documents`.
+If the `Pictures` folder is unavailable, the app uses `Documents`.
+
+## Recording and Streaming
+
+FocusTool draws as a desktop overlay. For OBS and similar tools, the simplest option is **Display Capture / Monitor Capture** - it includes the laser, annotations, timer, masks, pinned lens, and toolbar.
+
+**Window Capture** usually captures only a single application window and does not include FocusTool's overlay windows. This is a Windows window-composition limitation, not a FocusTool bug.
+
+If you need to share **only one application** (not the whole screen) while keeping the overlays, use **Capture Stage**: a separate window composes the chosen source together with annotations and the timer, and capture tools take it as an ordinary window (`Share window` / OBS Window Capture). In the capture tool, disable its own cursor drawing (in OBS - the **Capture Cursor** option): the cursor is already inside the Stage frame, otherwise it is doubled.
+
+## Limitations and Notes
+
+- FocusTool targets Windows 10 / 11.
+- An unsigned exe may trigger a Windows SmartScreen warning.
+- If a global hotkey conflicts with another program, the app shows a warning and the hotkey must be reassigned.
+- Some shortcuts may not work due to keyboard ghosting of a specific keyboard.
+- Performance depends on the number of monitors, DPI, pinned lenses, timers, masks, and active animations.
+- The timer uses no sound.
 
 ## Build From Source
 
