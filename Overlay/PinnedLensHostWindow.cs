@@ -76,6 +76,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
     public event EventHandler? FreezeStateChanged;
 
+    public event EventHandler? Selected;
+
     public Action? CloseAllRequested { get; }
 
     public bool IsAvailable { get; private set; }
@@ -86,7 +88,25 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
     public bool IsFrozen => _frozen;
 
+    public bool IsSelected { get; private set; }
+
     public double Zoom => _zoom;
+
+    public bool Contains(ScreenPoint point)
+    {
+        return _windowBounds.Contains((int)Math.Round(point.X), (int)Math.Round(point.Y));
+    }
+
+    public void SetSelected(bool selected)
+    {
+        if (IsSelected == selected)
+        {
+            return;
+        }
+
+        IsSelected = selected;
+        _host?.Invalidate();
+    }
 
     public void Show()
     {
@@ -320,6 +340,14 @@ internal sealed class PinnedLensHostWindow : IDisposable
         if (!_disposed)
         {
             Closed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void RequestSelection()
+    {
+        if (!_disposed)
+        {
+            Selected?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -743,6 +771,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
+            _owner.RequestSelection();
+
             if (e.Button == MouseButtons.Left)
             {
                 NativeMethods.ReleaseCapture();
@@ -787,6 +817,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
                     Math.Max(0, ClientSize.Height - BorderThickness * 2)));
             var color = _owner.IsFrozen
                 ? Color.FromArgb(230, 90, 190, 255)
+                : _owner.IsSelected
+                    ? Color.FromArgb(235, 255, 214, 80)
                 : Color.FromArgb(220, 255, 255, 255);
             using var pen = new Pen(color, BorderThickness);
             e.Graphics.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);

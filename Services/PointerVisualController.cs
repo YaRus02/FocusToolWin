@@ -206,6 +206,18 @@ internal sealed class PointerVisualController : IDisposable
         _invalidate();
     }
 
+    public void ClearLaser()
+    {
+        var hadTrail = _trail.Points.Count > 0;
+        _trail.Clear();
+        _hasLastCursor = false;
+        SetLaserVisualActive(false);
+        if (hadTrail)
+        {
+            _invalidate();
+        }
+    }
+
     public bool IsLaserHoldActive(LaserActivationMode activationMode)
     {
         return activationMode == LaserActivationMode.Always || _laserHoldShortcut.IsPressed();

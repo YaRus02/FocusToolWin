@@ -213,7 +213,6 @@ internal sealed class OverlayToolbarWindow : Window
         primary.Children.Add(CreateSeparator());
         _spotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
         _zoomButton = AddSplitButton(primary, "Zoom", "Toggle magnifier", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
-        _pinButton = AddSplitButton(primary, "Pin", "Select a live pinned lens area", 34, (_, _) => _controller.TogglePinnedLens(), "pin");
         _maskButton = AddSplitButton(primary, "Mask", "Select regions to cover", 38, (_, _) => _controller.ToggleRegionMask(), "mask");
         primary.Children.Add(CreateSeparator());
         _boardButton = AddSplitButton(primary, "Board", "Screen board, black or white", 48, (_, _) => ShowContextualRow("board"), "board");
@@ -248,7 +247,6 @@ internal sealed class OverlayToolbarWindow : Window
         _rows["draw"] = BuildDrawRow();
         _rows["spot"] = BuildSpotRow();
         _rows["zoom"] = BuildZoomRow();
-        _rows["pin"] = BuildPinRow();
         _rows["mask"] = BuildMaskRow();
         _rows["board"] = BuildBoardRow();
         _rows["shot"] = BuildShotRow();
@@ -381,12 +379,9 @@ internal sealed class OverlayToolbarWindow : Window
         var row = CreateRow();
         _zoomZoomText = CreateStepper(row, "Zoom", () => _controller.AdjustMagnifierZoom(-0.25), () => _controller.AdjustMagnifierZoom(0.25));
         _zoomRadiusText = CreateStepper(row, "Radius", () => _controller.AdjustMagnifierRadius(-16), () => _controller.AdjustMagnifierRadius(16));
-        return row;
-    }
-
-    private UIElement BuildPinRow()
-    {
-        var row = CreateRow();
+        row.Children.Add(CreateSeparator());
+        _pinButton = CreateButton("Pin", "Select a live pinned lens area", (_, _) => _controller.TogglePinnedLens(), width: 34);
+        row.Children.Add(_pinButton);
         _pinZoomText = CreateStepper(row, "Zoom", () => _controller.AdjustPinnedLensZoom(-0.25), () => _controller.AdjustPinnedLensZoom(0.25));
         _pinFpsText = CreateStepper(row, "Fps", () => _controller.AdjustPinnedLensRefreshFps(-5), () => _controller.AdjustPinnedLensRefreshFps(5));
         row.Children.Add(CreateSeparator());
@@ -880,7 +875,7 @@ internal sealed class OverlayToolbarWindow : Window
             SetButtonActive(_highlightButton, _controller.CursorHighlightEnabled);
             SetButtonActive(_drawButton, _controller.Mode == InteractionMode.Annotate);
             SetButtonActive(_spotButton, _controller.SpotlightEnabled || _controller.RegionSpotlightActive || _controller.RegionSpotlightSelectionActive);
-            SetButtonActive(_zoomButton, _controller.MagnifierEnabled);
+            SetButtonActive(_zoomButton, _controller.MagnifierEnabled || _controller.PinnedLensSelectionActive || _controller.PinnedLensActive);
             SetButtonActive(_pinButton, _controller.PinnedLensSelectionActive || _controller.PinnedLensActive);
             SetButtonActive(_maskButton, _controller.RegionMaskSelectionActive || _controller.RegionMaskActive);
             SetButtonActive(_boardButton, _controller.Mode is InteractionMode.ScreenBoard or InteractionMode.BlackScreen or InteractionMode.WhiteScreen);

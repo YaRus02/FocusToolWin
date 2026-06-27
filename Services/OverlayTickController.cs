@@ -68,14 +68,26 @@ internal sealed class OverlayTickController
         _pushToAnnotate.Update(_canExitPushToAnnotate());
 
         var fadingAnnotationsAnimating = _updateFadingAnnotations();
-        var cursorHighlightAnimating = _pointerVisuals.UpdateCursorHighlight(force: false);
         var mode = _modeProvider();
         var magnifierActive = _magnifierEnabledProvider();
+        var suppressPointerVisuals = magnifierActive;
+        var cursorHighlightAnimating = false;
+        if (suppressPointerVisuals)
+        {
+            _pointerVisuals.ClearLaser();
+            _pointerVisuals.ClearCursorHighlightPoint();
+            _pointerVisuals.ClearCursorClickPulses();
+        }
+        else
+        {
+            cursorHighlightAnimating = _pointerVisuals.UpdateCursorHighlight(force: false);
+        }
+
         var spotlightActive = _visualEffects.IsSpotlightVisibleInMode(mode);
         var activationMode = _activationModeProvider();
-        var holdActive = _pointerVisuals.IsLaserHoldActive(activationMode);
+        var holdActive = !suppressPointerVisuals && _pointerVisuals.IsLaserHoldActive(activationMode);
 
-        _pointerVisuals.SetLaserVisualActive(holdActive || IsAnnotationMode(mode));
+        _pointerVisuals.SetLaserVisualActive(!suppressPointerVisuals && (holdActive || IsAnnotationMode(mode)));
         if (magnifierActive)
         {
             if (!_magnifier.IsRenderingSubscribed)
