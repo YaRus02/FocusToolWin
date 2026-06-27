@@ -1,0 +1,184 @@
+using System.Globalization;
+using FocusTool.Win.Models;
+
+namespace FocusTool.Win.Overlay;
+
+internal static class TimerTimeEditor
+{
+    public static int MaxLength(TimerMode mode, bool use24HourTime)
+    {
+        if (mode != TimerMode.UntilTime)
+        {
+            return 8;
+        }
+
+        return use24HourTime ? 5 : 8;
+    }
+
+    public static string ToolTip(TimerMode mode, bool use24HourTime)
+    {
+        if (mode != TimerMode.UntilTime)
+        {
+            return "mm:ss or h:mm:ss";
+        }
+
+        return use24HourTime ? "HH:mm" : "h:mm AM/PM";
+    }
+
+    public static bool IsValidPartial(string text, TimerMode mode, bool use24HourTime)
+    {
+        if (text.Length == 0)
+        {
+            return true;
+        }
+
+        if (mode == TimerMode.UntilTime && !use24HourTime)
+        {
+            return IsValidTwelveHourTargetPartial(text);
+        }
+
+        if (text.Any(ch => !char.IsDigit(ch) && ch != ':') || text.Contains("::", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var parts = text.Split(':');
+        var maxParts = mode == TimerMode.UntilTime ? 2 : 3;
+        if (parts.Length > maxParts)
+        {
+            return false;
+        }
+
+        return parts.All(part => part.Length <= 2);
+    }
+
+    public static bool TryParseDuration(string text, out int seconds)
+    {
+        seconds = 0;
+        var parts = text.Split(':');
+        if (parts.Length is < 1 or > 3)
+        {
+            return false;
+        }
+
+        int hours = 0, minutes = 0, secs = 0;
+        if (parts.Length == 1)
+        {
+            if (!int.TryParse(parts[0], out minutes))
+            {
+                return false;
+            }
+        }
+        else if (parts.Length == 2)
+        {
+            if (!int.TryParse(parts[0], out minutes) || !int.TryParse(parts[1], out secs))
+            {
+                return false;
+            }
+        }
+        else if (!int.TryParse(parts[0], out hours) || !int.TryParse(parts[1], out minutes) || !int.TryParse(parts[2], out secs))
+        {
+            return false;
+        }
+
+        if (hours < 0 || minutes < 0 || secs < 0)
+        {
+            return false;
+        }
+
+        seconds = (hours * 3600) + (minutes * 60) + secs;
+        return seconds >= 1;
+    }
+
+    public static bool TryParseTargetTime(string text, bool use24HourTime, out DateTime target)
+    {
+        target = default;
+        var now = DateTime.Now;
+        if (!use24HourTime)
+        {
+            if (!DateTime.TryParseExact(
+                text.Trim().ToUpperInvariant(),
+                ["h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt"],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces,
+                out var parsed))
+            {
+                return false;
+            }
+
+            target = new DateTime(now.Year, now.Month, now.Day, parsed.Hour, parsed.Minute, 0);
+            if (target <= now)
+            {
+                target = target.AddDays(1);
+            }
+
+            return true;
+        }
+
+        var parts = text.Split(':');
+        if (parts.Length != 2)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(parts[0], out var hours) || !int.TryParse(parts[1], out var minutes))
+        {
+            return false;
+        }
+
+        if (hours is < 0 or > 23 || minutes is < 0 or > 59)
+        {
+            return false;
+        }
+
+        target = new DateTime(now.Year, now.Month, now.Day, hours, minutes, 0);
+        if (target <= now)
+        {
+            target = target.AddDays(1);
+        }
+
+        return true;
+    }
+
+    private static bool IsValidTwelveHourTargetPartial(string text)
+    {
+        if (text.Length > 8 || text.Contains("::", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var ch in text)
+        {
+            if (!char.IsDigit(ch) && ch != ':' && ch != ' ' && "apmAPM".IndexOf(ch) < 0)
+            {
+                return false;
+            }
+        }
+
+        var upper = text.ToUpperInvariant();
+        if (upper.Count(ch => ch == ':') > 1)
+        {
+            return false;
+        }
+
+        var markerIndex = upper.IndexOfAny(['A', 'P', 'M']);
+        if (markerIndex >= 0)
+        {
+            var marker = upper[markerIndex..].TrimStart();
+            if (!"AM".StartsWith(marker, StringComparison.Ordinal) && !"PM".StartsWith(marker, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var beforeMarker = upper[..markerIndex].TrimEnd();
+            if (beforeMarker.Any(ch => ch is 'A' or 'P' or 'M'))
+            {
+                return false;
+            }
+        }
+
+        var timePart = markerIndex >= 0 ? upper[..markerIndex].TrimEnd() : upper;
+        var parts = timePart.Split(':');
+        return parts.Length <= 2 && parts.All(part => part.Length <= 2);
+    }
+}

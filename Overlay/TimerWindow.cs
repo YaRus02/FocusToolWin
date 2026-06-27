@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -713,33 +712,13 @@ internal sealed class TimerWindow : Window
         }
 
         _editingTime = true;
-        _timeEdit.MaxLength = TimeEditMaxLength();
-        _timeEdit.ToolTip = TimeEditToolTip();
+        _timeEdit.MaxLength = TimerTimeEditor.MaxLength(_model.Mode, _model.Use24HourTime);
+        _timeEdit.ToolTip = TimerTimeEditor.ToolTip(_model.Mode, _model.Use24HourTime);
         _timeEdit.Text = _model.Mode == TimerMode.UntilTime ? _model.TargetTimeText() : _model.DurationText();
         _timeText.Visibility = Visibility.Collapsed;
         _timeEdit.Visibility = Visibility.Visible;
         _timeEdit.Focus();
         _timeEdit.CaretIndex = 0;
-    }
-
-    private int TimeEditMaxLength()
-    {
-        if (_model.Mode != TimerMode.UntilTime)
-        {
-            return 8;
-        }
-
-        return _model.Use24HourTime ? 5 : 8;
-    }
-
-    private string TimeEditToolTip()
-    {
-        if (_model.Mode != TimerMode.UntilTime)
-        {
-            return "mm:ss or h:mm:ss";
-        }
-
-        return _model.Use24HourTime ? "HH:mm" : "h:mm AM/PM";
     }
 
     private void OnTimeEditPreviewKeyDown(object sender, WpfKeyEventArgs e)
@@ -796,7 +775,7 @@ internal sealed class TimerWindow : Window
             return;
         }
 
-        e.Handled = !IsValidTimeEditPartial(GetProposedText(_timeEdit, e.Text), _model.Mode, _model.Use24HourTime);
+        e.Handled = !TimerTimeEditor.IsValidPartial(GetProposedText(_timeEdit, e.Text), _model.Mode, _model.Use24HourTime);
     }
 
     private void OnTimeEditPaste(object sender, DataObjectPastingEventArgs e)
@@ -809,7 +788,7 @@ internal sealed class TimerWindow : Window
 
         var text = e.DataObject.GetData(WpfDataFormats.Text) as string ?? string.Empty;
         if ((SelectionTouchesFixedTimeSeparator() && text.IndexOf(':') < 0)
-            || !IsValidTimeEditPartial(GetProposedText(_timeEdit, text), _model.Mode, _model.Use24HourTime))
+            || !TimerTimeEditor.IsValidPartial(GetProposedText(_timeEdit, text), _model.Mode, _model.Use24HourTime))
         {
             e.CancelCommand();
         }
@@ -823,12 +802,12 @@ internal sealed class TimerWindow : Window
         }
 
         var input = _timeEdit.Text.Trim();
-        if (_model.Mode == TimerMode.Countdown && TryParseDuration(input, out var seconds))
+        if (_model.Mode == TimerMode.Countdown && TimerTimeEditor.TryParseDuration(input, out var seconds))
         {
             _model.SetCountdownSeconds(seconds);
             DefaultsChanged?.Invoke(this, EventArgs.Empty);
         }
-        else if (_model.Mode == TimerMode.UntilTime && TryParseTargetTime(input, _model.Use24HourTime, out var target))
+        else if (_model.Mode == TimerMode.UntilTime && TimerTimeEditor.TryParseTargetTime(input, _model.Use24HourTime, out var target))
         {
             _model.SetTargetTime(target);
             DefaultsChanged?.Invoke(this, EventArgs.Empty);
@@ -871,165 +850,6 @@ internal sealed class TimerWindow : Window
         var start = Math.Clamp(_timeEdit.SelectionStart, 0, text.Length);
         var length = Math.Clamp(_timeEdit.SelectionLength, 0, text.Length - start);
         return length > 0 && text.AsSpan(start, length).Contains(':');
-    }
-
-    private static bool IsValidTimeEditPartial(string text, TimerMode mode, bool use24HourTime)
-    {
-        if (text.Length == 0)
-        {
-            return true;
-        }
-
-        if (mode == TimerMode.UntilTime && !use24HourTime)
-        {
-            return IsValidTwelveHourTargetPartial(text);
-        }
-
-        if (text.Any(ch => !char.IsDigit(ch) && ch != ':') || text.Contains("::", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var parts = text.Split(':');
-        var maxParts = mode == TimerMode.UntilTime ? 2 : 3;
-        if (parts.Length > maxParts)
-        {
-            return false;
-        }
-
-        return parts.All(part => part.Length <= 2);
-    }
-
-    private static bool IsValidTwelveHourTargetPartial(string text)
-    {
-        if (text.Length > 8 || text.Contains("::", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        foreach (var ch in text)
-        {
-            if (!char.IsDigit(ch) && ch != ':' && ch != ' ' && "apmAPM".IndexOf(ch) < 0)
-            {
-                return false;
-            }
-        }
-
-        var upper = text.ToUpperInvariant();
-        if (upper.Count(ch => ch == ':') > 1)
-        {
-            return false;
-        }
-
-        var markerIndex = upper.IndexOfAny(['A', 'P', 'M']);
-        if (markerIndex >= 0)
-        {
-            var marker = upper[markerIndex..].TrimStart();
-            if (!"AM".StartsWith(marker, StringComparison.Ordinal) && !"PM".StartsWith(marker, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            var beforeMarker = upper[..markerIndex].TrimEnd();
-            if (beforeMarker.Any(ch => ch is 'A' or 'P' or 'M'))
-            {
-                return false;
-            }
-        }
-
-        var timePart = markerIndex >= 0 ? upper[..markerIndex].TrimEnd() : upper;
-        var parts = timePart.Split(':');
-        return parts.Length <= 2 && parts.All(part => part.Length <= 2);
-    }
-
-    // "mm:ss", "h:mm:ss", or a single number (minutes); returns total seconds (>= 1).
-    private static bool TryParseDuration(string text, out int seconds)
-    {
-        seconds = 0;
-        var parts = text.Split(':');
-        if (parts.Length is < 1 or > 3)
-        {
-            return false;
-        }
-
-        int hours = 0, minutes = 0, secs = 0;
-        if (parts.Length == 1)
-        {
-            if (!int.TryParse(parts[0], out minutes))
-            {
-                return false;
-            }
-        }
-        else if (parts.Length == 2)
-        {
-            if (!int.TryParse(parts[0], out minutes) || !int.TryParse(parts[1], out secs))
-            {
-                return false;
-            }
-        }
-        else if (!int.TryParse(parts[0], out hours) || !int.TryParse(parts[1], out minutes) || !int.TryParse(parts[2], out secs))
-        {
-            return false;
-        }
-
-        if (hours < 0 || minutes < 0 || secs < 0)
-        {
-            return false;
-        }
-
-        seconds = (hours * 3600) + (minutes * 60) + secs;
-        return seconds >= 1;
-    }
-
-    // Wall-clock time; rolls to tomorrow if already passed today.
-    private static bool TryParseTargetTime(string text, bool use24HourTime, out DateTime target)
-    {
-        target = default;
-        var now = DateTime.Now;
-        if (!use24HourTime)
-        {
-            if (!DateTime.TryParseExact(
-                text.Trim().ToUpperInvariant(),
-                ["h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt"],
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AllowWhiteSpaces,
-                out var parsed))
-            {
-                return false;
-            }
-
-            target = new DateTime(now.Year, now.Month, now.Day, parsed.Hour, parsed.Minute, 0);
-            if (target <= now)
-            {
-                target = target.AddDays(1);
-            }
-
-            return true;
-        }
-
-        var parts = text.Split(':');
-        if (parts.Length != 2)
-        {
-            return false;
-        }
-
-        if (!int.TryParse(parts[0], out var hours) || !int.TryParse(parts[1], out var minutes))
-        {
-            return false;
-        }
-
-        if (hours is < 0 or > 23 || minutes is < 0 or > 59)
-        {
-            return false;
-        }
-
-        target = new DateTime(now.Year, now.Month, now.Day, hours, minutes, 0);
-        if (target <= now)
-        {
-            target = target.AddDays(1);
-        }
-
-        return true;
     }
 
     public TimerSettings CaptureDefaults() => new()
