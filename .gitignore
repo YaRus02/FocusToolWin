@@ -35,7 +35,7 @@ coverage.cobertura.xml
 # Publish binaries and archives
 publish/**
 !publish/
-!publish/readme.txt
+!publish/readme.ru.txt
 !publish/readme.eng.txt
 !publish/license.txt
 
