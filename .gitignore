@@ -36,6 +36,7 @@ coverage.cobertura.xml
 publish/**
 !publish/
 !publish/readme.txt
+!publish/readme.eng.txt
 !publish/license.txt
 
 # Temporary files
