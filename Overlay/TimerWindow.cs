@@ -12,8 +12,6 @@ using WpfBrushes = System.Windows.Media.Brushes;
 using WpfCursors = System.Windows.Input.Cursors;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfContextMenu = System.Windows.Controls.ContextMenu;
-using WpfDataFormats = System.Windows.DataFormats;
-using WpfDataObject = System.Windows.DataObject;
 using WpfMenuItem = System.Windows.Controls.MenuItem;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using WpfButton = System.Windows.Controls.Button;
@@ -48,14 +46,15 @@ internal sealed class TimerWindow : Window
 
     private double _scale;
     private double _opacity;
-    private string _theme;
+    private readonly TimerTheme _theme;
     private bool _progressVisible;
     private bool _blinkOnFinish;
 
+    private readonly TimerLabelEditSession _labelSession;
+    private readonly TimerTimeEditSession _timeSession;
+
     private IntPtr _returnForeground;
     private bool _focused;
-    private bool _editing;
-    private bool _editingTime;
 
     public event EventHandler? DefaultsChanged;
     public event EventHandler<string>? LabelCommitted;
@@ -66,7 +65,7 @@ internal sealed class TimerWindow : Window
         _clock = clock;
         _scale = style.Scale;
         _opacity = style.Opacity;
-        _theme = style.Theme;
+        _theme = new TimerTheme(style.Theme);
         _progressVisible = style.ProgressVisible;
         _blinkOnFinish = style.BlinkOnFinish;
 
@@ -100,8 +99,14 @@ internal sealed class TimerWindow : Window
             Visibility = Visibility.Collapsed,
             MinWidth = 80
         };
-        _labelEdit.KeyDown += OnLabelEditKeyDown;
-        _labelEdit.LostKeyboardFocus += (_, _) => CommitLabelEdit();
+        _labelSession = new TimerLabelEditSession(
+            _labelEdit,
+            _labelText,
+            _model,
+            onChanged: () => { DefaultsChanged?.Invoke(this, EventArgs.Empty); Refresh(); },
+            onCommitted: label => LabelCommitted?.Invoke(this, label),
+            onCancelled: Refresh,
+            focusBack: () => Focus());
 
         _timeText = new TextBlock
         {
@@ -127,11 +132,13 @@ internal sealed class TimerWindow : Window
             Padding = new Thickness(2, 0, 2, 0),
             Visibility = Visibility.Collapsed
         };
-        _timeEdit.PreviewKeyDown += OnTimeEditPreviewKeyDown;
-        _timeEdit.KeyDown += OnTimeEditKeyDown;
-        _timeEdit.PreviewTextInput += OnTimeEditPreviewTextInput;
-        _timeEdit.LostKeyboardFocus += (_, _) => CommitTimeEdit();
-        WpfDataObject.AddPastingHandler(_timeEdit, OnTimeEditPaste);
+        _timeSession = new TimerTimeEditSession(
+            _timeEdit,
+            _timeText,
+            _model,
+            onChanged: () => DefaultsChanged?.Invoke(this, EventArgs.Empty),
+            refresh: Refresh,
+            focusBack: () => Focus());
         _timeText.MouseLeftButtonDown += OnTimeMouseDown;
 
         var stack = new StackPanel { Orientation = WpfOrientation.Vertical };
@@ -301,15 +308,15 @@ internal sealed class TimerWindow : Window
         _timeText.Text = snapshot.TimeText;
         ApplyTimeTextFit(snapshot.TimeText);
         var overtime = snapshot.State == TimerState.Overtime;
-        var blink = overtime && _blinkOnFinish ? BlinkAmount(nowMs) : 0;
-        var textColor = overtime ? OvertimeColor : ThemeTextColor();
+        var blink = overtime && _blinkOnFinish ? TimerTheme.BlinkAmount(nowMs) : 0;
+        var textColor = overtime ? OvertimeColor : _theme.TextColor;
         _timeText.Foreground = new SolidColorBrush(textColor);
         _timeText.Opacity = overtime && _blinkOnFinish
             ? 0.62 + (0.38 * blink)
             : snapshot.State == TimerState.Paused ? 0.65 : 1.0;
         _block.Opacity = overtime && _blinkOnFinish ? 0.78 + (0.22 * blink) : 1.0;
 
-        if (!_editing)
+        if (!_labelSession.IsEditing)
         {
             _labelText.Text = snapshot.Label;
             var showLabel = snapshot.LabelVisible && snapshot.Label.Length > 0;
@@ -320,13 +327,13 @@ internal sealed class TimerWindow : Window
         _progressTrack.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
         if (showProgress)
         {
-            _progressFill.Background = new SolidColorBrush(overtime ? Blend(OvertimeColor, ThemeAccentColor(), blink * 0.35) : ThemeAccentColor());
+            _progressFill.Background = new SolidColorBrush(overtime ? TimerTheme.Blend(OvertimeColor, _theme.AccentColor, blink * 0.35) : _theme.AccentColor);
             UpdateProgressWidth(snapshot.Progress);
         }
 
         if (overtime && _blinkOnFinish)
         {
-            _block.BorderBrush = new SolidColorBrush(Blend(OvertimeColor, ThemeAccentColor(), blink * 0.45));
+            _block.BorderBrush = new SolidColorBrush(TimerTheme.Blend(OvertimeColor, _theme.AccentColor, blink * 0.45));
         }
         else
         {
@@ -348,9 +355,12 @@ internal sealed class TimerWindow : Window
 
     private void ApplyTimeTextFit(string text)
     {
-        _timeText.FontSize = text.Contains("AM", StringComparison.Ordinal) || text.Contains("PM", StringComparison.Ordinal)
-            ? CompactTimeFontSize
-            : TimeFontSize;
+        // Compact font for the AM/PM clock and for longer strings (e.g. the "+hh:mm:ss"
+        // overtime form) so they never overflow the fixed-width block.
+        var compact = text.Contains("AM", StringComparison.Ordinal)
+            || text.Contains("PM", StringComparison.Ordinal)
+            || text.Length > 8;
+        _timeText.FontSize = compact ? CompactTimeFontSize : TimeFontSize;
     }
 
     private void ApplyStyle()
@@ -358,22 +368,22 @@ internal sealed class TimerWindow : Window
         _scaleTransform.ScaleX = _scale;
         _scaleTransform.ScaleY = _scale;
 
-        var baseColor = ThemeBaseColor();
+        var baseColor = _theme.BaseColor;
         var alpha = (int)Math.Round(225 * Math.Clamp(_opacity, 0.2, 1.0));
         _block.Background = new SolidColorBrush(MediaColor.FromArgb((byte)Math.Clamp(alpha, 0, 255), baseColor.R, baseColor.G, baseColor.B));
 
-        _labelText.Foreground = new SolidColorBrush(ThemeLabelColor());
-        _labelEdit.Foreground = new SolidColorBrush(ThemeTextColor());
-        _labelEdit.Background = new SolidColorBrush(IsLightTheme() ? Colors.White : MediaColor.FromRgb(45, 45, 45));
-        _labelEdit.CaretBrush = new SolidColorBrush(ThemeTextColor());
-        _labelEdit.BorderBrush = new SolidColorBrush(ThemeAccentColor());
-        _timeEdit.Foreground = new SolidColorBrush(ThemeTextColor());
-        _timeEdit.Background = new SolidColorBrush(IsLightTheme() ? Colors.White : MediaColor.FromRgb(45, 45, 45));
-        _timeEdit.CaretBrush = new SolidColorBrush(ThemeTextColor());
-        _timeEdit.BorderBrush = new SolidColorBrush(ThemeAccentColor());
-        _progressTrack.Background = new SolidColorBrush(ThemeProgressTrackColor());
+        _labelText.Foreground = new SolidColorBrush(_theme.LabelColor);
+        _labelEdit.Foreground = new SolidColorBrush(_theme.TextColor);
+        _labelEdit.Background = new SolidColorBrush(_theme.IsLight ? Colors.White : MediaColor.FromRgb(45, 45, 45));
+        _labelEdit.CaretBrush = new SolidColorBrush(_theme.TextColor);
+        _labelEdit.BorderBrush = new SolidColorBrush(_theme.AccentColor);
+        _timeEdit.Foreground = new SolidColorBrush(_theme.TextColor);
+        _timeEdit.Background = new SolidColorBrush(_theme.IsLight ? Colors.White : MediaColor.FromRgb(45, 45, 45));
+        _timeEdit.CaretBrush = new SolidColorBrush(_theme.TextColor);
+        _timeEdit.BorderBrush = new SolidColorBrush(_theme.AccentColor);
+        _progressTrack.Background = new SolidColorBrush(_theme.ProgressTrackColor);
 
-        var text = ThemeTextColor();
+        var text = _theme.TextColor;
         var stepForeground = new SolidColorBrush(text);
         var stepBackground = new SolidColorBrush(MediaColor.FromArgb(36, text.R, text.G, text.B));
         foreach (var child in _styleControls.Children)
@@ -385,7 +395,7 @@ internal sealed class TimerWindow : Window
             }
             else if (child is TextBlock stepLabel)
             {
-                stepLabel.Foreground = new SolidColorBrush(ThemeLabelColor());
+                stepLabel.Foreground = new SolidColorBrush(_theme.LabelColor);
             }
         }
 
@@ -397,12 +407,12 @@ internal sealed class TimerWindow : Window
     {
         if (_focused)
         {
-            _block.BorderBrush = new SolidColorBrush(ThemeAccentColor());
+            _block.BorderBrush = new SolidColorBrush(_theme.AccentColor);
             _block.BorderThickness = new Thickness(2);
         }
         else
         {
-            _block.BorderBrush = new SolidColorBrush(ThemeInactiveBorderColor());
+            _block.BorderBrush = new SolidColorBrush(_theme.InactiveBorderColor);
             _block.BorderThickness = new Thickness(1);
         }
     }
@@ -452,70 +462,6 @@ internal sealed class TimerWindow : Window
         Margin = new Thickness(6, 0, 4, 0)
     };
 
-    private bool IsLightTheme()
-    {
-        if (_theme.Equals("Light", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (_theme.Equals("Auto", StringComparison.OrdinalIgnoreCase))
-        {
-            return IsSystemLightTheme();
-        }
-
-        return false;
-    }
-
-    private static bool IsSystemLightTheme()
-    {
-        try
-        {
-            var value = Registry.GetValue(
-                @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-                "AppsUseLightTheme",
-                0);
-            return value is int intValue && intValue > 0;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private MediaColor ThemeBaseColor() => IsLightTheme() ? MediaColor.FromRgb(244, 244, 244) : MediaColor.FromRgb(28, 28, 28);
-
-    private MediaColor ThemeTextColor() => IsLightTheme() ? MediaColor.FromRgb(26, 26, 26) : Colors.White;
-
-    private MediaColor ThemeLabelColor() => IsLightTheme()
-        ? MediaColor.FromRgb(42, 42, 42)
-        : MediaColor.FromArgb(0xDD, 255, 255, 255);
-
-    private MediaColor ThemeAccentColor() => IsLightTheme()
-        ? MediaColor.FromRgb(46, 46, 46)
-        : Colors.White;
-
-    private MediaColor ThemeInactiveBorderColor() => IsLightTheme()
-        ? MediaColor.FromArgb(100, 0, 0, 0)
-        : MediaColor.FromArgb(100, 255, 255, 255);
-
-    private MediaColor ThemeProgressTrackColor() => IsLightTheme()
-        ? MediaColor.FromArgb(70, 0, 0, 0)
-        : MediaColor.FromArgb(70, 255, 255, 255);
-
-    private static double BlinkAmount(double nowMs) =>
-        0.5 + (0.5 * Math.Sin(nowMs / 145.0));
-
-    private static MediaColor Blend(MediaColor left, MediaColor right, double amount)
-    {
-        var clamped = Math.Clamp(amount, 0, 1);
-        return MediaColor.FromArgb(
-            (byte)Math.Round(left.A + ((right.A - left.A) * clamped)),
-            (byte)Math.Round(left.R + ((right.R - left.R) * clamped)),
-            (byte)Math.Round(left.G + ((right.G - left.G) * clamped)),
-            (byte)Math.Round(left.B + ((right.B - left.B) * clamped)));
-    }
-
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -531,7 +477,7 @@ internal sealed class TimerWindow : Window
 
     private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
     {
-        if (!_theme.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+        if (!_theme.IsAuto)
         {
             return;
         }
@@ -562,14 +508,14 @@ internal sealed class TimerWindow : Window
 
     private void OnDeactivated(object? sender, EventArgs e)
     {
-        if (_editing)
+        if (_labelSession.IsEditing)
         {
-            CommitLabelEdit();
+            _labelSession.Commit();
         }
 
-        if (_editingTime)
+        if (_timeSession.IsEditing)
         {
-            CommitTimeEdit();
+            _timeSession.Commit();
         }
 
         _focused = false;
@@ -587,7 +533,7 @@ internal sealed class TimerWindow : Window
 
     private void OnPreviewKeyDown(object sender, WpfKeyEventArgs e)
     {
-        if (_editing || _editingTime)
+        if (_labelSession.IsEditing || _timeSession.IsEditing)
         {
             return;
         }
@@ -618,7 +564,7 @@ internal sealed class TimerWindow : Window
                 break;
             case Key.Enter:
             case Key.F2:
-                BeginLabelEdit();
+                _labelSession.Begin();
                 e.Handled = true;
                 return;
             case Key.Escape:
@@ -640,7 +586,7 @@ internal sealed class TimerWindow : Window
 
     private void OnBlockMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (_editing || _editingTime || e.ButtonState != MouseButtonState.Pressed)
+        if (_labelSession.IsEditing || _timeSession.IsEditing || e.ButtonState != MouseButtonState.Pressed)
         {
             return;
         }
@@ -650,7 +596,7 @@ internal sealed class TimerWindow : Window
 
     private void OnLabelMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_editing || _editingTime || e.ButtonState != MouseButtonState.Pressed)
+        if (_labelSession.IsEditing || _timeSession.IsEditing || e.ButtonState != MouseButtonState.Pressed)
         {
             return;
         }
@@ -658,7 +604,7 @@ internal sealed class TimerWindow : Window
         if (e.ClickCount >= 2)
         {
             e.Handled = true;
-            BeginLabelEdit();
+            _labelSession.Begin();
         }
     }
 
@@ -671,65 +617,9 @@ internal sealed class TimerWindow : Window
         e.Handled = true;
     }
 
-    private void BeginLabelEdit()
-    {
-        _editing = true;
-        _labelEdit.Text = _model.Label;
-        _labelText.Visibility = Visibility.Collapsed;
-        _labelEdit.Visibility = Visibility.Visible;
-        _labelEdit.Focus();
-        _labelEdit.SelectAll();
-    }
-
-    private void OnLabelEditKeyDown(object sender, WpfKeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            CommitLabelEdit();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape)
-        {
-            CancelLabelEdit();
-            e.Handled = true;
-        }
-    }
-
-    private void CommitLabelEdit()
-    {
-        if (!_editing)
-        {
-            return;
-        }
-
-        var label = _labelEdit.Text.Trim();
-        _model.Label = label;
-        EndLabelEdit();
-        if (label.Length > 0)
-        {
-            LabelCommitted?.Invoke(this, label);
-        }
-
-        DefaultsChanged?.Invoke(this, EventArgs.Empty);
-        Refresh();
-    }
-
-    private void CancelLabelEdit()
-    {
-        EndLabelEdit();
-        Refresh();
-    }
-
-    private void EndLabelEdit()
-    {
-        _editing = false;
-        _labelEdit.Visibility = Visibility.Collapsed;
-        Focus();
-    }
-
     private void OnTimeMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_editing || _editingTime || e.ButtonState != MouseButtonState.Pressed)
+        if (_labelSession.IsEditing || _timeSession.IsEditing || e.ButtonState != MouseButtonState.Pressed)
         {
             return;
         }
@@ -742,156 +632,8 @@ internal sealed class TimerWindow : Window
         if (e.ClickCount >= 2)
         {
             e.Handled = true;
-            BeginTimeEdit();
+            _timeSession.Begin();
         }
-    }
-
-    private void BeginTimeEdit()
-    {
-        if (!_model.CanEditTime)
-        {
-            return;
-        }
-
-        _editingTime = true;
-        _timeEdit.MaxLength = TimerTimeEditor.MaxLength(_model.Mode, _model.Use24HourTime);
-        _timeEdit.ToolTip = TimerTimeEditor.ToolTip(_model.Mode, _model.Use24HourTime);
-        _timeEdit.Text = _model.Mode == TimerMode.UntilTime ? _model.TargetTimeText() : _model.DurationText();
-        _timeText.Visibility = Visibility.Collapsed;
-        _timeEdit.Visibility = Visibility.Visible;
-        _timeEdit.Focus();
-        _timeEdit.CaretIndex = 0;
-    }
-
-    private void OnTimeEditPreviewKeyDown(object sender, WpfKeyEventArgs e)
-    {
-        if (e.Key is not (Key.Back or Key.Delete))
-        {
-            return;
-        }
-
-        if (SelectionTouchesFixedTimeSeparator())
-        {
-            e.Handled = true;
-            return;
-        }
-
-        var text = _timeEdit.Text ?? string.Empty;
-        if (e.Key == Key.Back
-            && _timeEdit.SelectionLength == 0
-            && _timeEdit.SelectionStart > 0
-            && text[_timeEdit.SelectionStart - 1] == ':')
-        {
-            _timeEdit.SelectionStart = Math.Max(0, _timeEdit.SelectionStart - 1);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Delete
-            && _timeEdit.SelectionLength == 0
-            && _timeEdit.SelectionStart < text.Length
-            && text[_timeEdit.SelectionStart] == ':')
-        {
-            _timeEdit.SelectionStart = Math.Min(text.Length, _timeEdit.SelectionStart + 1);
-            e.Handled = true;
-        }
-    }
-
-    private void OnTimeEditKeyDown(object sender, WpfKeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            CommitTimeEdit();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape)
-        {
-            CancelTimeEdit();
-            e.Handled = true;
-        }
-    }
-
-    private void OnTimeEditPreviewTextInput(object sender, TextCompositionEventArgs e)
-    {
-        if (SelectionTouchesFixedTimeSeparator() && e.Text.IndexOf(':') < 0)
-        {
-            e.Handled = true;
-            return;
-        }
-
-        e.Handled = !TimerTimeEditor.IsValidPartial(GetProposedText(_timeEdit, e.Text), _model.Mode, _model.Use24HourTime);
-    }
-
-    private void OnTimeEditPaste(object sender, DataObjectPastingEventArgs e)
-    {
-        if (!e.DataObject.GetDataPresent(WpfDataFormats.Text))
-        {
-            e.CancelCommand();
-            return;
-        }
-
-        var text = e.DataObject.GetData(WpfDataFormats.Text) as string ?? string.Empty;
-        if ((SelectionTouchesFixedTimeSeparator() && text.IndexOf(':') < 0)
-            || !TimerTimeEditor.IsValidPartial(GetProposedText(_timeEdit, text), _model.Mode, _model.Use24HourTime))
-        {
-            e.CancelCommand();
-        }
-    }
-
-    private void CommitTimeEdit()
-    {
-        if (!_editingTime)
-        {
-            return;
-        }
-
-        var input = _timeEdit.Text.Trim();
-        if (_model.Mode == TimerMode.Countdown && TimerTimeEditor.TryParseDuration(input, out var seconds))
-        {
-            _model.SetCountdownSeconds(seconds);
-            DefaultsChanged?.Invoke(this, EventArgs.Empty);
-        }
-        else if (_model.Mode == TimerMode.UntilTime && TimerTimeEditor.TryParseTargetTime(input, _model.Use24HourTime, out var target))
-        {
-            _model.SetTargetTime(target);
-            DefaultsChanged?.Invoke(this, EventArgs.Empty);
-        }
-
-        EndTimeEdit();
-        Refresh();
-    }
-
-    private void CancelTimeEdit()
-    {
-        EndTimeEdit();
-        Refresh();
-    }
-
-    private void EndTimeEdit()
-    {
-        _editingTime = false;
-        _timeEdit.Visibility = Visibility.Collapsed;
-        _timeText.Visibility = Visibility.Visible;
-        Focus();
-    }
-
-    private static string GetProposedText(WpfTextBox textBox, string input)
-    {
-        var text = textBox.Text ?? string.Empty;
-        var start = Math.Clamp(textBox.SelectionStart, 0, text.Length);
-        var length = Math.Clamp(textBox.SelectionLength, 0, text.Length - start);
-        return text.Remove(start, length).Insert(start, input);
-    }
-
-    private bool SelectionTouchesFixedTimeSeparator()
-    {
-        var text = _timeEdit.Text ?? string.Empty;
-        if (_timeEdit.SelectionLength == 0 || text.Length == 0)
-        {
-            return false;
-        }
-
-        var start = Math.Clamp(_timeEdit.SelectionStart, 0, text.Length);
-        var length = Math.Clamp(_timeEdit.SelectionLength, 0, text.Length - start);
-        return length > 0 && text.AsSpan(start, length).Contains(':');
     }
 
     public TimerSettings CaptureDefaults() => new()
@@ -901,7 +643,7 @@ internal sealed class TimerWindow : Window
         Label = _model.Label,
         Scale = _scale,
         Opacity = _opacity,
-        Theme = _theme,
+        Theme = _theme.Name,
         TimeFormat = _model.TimeFormat,
         ProgressVisible = _progressVisible,
         LabelVisible = _model.LabelVisible,
@@ -926,8 +668,8 @@ internal sealed class TimerWindow : Window
         }
 
         menu.Items.Add(mode);
-        menu.Items.Add(NewItem("Edit label", (_, _) => BeginLabelEdit()));
-        menu.Items.Add(NewItem("Edit time", (_, _) => BeginTimeEdit()));
+        menu.Items.Add(NewItem("Edit label", (_, _) => _labelSession.Begin()));
+        menu.Items.Add(NewItem("Edit time", (_, _) => _timeSession.Begin()));
         menu.Items.Add(new Separator());
         menu.Items.Add(BuildStyleMenu());
         menu.Items.Add(new Separator());
@@ -944,9 +686,9 @@ internal sealed class TimerWindow : Window
         foreach (var option in new[] { "Light", "Dark", "Auto" })
         {
             var captured = option;
-            var themeItem = NewItem(option, (_, _) => { _theme = captured; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); });
+            var themeItem = NewItem(option, (_, _) => { _theme.Name = captured; ApplyStyle(); DefaultsChanged?.Invoke(this, EventArgs.Empty); });
             themeItem.IsCheckable = true;
-            themeItem.IsChecked = string.Equals(_theme, option, StringComparison.OrdinalIgnoreCase);
+            themeItem.IsChecked = string.Equals(_theme.Name, option, StringComparison.OrdinalIgnoreCase);
             theme.Items.Add(themeItem);
         }
 
@@ -1044,7 +786,7 @@ internal sealed class TimerWindow : Window
             {
                 foreach (var themeOption in themeItem.Items.OfType<WpfMenuItem>())
                 {
-                    themeOption.IsChecked = string.Equals(themeOption.Header?.ToString(), _theme, StringComparison.OrdinalIgnoreCase);
+                    themeOption.IsChecked = string.Equals(themeOption.Header?.ToString(), _theme.Name, StringComparison.OrdinalIgnoreCase);
                 }
             }
             else if (item is WpfMenuItem { Header: "Show progress" } progressItem)
