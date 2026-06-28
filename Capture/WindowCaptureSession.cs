@@ -22,10 +22,12 @@ internal sealed class WindowCaptureSession : IDisposable
     private Direct3D11CaptureFramePool? _framePool;
     private GraphicsCaptureSession? _session;
     private SizeInt32 _lastSize;
+    private readonly bool _captureCursor;
     private bool _disposed;
 
-    public WindowCaptureSession(ID3D11Device device, IntPtr sourceWindow)
+    public WindowCaptureSession(ID3D11Device device, IntPtr sourceWindow, bool captureCursor)
     {
+        _captureCursor = captureCursor;
         _winrtDevice = CaptureInterop.CreateDirect3DDevice(device);
         _item = CaptureInterop.CreateItemForWindow(sourceWindow);
         _item.Closed += OnItemClosed;
@@ -51,10 +53,9 @@ internal sealed class WindowCaptureSession : IDisposable
             _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(_winrtDevice, PixelFormat, BufferCount, _item.Size);
             _framePool.FrameArrived += OnFrameArrived;
             _session = _framePool.CreateCaptureSession(_item);
-            // Keep the real OS cursor in the mirror: it stays in sync with the
-            // overlay snapshot (cursor highlight / laser) frame-for-frame, unlike a
-            // separately drawn synthetic cursor which visibly lags/doubles.
-            _session.IsCursorCaptureEnabled = true;
+            // Capture Stage normally renders FocusTool pointer visuals as an
+            // overlay. Capturing the OS cursor too would draw a second cursor.
+            _session.IsCursorCaptureEnabled = _captureCursor;
             _session.StartCapture();
         }
     }

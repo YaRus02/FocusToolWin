@@ -80,7 +80,7 @@ internal sealed class CaptureStageController : IDisposable
 
         if (!TryResolveWindowFromPickedItem(item, out var sourceWindow))
         {
-            ShowInfo($"Couldn't map \"{item.DisplayName}\" to an application window. Pick an application window — capturing a whole screen isn't supported yet.");
+            ShowInfo($"Couldn't map \"{item.DisplayName}\" to an application window. Pick an application window - capturing a whole screen is not supported yet.");
             return;
         }
 
@@ -111,7 +111,8 @@ internal sealed class CaptureStageController : IDisposable
             return;
         }
 
-        var stage = new CaptureStageWindow(target);
+        var sourceTitle = GetWindowTitle(target);
+        var stage = new CaptureStageWindow(target, sourceTitle);
         stage.FormClosed += OnStageClosed;
         _stages.Add(stage);
         stage.Show();
@@ -273,7 +274,7 @@ internal sealed class CaptureStageController : IDisposable
 
         foreach (var stage in _stages)
         {
-            if (stage.TryGetSourceRect(out var rect) && _overlayProvider(rect) is { } snapshot)
+            if (stage.SourceAvailable && stage.TryGetSourceRect(out var rect) && _overlayProvider(rect) is { } snapshot)
             {
                 stage.UpdateOverlaySnapshot(snapshot);
             }

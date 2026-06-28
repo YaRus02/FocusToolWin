@@ -17,7 +17,7 @@ using Screen = System.Windows.Forms.Screen;
 namespace FocusTool.Win.Capture;
 
 /// <summary>
-/// A normal, resizable window that mirrors a captured source window. Because it
+/// A borderless stage window that mirrors a captured source window. Because it
 /// is an ordinary top-level window with real swap-chain pixels, screen-share and
 /// recording tools (OBS, Zoom, Discord, Teams) can grab it via "Share window"
 /// while it carries the source content plus FocusTool overlay snapshots.
@@ -29,6 +29,8 @@ internal sealed class CaptureStageWindow : Form
 
     private readonly object _gate = new();
     private readonly IntPtr _sourceWindow;
+    private readonly string _sourceTitle;
+    private readonly System.Windows.Forms.Label _statusLabel;
     private bool _deviceLost;
     private ID3D11Device? _device;
     private ID3D11DeviceContext? _context;
@@ -45,23 +47,41 @@ internal sealed class CaptureStageWindow : Form
     private WindowCaptureSession? _session;
     private SizeInt32 _swapSize;
     private bool _graphicsDisposed;
-    private bool _maximizedOnShow;
+    private bool _placedOnShow;
+    private bool _sourceAvailable = true;
+    private bool _sourceUnavailableQueued;
 
-    public CaptureStageWindow(IntPtr sourceWindow)
+    public CaptureStageWindow(IntPtr sourceWindow, string sourceTitle)
     {
         _sourceWindow = sourceWindow;
-        Text = "FocusTool Capture Stage";
+        _sourceTitle = string.IsNullOrWhiteSpace(sourceTitle) ? "Window" : sourceTitle.Trim();
+        Text = $"FocusTool Capture Stage - {_sourceTitle}";
         BackColor = System.Drawing.Color.Black;
         StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-        FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
+        FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
         ShowInTaskbar = true;
-        // Non-minimizable: a minimized window stops rendering, so the capture would
-        // freeze. It may still go behind other windows (WGC captures it occluded).
+        // Non-minimizable: a minimized window stops rendering, so the capture would freeze.
         MinimizeBox = false;
+        MaximizeBox = false;
         MinimumSize = new DrawingSize(160, 120);
         ClientSize = new DrawingSize(640, 360);
         SetStyle(System.Windows.Forms.ControlStyles.AllPaintingInWmPaint | System.Windows.Forms.ControlStyles.Opaque, true);
+
+        _statusLabel = new System.Windows.Forms.Label
+        {
+            Dock = System.Windows.Forms.DockStyle.Fill,
+            BackColor = System.Drawing.Color.Black,
+            ForeColor = System.Drawing.Color.White,
+            Font = new System.Drawing.Font(Font.FontFamily, Math.Max(12f, Font.Size + 2f), System.Drawing.FontStyle.Regular),
+            TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+            Visible = false,
+        };
+        Controls.Add(_statusLabel);
     }
+
+    public bool SourceAvailable => _sourceAvailable;
+
+    protected override bool ShowWithoutActivation => true;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -94,13 +114,14 @@ internal sealed class CaptureStageWindow : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        if (_maximizedOnShow)
+        if (_placedOnShow)
         {
             return;
         }
 
-        _maximizedOnShow = true;
-        WindowState = System.Windows.Forms.FormWindowState.Maximized;
+        _placedOnShow = true;
+        WindowState = System.Windows.Forms.FormWindowState.Normal;
+        Bounds = Screen.FromControl(this).WorkingArea;
     }
 
     private void InitializeGraphics()
@@ -108,7 +129,7 @@ internal sealed class CaptureStageWindow : Form
         _device = CreateDevice();
         _context = _device.ImmediateContext;
         CreateD2DDevice();
-        _session = new WindowCaptureSession(_device, _sourceWindow);
+        _session = new WindowCaptureSession(_device, _sourceWindow, captureCursor: false);
 
         var size = _session.SourceSize;
         var width = Math.Max(1, size.Width);
@@ -210,7 +231,7 @@ internal sealed class CaptureStageWindow : Form
     {
         lock (_gate)
         {
-            if (_graphicsDisposed || _swapChain is null || _backBuffer is null || _context is null)
+            if (!_sourceAvailable || _graphicsDisposed || _swapChain is null || _backBuffer is null || _context is null)
             {
                 return;
             }
@@ -277,7 +298,7 @@ internal sealed class CaptureStageWindow : Form
     // UI-timer re-present so it never blocks the UI thread waiting for vblank.
     private void RenderCurrentFrame(int syncInterval)
     {
-        if (_deviceLost || _swapChain is null || _backBuffer is null || _sourceFrame is null || _context is null)
+        if (!_sourceAvailable || _deviceLost || _swapChain is null || _backBuffer is null || _sourceFrame is null || _context is null)
         {
             return;
         }
@@ -456,7 +477,7 @@ internal sealed class CaptureStageWindow : Form
     {
         lock (_gate)
         {
-            if (!_graphicsDisposed)
+            if (_sourceAvailable && !_graphicsDisposed)
             {
                 _pendingOverlay = data;
                 RenderCurrentFrame(syncInterval: 0);
@@ -470,6 +491,17 @@ internal sealed class CaptureStageWindow : Form
     private bool TryGetSourceContentRect(out double left, out double top, out double width, out double height)
     {
         left = top = width = height = 0;
+        if (!_sourceAvailable)
+        {
+            return false;
+        }
+
+        if (!NativeMethods.IsWindow(_sourceWindow))
+        {
+            QueueSourceUnavailable("Source window is no longer available.");
+            return false;
+        }
+
         if (NativeMethods.DwmGetWindowAttribute(_sourceWindow, NativeMethods.DwmwaExtendedFrameBounds, out var bounds, Marshal.SizeOf<NativeMethods.Rect>()) != 0
             && !NativeMethods.GetWindowRect(_sourceWindow, out bounds))
         {
@@ -510,10 +542,63 @@ internal sealed class CaptureStageWindow : Form
 
     private void OnSourceClosed(object? sender, EventArgs e)
     {
-        if (IsHandleCreated && !IsDisposed)
+        QueueSourceUnavailable("Source window was closed.");
+    }
+
+    private void QueueSourceUnavailable(string message)
+    {
+        if (_sourceUnavailableQueued || !_sourceAvailable || !IsHandleCreated || IsDisposed)
         {
-            BeginInvoke(Close);
+            return;
         }
+
+        _sourceUnavailableQueued = true;
+        try
+        {
+            BeginInvoke((Action)(() => MarkSourceUnavailable(message)));
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private void MarkSourceUnavailable(string message)
+    {
+        if (!_sourceAvailable || IsDisposed)
+        {
+            return;
+        }
+
+        _sourceAvailable = false;
+        Text = $"FocusTool Capture Stage - {_sourceTitle} (source unavailable)";
+        _statusLabel.Text = $"{message}{Environment.NewLine}Close this Capture Stage and pick the source again.";
+        _statusLabel.Visible = true;
+        _statusLabel.BringToFront();
+
+        DisposeCaptureSession();
+        lock (_gate)
+        {
+            _pendingOverlay = null;
+        }
+    }
+
+    private void DisposeCaptureSession()
+    {
+        WindowCaptureSession? session;
+        lock (_gate)
+        {
+            session = _session;
+            _session = null;
+        }
+
+        if (session is null)
+        {
+            return;
+        }
+
+        session.FrameArrived -= OnFrameArrived;
+        session.SourceClosed -= OnSourceClosed;
+        session.Dispose();
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
