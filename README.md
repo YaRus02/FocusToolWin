@@ -55,10 +55,10 @@ Documentation is current for version **3.0.2**.
 - **Fading annotations** - new annotations can live for a set time and then fade out smoothly.
 - **Paste image / text** - `Ctrl+V` pastes an image or text from the clipboard as an annotation object that can be moved, scaled, and included in screenshots/boards.
 
-### Privacy / Masking
+### Masking
 
-- **Region Mask** - rectangular privacy masks over the screen.
-- Masks work as a top privacy layer and appear in screenshots, screen board, magnifier, and pinned lens.
+- **Region Mask** - rectangular masks over the screen.
+- Masks work as a top layer and appear in screenshots, screen board, magnifier, and pinned lens.
 - Styles: solid fill, diagonal stripes, `HIDE` label, and stripes + label.
 - The create-mask mode is designed for adding several areas in a row.
 - A selected mask can be moved, resized, deleted with `Backspace/Delete`, and have its color and opacity changed. New masks remember the last chosen style.
