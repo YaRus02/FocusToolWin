@@ -27,7 +27,7 @@ It adds, on top of the desktop:
 The main idea of FocusTool is minimum visual noise and fast access through
 hotkeys, the tray menu, and a compact panel over the screen.
 
-Documentation is current for version 3.0.0.
+Documentation is current for version 3.0.2.
 
 
 1. Which file to run
@@ -475,21 +475,31 @@ Screen board is saved with the prefix:
 Capture Stage lets you share only one application (not the whole screen) while
 keeping FocusTool's overlays in the frame.
 
-The source is chosen with the Windows system picker. A separate window appears
-that mirrors the chosen application together with the overlays (annotations,
-laser, cursor highlight, spotlight, masks, timer). Capture tools take it as an
-ordinary window (Share window / OBS Window Capture), so the overlays end up in
-the frame even with window capture.
+The source is chosen with the Windows system picker. A separate borderless
+window appears that mirrors the chosen application together with the overlays
+(annotations, laser, cursor highlight, click pulse, spotlight, masks, timer).
+Capture tools take it as an ordinary window (Share window / OBS Window Capture),
+so the overlays end up in the frame even with window capture.
 
 Important about Capture Stage:
 
-- you keep working in the real source window; the Stage only mirrors it;
+- you keep working in the real source window; the Stage only mirrors it and does
+  not steal focus when opened;
+- Stage has no title bar or window buttons and fills the monitor working area
+  without covering the taskbar;
+- its system/taskbar title includes the selected source name:
+  FocusTool Capture Stage - <source title>;
 - the source must not be minimized: a minimized window stops rendering and the
   frame freezes. It can be covered by other windows;
+- if the source is closed or becomes unavailable, Stage shows source unavailable
+  instead of closing automatically;
 - the Stage window itself cannot be minimized, so you do not lose the picture in
-  the recording;
-- in the capture tool, disable its own cursor drawing (in OBS - the Capture
-  Cursor option), otherwise the cursor is doubled;
+  the recording. Close all Stage windows from the tray menu:
+  Capture Stage -> Close all;
+- Capture Stage disables Windows Graphics Capture cursor capture and renders
+  FocusTool pointer visuals over the frame. If the external capture tool adds
+  its own cursor and you see a duplicate, disable its cursor option, for example
+  Capture Cursor in OBS;
 - this version supports windows (not the whole screen), view-only.
 
 
@@ -582,10 +592,12 @@ include FocusTool's overlay windows. This is a Windows window-composition
 limitation, not a FocusTool bug.
 
 If you need to share only one application (not the whole screen) while keeping
-the overlays, use Capture Stage (see section 17): a separate window composes the
-chosen source together with annotations and the timer, and capture tools take it
-as an ordinary window. In the capture tool, disable its own cursor drawing (in
-OBS - the Capture Cursor option), otherwise the cursor is doubled.
+the overlays, use Capture Stage (see section 17): a separate borderless window
+composes the chosen source together with annotations, pointer visuals, and the
+timer, and capture tools take it as an ordinary window. Stage does not steal
+focus from the source application and does not cover the taskbar. If the external
+capture tool adds its own cursor over Stage and you see a duplicate, disable
+cursor drawing there (in OBS - the Capture Cursor option).
 
 
 22. Limitations and notes
