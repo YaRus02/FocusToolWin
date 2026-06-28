@@ -12,16 +12,16 @@ namespace FocusTool.Win.Overlay;
 internal sealed class PinnedLensHostWindow : IDisposable
 {
     private const int MinimumSourceSize = 12;
-    private const int BorderThickness = 1;
-    private const int FreezeAfterMenuDelayMs = 120;
     private const double DefaultMaximumWorkingAreaShare = 0.72;
-    private const double ZoomStep = 0.25;
+    internal const int BorderThickness = 1;
+    internal const int FreezeAfterMenuDelayMs = 120;
+    internal const double ZoomStep = 0.25;
 
     private readonly ScreenRect _sourceRect;
     private readonly double _maximumZoom;
     private readonly Func<PinnedLensHostWindow, Func<bool>, Task<bool>> _freezeFrameCaptureCoordinator;
-    private HostForm? _host;
-    private TransparentChildNativeWindow? _magnifierSubclass;
+    private PinnedLensHostForm? _host;
+    private PinnedLensTransparentChildNativeWindow? _magnifierSubclass;
     private MagnificationRuntime? _runtime;
     private IntPtr _hostHwnd;
     private IntPtr _magnifierHwnd;
@@ -55,7 +55,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
 
         try
         {
-            _host = new HostForm(this);
+            _host = new PinnedLensHostForm(this);
             _host.FormClosed += OnHostFormClosed;
             var windowSize = CalculateWindowSize(_sourceRect, _zoom);
             _windowBounds = new Rectangle(CalculateInitialLocation(_sourceRect, windowSize), windowSize);
@@ -91,6 +91,8 @@ internal sealed class PinnedLensHostWindow : IDisposable
     public bool IsSelected { get; private set; }
 
     public double Zoom => _zoom;
+
+    internal double MaximumZoom => _maximumZoom;
 
     public bool Contains(ScreenPoint point)
     {
@@ -343,7 +345,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         }
     }
 
-    private void RequestSelection()
+    internal void RequestSelection()
     {
         if (!_disposed)
         {
@@ -376,7 +378,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
             return;
         }
 
-        _magnifierSubclass = new TransparentChildNativeWindow(_magnifierHwnd);
+        _magnifierSubclass = new PinnedLensTransparentChildNativeWindow(_magnifierHwnd);
     }
 
     private void ResizeMagnifierChild()
@@ -421,7 +423,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         return true;
     }
 
-    private void SyncWindowBoundsFromNative(bool clamp)
+    internal void SyncWindowBoundsFromNative(bool clamp)
     {
         if (_hostHwnd == IntPtr.Zero || !NativeMethods.GetWindowRect(_hostHwnd, out var rect))
         {
@@ -439,6 +441,11 @@ internal sealed class PinnedLensHostWindow : IDisposable
             }
         }
 
+        _windowBounds = bounds;
+    }
+
+    internal void SetWindowBoundsFromHostMove(Rectangle bounds)
+    {
         _windowBounds = bounds;
     }
 
@@ -694,7 +701,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
         return GetVirtualWorkingArea();
     }
 
-    private static Rectangle ClampWindowBoundsToNearestWorkingArea(Rectangle bounds)
+    internal static Rectangle ClampWindowBoundsToNearestWorkingArea(Rectangle bounds)
     {
         const int margin = 1;
         var area = GetNearestWorkingArea(bounds);
@@ -710,237 +717,4 @@ internal sealed class PinnedLensHostWindow : IDisposable
         return new Rectangle(left, top, bounds.Width, bounds.Height);
     }
 
-    private sealed class HostForm : Form
-    {
-        private readonly PinnedLensHostWindow _owner;
-        private readonly ContextMenuStrip _menu = new();
-        private readonly ToolStripMenuItem _freezeItem;
-        private readonly ToolStripMenuItem _zoomInItem;
-        private readonly ToolStripMenuItem _zoomOutItem;
-        private readonly List<System.Windows.Forms.Timer> _topmostTimers = [];
-        private bool _freezeTogglePending;
-
-        public HostForm(PinnedLensHostWindow owner)
-        {
-            _owner = owner;
-            Text = "FocusTool Pinned Lens";
-            FormBorderStyle = FormBorderStyle.None;
-            BackColor = Color.FromArgb(28, 28, 28);
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.Manual;
-            TopMost = true;
-            MinimizeBox = false;
-            MaximizeBox = false;
-            AutoScaleMode = AutoScaleMode.None;
-            Bounds = new Rectangle(-32000, -32000, 1, 1);
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
-
-            _freezeItem = new ToolStripMenuItem("Freeze", null, (_, _) => ToggleFrozenAfterMenuCloses());
-            _zoomInItem = new ToolStripMenuItem("Zoom in", null, (_, _) => _owner.AdjustZoom(ZoomStep));
-            _zoomOutItem = new ToolStripMenuItem("Zoom out", null, (_, _) => _owner.AdjustZoom(-ZoomStep));
-            _menu.Items.Add(_freezeItem);
-            _menu.Items.Add(new ToolStripSeparator());
-            _menu.Items.Add(_zoomInItem);
-            _menu.Items.Add(_zoomOutItem);
-            _menu.Items.Add(new ToolStripSeparator());
-            _menu.Items.Add(new ToolStripMenuItem("Close", null, (_, _) => Close()));
-            _menu.Items.Add(new ToolStripMenuItem("Close all", null, (_, _) => _owner.CloseAllRequested?.Invoke()));
-            _menu.Opening += (_, _) => UpdateMenuState();
-            TopmostContextMenuHelper.Attach(_menu, _topmostTimers);
-            ContextMenuStrip = _menu;
-        }
-
-        protected override void OnShown(EventArgs e)
-        {
-            base.OnShown(e);
-            TopMost = true;
-        }
-
-        protected override bool ShowWithoutActivation => true;
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                var cp = base.CreateParams;
-                cp.ExStyle |= NativeMethods.WsExToolWindow;
-                cp.ExStyle |= NativeMethods.WsExNoActivate;
-                cp.ExStyle &= ~NativeMethods.WsExAppWindow;
-                return cp;
-            }
-        }
-
-        protected override void OnMouseDown(MouseEventArgs e)
-        {
-            _owner.RequestSelection();
-
-            if (e.Button == MouseButtons.Left)
-            {
-                NativeMethods.ReleaseCapture();
-                NativeMethods.SendMessage(Handle, NativeMethods.WmNcLButtonDown, NativeMethods.HtCaption, IntPtr.Zero);
-                return;
-            }
-
-            base.OnMouseDown(e);
-        }
-
-        protected override void OnMove(EventArgs e)
-        {
-            base.OnMove(e);
-            if (WindowState != FormWindowState.Normal)
-            {
-                return;
-            }
-
-            _owner.SyncWindowBoundsFromNative(clamp: true);
-        }
-
-        protected override void OnMouseWheel(MouseEventArgs e)
-        {
-            if ((ModifierKeys & Keys.Control) == Keys.Control)
-            {
-                _owner.AdjustZoom(e.Delta > 0 ? ZoomStep : -ZoomStep);
-                return;
-            }
-
-            base.OnMouseWheel(e);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            _owner.PaintFrozenFrame(
-                e.Graphics,
-                new Rectangle(
-                    BorderThickness,
-                    BorderThickness,
-                    Math.Max(0, ClientSize.Width - BorderThickness * 2),
-                    Math.Max(0, ClientSize.Height - BorderThickness * 2)));
-            var color = _owner.IsFrozen
-                ? Color.FromArgb(230, 90, 190, 255)
-                : _owner.IsSelected
-                    ? Color.FromArgb(235, 255, 214, 80)
-                : Color.FromArgb(220, 255, 255, 255);
-            using var pen = new Pen(color, BorderThickness);
-            e.Graphics.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
-        }
-
-        protected override void OnContextMenuStripChanged(EventArgs e)
-        {
-            base.OnContextMenuStripChanged(e);
-            UpdateMenuState();
-        }
-
-        protected override void OnMouseUp(MouseEventArgs e)
-        {
-            UpdateMenuState();
-            base.OnMouseUp(e);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                TopmostContextMenuHelper.DisposeTimers(_topmostTimers);
-                _menu.Dispose();
-            }
-
-            base.Dispose(disposing);
-        }
-
-        private void UpdateMenuState()
-        {
-            _freezeItem.Text = _owner.IsFrozen ? "Unfreeze" : "Freeze";
-            _freezeItem.Enabled = !_freezeTogglePending;
-            _zoomInItem.Enabled = !_freezeTogglePending && _owner.Zoom < _owner._maximumZoom - 0.001;
-            _zoomOutItem.Enabled = !_freezeTogglePending && _owner.Zoom > 1.0 + 0.001;
-        }
-
-        private async void ToggleFrozenAfterMenuCloses()
-        {
-            if (_freezeTogglePending)
-            {
-                return;
-            }
-
-            if (_owner.IsFrozen)
-            {
-                _owner.Resume();
-                UpdateMenuState();
-                return;
-            }
-
-            _freezeTogglePending = true;
-            UpdateMenuState();
-
-            try
-            {
-                if (_menu.Visible)
-                {
-                    _menu.Close(ToolStripDropDownCloseReason.ItemClicked);
-                }
-
-                await Task.Delay(FreezeAfterMenuDelayMs);
-
-                if (!IsDisposed && IsHandleCreated)
-                {
-                    await _owner.SetFrozenAsync(true);
-                }
-            }
-            finally
-            {
-                if (!IsDisposed)
-                {
-                    _freezeTogglePending = false;
-                    UpdateMenuState();
-                }
-            }
-        }
-
-        public void ReassertContextMenuTopmost()
-        {
-            TopmostContextMenuHelper.ReassertIfVisible(_menu);
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == NativeMethods.WmMoving && m.LParam != IntPtr.Zero)
-            {
-                var rect = Marshal.PtrToStructure<NativeMethods.Rect>(m.LParam);
-                var clamped = ClampWindowBoundsToNearestWorkingArea(Rectangle.FromLTRB(rect.Left, rect.Top, rect.Right, rect.Bottom));
-                rect.Left = clamped.Left;
-                rect.Top = clamped.Top;
-                rect.Right = clamped.Right;
-                rect.Bottom = clamped.Bottom;
-                Marshal.StructureToPtr(rect, m.LParam, false);
-                _owner._windowBounds = clamped;
-            }
-
-            base.WndProc(ref m);
-        }
-    }
-
-    private sealed class TransparentChildNativeWindow : NativeWindow
-    {
-        public TransparentChildNativeWindow(IntPtr handle)
-        {
-            AssignHandle(handle);
-        }
-
-        public void Release()
-        {
-            ReleaseHandle();
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == NativeMethods.WmNcHitTest)
-            {
-                m.Result = NativeMethods.HtTransparent;
-                return;
-            }
-
-            base.WndProc(ref m);
-        }
-    }
 }
