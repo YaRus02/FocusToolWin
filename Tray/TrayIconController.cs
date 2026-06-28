@@ -41,11 +41,11 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _redoItem;
     private readonly ToolStripMenuItem _clearItem;
     private readonly ToolStripMenuItem _exitItem;
-    private readonly Dictionary<AnnotationTool, ToolStripMenuItem> _toolItems = [];
-    private readonly List<ToolStripMenuItem> _laserColorItems = [];
-    private readonly List<ToolStripMenuItem> _highlightColorItems = [];
-    private readonly List<ToolStripMenuItem> _annotationColorItems = [];
-    private readonly List<ToolStripMenuItem> _regionMaskColorItems = [];
+    private readonly IReadOnlyDictionary<AnnotationTool, ToolStripMenuItem> _toolItems;
+    private readonly IReadOnlyList<ToolStripMenuItem> _laserColorItems;
+    private readonly IReadOnlyList<ToolStripMenuItem> _highlightColorItems;
+    private readonly IReadOnlyList<ToolStripMenuItem> _annotationColorItems;
+    private readonly IReadOnlyList<ToolStripMenuItem> _regionMaskColorItems;
     private Icon _trayIconImage;
     private string? _lastIconKey;
     private bool _updating;
@@ -55,302 +55,42 @@ internal sealed class TrayIconController : IDisposable
         _controller = controller;
         _controller.StateChanged += OnControllerStateChanged;
 
-        _modeItem = new ToolStripMenuItem("Annotate mode") { CheckOnClick = true };
-        _modeItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetInteractionMode(_modeItem.Checked ? InteractionMode.Annotate : InteractionMode.Passthrough);
-            }
-        };
-
-        _statusItem = new ToolStripMenuItem("Mode: Passthrough") { Enabled = false };
-
-        _laserAlwaysModeItem = new ToolStripMenuItem("Always on") { CheckOnClick = true };
-        _laserAlwaysModeItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetLaserActivationMode(LaserActivationMode.Always);
-            }
-        };
-
-        _laserHoldModeItem = new ToolStripMenuItem("Hold key / mouse button") { CheckOnClick = true };
-        _laserHoldModeItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetLaserActivationMode(LaserActivationMode.Hold);
-            }
-        };
-
-        _cursorHighlightAlwaysModeItem = new ToolStripMenuItem("Always on") { CheckOnClick = true };
-        _cursorHighlightAlwaysModeItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetCursorHighlightActivationMode(LaserActivationMode.Always);
-            }
-        };
-
-        _cursorHighlightHoldModeItem = new ToolStripMenuItem("Hold key / mouse button") { CheckOnClick = true };
-        _cursorHighlightHoldModeItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetCursorHighlightActivationMode(LaserActivationMode.Hold);
-            }
-        };
-
-        _cursorHighlightPulseItem = new ToolStripMenuItem("Click pulse") { CheckOnClick = true };
-        _cursorHighlightPulseItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetClickPulseEnabled(_cursorHighlightPulseItem.Checked);
-            }
-        };
-
-        _spotlightItem = new ToolStripMenuItem("Spotlight") { CheckOnClick = true };
-        _spotlightItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetSpotlightEnabled(_spotlightItem.Checked);
-            }
-        };
-
-        _regionSpotlightItem = new ToolStripMenuItem("Region Spotlight");
-        _regionSpotlightItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.ToggleRegionSpotlight();
-            }
-        };
-
-        _clearRegionSpotlightsItem = new ToolStripMenuItem("Clear region spotlights", null, (_, _) => _controller.ClearRegionSpotlights());
-
-        _magnifierItem = new ToolStripMenuItem("Zoom") { CheckOnClick = true };
-        _magnifierItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetMagnifierEnabled(_magnifierItem.Checked);
-            }
-        };
-
-        _pinnedLensItem = new ToolStripMenuItem("New pin");
-        _pinnedLensItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.TogglePinnedLens();
-            }
-        };
-
-        _closePinnedLensesItem = new ToolStripMenuItem("Close all pins", null, (_, _) => _controller.ClosePinnedLenses());
-
-        _regionMaskItem = new ToolStripMenuItem("Mask");
-        _regionMaskItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.ToggleRegionMask();
-            }
-        };
-
-        _clearRegionMasksItem = new ToolStripMenuItem("Clear masks", null, (_, _) => _controller.ClearRegionMasks());
-
-        _fadingAnnotationsItem = new ToolStripMenuItem("Fading annotations") { CheckOnClick = true };
-        _fadingAnnotationsItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetFadingAnnotationsEnabled(_fadingAnnotationsItem.Checked);
-            }
-        };
-
-        _toolbarItem = new ToolStripMenuItem("Toolbar") { CheckOnClick = true };
-        _toolbarItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.ToggleToolbar();
-            }
-        };
-
-        _screenshotItem = new ToolStripMenuItem("Monitor", null, (_, _) => _controller.TakeScreenshot());
-        _regionScreenshotItem = new ToolStripMenuItem("Region Screenshot", null, (_, _) => _controller.TakeRegionScreenshot());
-
-        _newTimerItem = new ToolStripMenuItem("New timer");
-        _newTimerItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.NewTimer();
-            }
-        };
-
-        _closeTimersItem = new ToolStripMenuItem("Close all timers", null, (_, _) => _controller.CloseAllTimers());
-
-        _screenBoardItem = new ToolStripMenuItem("Screen board") { CheckOnClick = true };
-        _screenBoardItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.ToggleScreenBoard();
-            }
-        };
-
-        _blackScreenItem = new ToolStripMenuItem("Black board") { CheckOnClick = true };
-        _blackScreenItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetInteractionMode(_blackScreenItem.Checked ? InteractionMode.BlackScreen : InteractionMode.Passthrough);
-            }
-        };
-
-        _whiteScreenItem = new ToolStripMenuItem("White board") { CheckOnClick = true };
-        _whiteScreenItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetInteractionMode(_whiteScreenItem.Checked ? InteractionMode.WhiteScreen : InteractionMode.Passthrough);
-            }
-        };
-
-        _glowItem = new ToolStripMenuItem("Laser glow") { CheckOnClick = true };
-        _glowItem.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetGlowEnabled(_glowItem.Checked);
-            }
-        };
-
-        _undoItem = new ToolStripMenuItem("Undo", null, (_, _) => _controller.UndoAnnotation());
-        _redoItem = new ToolStripMenuItem("Redo", null, (_, _) => _controller.RedoAnnotation());
-        _clearItem = new ToolStripMenuItem("Clear annotations", null, (_, _) => _controller.ClearAnnotations());
-
-        var tools = new ToolStripMenuItem("Tool");
-        AddTool(tools, AnnotationTool.Arrow, "Arrow");
-        AddTool(tools, AnnotationTool.Rectangle, "Rectangle");
-        AddTool(tools, AnnotationTool.Ellipse, "Ellipse / Circle");
-        AddTool(tools, AnnotationTool.Line, "Line");
-        AddTool(tools, AnnotationTool.Pencil, "Pencil");
-        AddTool(tools, AnnotationTool.Highlighter, "Highlighter");
-        AddTool(tools, AnnotationTool.Text, "Text");
-        AddTool(tools, AnnotationTool.Move, "Move selection");
-        AddTool(tools, AnnotationTool.StepOval, "Step oval");
-        AddTool(tools, AnnotationTool.StepRect, "Step rectangle");
-
-        var annotationColors = new ToolStripMenuItem("Annotation color");
-        for (var i = 0; i < 5; i++)
-        {
-            AddAnnotationPreset(annotationColors, i);
-        }
-
-        var laserPresets = new ToolStripMenuItem("Laser color");
-        for (var i = 0; i < 5; i++)
-        {
-            AddLaserPreset(laserPresets, i);
-        }
-
-        laserPresets.Text = "Color";
-        var highlightPresets = new ToolStripMenuItem("Color");
-        for (var i = 0; i < 5; i++)
-        {
-            AddHighlightPreset(highlightPresets, i);
-        }
-
-        var laserMenu = new ToolStripMenuItem("Laser");
-        laserMenu.DropDownItems.Add(_laserAlwaysModeItem);
-        laserMenu.DropDownItems.Add(_laserHoldModeItem);
-        laserMenu.DropDownItems.Add(new ToolStripSeparator());
-        laserMenu.DropDownItems.Add(laserPresets);
-        laserMenu.DropDownItems.Add(_glowItem);
-
-        var cursorHighlightMenu = new ToolStripMenuItem("Cursor Highlight");
-        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightAlwaysModeItem);
-        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightHoldModeItem);
-        cursorHighlightMenu.DropDownItems.Add(new ToolStripSeparator());
-        cursorHighlightMenu.DropDownItems.Add(highlightPresets);
-        cursorHighlightMenu.DropDownItems.Add(_cursorHighlightPulseItem);
-
-        tools.Text = "Tool";
-        annotationColors.Text = "Color";
-        var drawMenu = new ToolStripMenuItem("Draw");
-        drawMenu.DropDownItems.Add(_modeItem);
-        drawMenu.DropDownItems.Add(new ToolStripSeparator());
-        drawMenu.DropDownItems.Add(tools);
-        drawMenu.DropDownItems.Add(annotationColors);
-        drawMenu.DropDownItems.Add(_fadingAnnotationsItem);
-        drawMenu.DropDownItems.Add(new ToolStripSeparator());
-        drawMenu.DropDownItems.Add(_undoItem);
-        drawMenu.DropDownItems.Add(_redoItem);
-        drawMenu.DropDownItems.Add(_clearItem);
-
-        var pinnedLensMenu = new ToolStripMenuItem("Pin");
-        pinnedLensMenu.DropDownItems.Add(_pinnedLensItem);
-        pinnedLensMenu.DropDownItems.Add(_closePinnedLensesItem);
-
-        var maskColors = new ToolStripMenuItem("Color");
-        for (var i = 0; i < 5; i++)
-        {
-            AddMaskColor(maskColors, i);
-        }
-
-        var regionMaskMenu = new ToolStripMenuItem("Mask");
-        regionMaskMenu.DropDownItems.Add(_regionMaskItem);
-        regionMaskMenu.DropDownItems.Add(_clearRegionMasksItem);
-        regionMaskMenu.DropDownItems.Add(new ToolStripSeparator());
-        regionMaskMenu.DropDownItems.Add(maskColors);
-
-        var boardMenu = new ToolStripMenuItem("Board");
-        boardMenu.DropDownItems.Add(_screenBoardItem);
-        boardMenu.DropDownItems.Add(_blackScreenItem);
-        boardMenu.DropDownItems.Add(_whiteScreenItem);
-
-        var screenshotMenu = new ToolStripMenuItem("Screenshot");
-        screenshotMenu.DropDownItems.Add(_screenshotItem);
-        screenshotMenu.DropDownItems.Add(_regionScreenshotItem);
-
-        _contextMenu = new ContextMenuStrip();
-        _contextMenu.Items.Add(_statusItem);
-        _contextMenu.Items.Add(new ToolStripSeparator());
-        _contextMenu.Items.Add(laserMenu);
-        _contextMenu.Items.Add(cursorHighlightMenu);
-        _contextMenu.Items.Add(_spotlightItem);
-        _contextMenu.Items.Add(_regionSpotlightItem);
-        _contextMenu.Items.Add(_clearRegionSpotlightsItem);
-        _contextMenu.Items.Add(_magnifierItem);
-        _contextMenu.Items.Add(pinnedLensMenu);
-        _contextMenu.Items.Add(new ToolStripSeparator());
-        _contextMenu.Items.Add(drawMenu);
-        _contextMenu.Items.Add(new ToolStripSeparator());
-        _contextMenu.Items.Add(regionMaskMenu);
-        _contextMenu.Items.Add(boardMenu);
-        _contextMenu.Items.Add(screenshotMenu);
-
-        var timerMenu = new ToolStripMenuItem("Timer");
-        timerMenu.DropDownItems.Add(_newTimerItem);
-        timerMenu.DropDownItems.Add(_closeTimersItem);
-        _contextMenu.Items.Add(timerMenu);
-
-        var captureStageMenu = new ToolStripMenuItem("Capture Stage");
-        captureStageMenu.DropDownItems.Add("Pick source...", null, async (_, _) => await _controller.StartCaptureStageWithPickerAsync());
-        captureStageMenu.DropDownItems.Add("Mirror focused window", null, (_, _) => _controller.StartCaptureStageForLastWindow());
-        captureStageMenu.DropDownItems.Add("Close all", null, (_, _) => _controller.CloseCaptureStages());
-        _contextMenu.Items.Add(captureStageMenu);
-
-        _contextMenu.Items.Add(new ToolStripSeparator());
-        _contextMenu.Items.Add(_toolbarItem);
-        _contextMenu.Items.Add("Settings...", null, (_, _) => _controller.ShowSettingsWindow());
-        _contextMenu.Items.Add(new ToolStripSeparator());
-        _exitItem = new ToolStripMenuItem("Exit", null, (_, _) => _controller.Exit());
-        _contextMenu.Items.Add(_exitItem);
+        var menuItems = TrayMenuBuilder.Build(_controller, () => _updating);
+        _contextMenu = menuItems.ContextMenu;
+        _statusItem = menuItems.StatusItem;
+        _modeItem = menuItems.ModeItem;
+        _laserAlwaysModeItem = menuItems.LaserAlwaysModeItem;
+        _laserHoldModeItem = menuItems.LaserHoldModeItem;
+        _cursorHighlightAlwaysModeItem = menuItems.CursorHighlightAlwaysModeItem;
+        _cursorHighlightHoldModeItem = menuItems.CursorHighlightHoldModeItem;
+        _cursorHighlightPulseItem = menuItems.CursorHighlightPulseItem;
+        _spotlightItem = menuItems.SpotlightItem;
+        _regionSpotlightItem = menuItems.RegionSpotlightItem;
+        _clearRegionSpotlightsItem = menuItems.ClearRegionSpotlightsItem;
+        _magnifierItem = menuItems.MagnifierItem;
+        _pinnedLensItem = menuItems.PinnedLensItem;
+        _closePinnedLensesItem = menuItems.ClosePinnedLensesItem;
+        _regionMaskItem = menuItems.RegionMaskItem;
+        _clearRegionMasksItem = menuItems.ClearRegionMasksItem;
+        _fadingAnnotationsItem = menuItems.FadingAnnotationsItem;
+        _toolbarItem = menuItems.ToolbarItem;
+        _screenshotItem = menuItems.ScreenshotItem;
+        _regionScreenshotItem = menuItems.RegionScreenshotItem;
+        _newTimerItem = menuItems.NewTimerItem;
+        _closeTimersItem = menuItems.CloseTimersItem;
+        _screenBoardItem = menuItems.ScreenBoardItem;
+        _blackScreenItem = menuItems.BlackScreenItem;
+        _whiteScreenItem = menuItems.WhiteScreenItem;
+        _glowItem = menuItems.GlowItem;
+        _undoItem = menuItems.UndoItem;
+        _redoItem = menuItems.RedoItem;
+        _clearItem = menuItems.ClearItem;
+        _exitItem = menuItems.ExitItem;
+        _toolItems = menuItems.ToolItems;
+        _laserColorItems = menuItems.LaserColorItems;
+        _highlightColorItems = menuItems.HighlightColorItems;
+        _annotationColorItems = menuItems.AnnotationColorItems;
+        _regionMaskColorItems = menuItems.RegionMaskColorItems;
         _contextMenu.Opening += (_, _) => UpdateMenuState();
 
         _trayIconImage = CreateTrayIcon(CurrentIconColor(), _controller.LaserVisuallyActive);
@@ -552,81 +292,6 @@ internal sealed class TrayIconController : IDisposable
             AnnotationTool.StepRect => "Step rectangle",
             _ => tool.ToString()
         };
-    }
-
-    private void AddTool(ToolStripMenuItem parent, AnnotationTool tool, string title)
-    {
-        var item = new ToolStripMenuItem(title) { CheckOnClick = true };
-        item.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetAnnotationTool(tool);
-            }
-        };
-
-        _toolItems[tool] = item;
-        parent.DropDownItems.Add(item);
-    }
-
-    private void AddAnnotationPreset(ToolStripMenuItem parent, int index)
-    {
-        var item = new ToolStripMenuItem($"Color {index + 1}");
-        item.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetAnnotationPresetColor(index);
-            }
-        };
-
-        _annotationColorItems.Add(item);
-        parent.DropDownItems.Add(item);
-    }
-
-    private void AddLaserPreset(ToolStripMenuItem parent, int index)
-    {
-        var item = new ToolStripMenuItem($"Color {index + 1}");
-        item.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetLaserPresetColor(index);
-            }
-        };
-
-        _laserColorItems.Add(item);
-        parent.DropDownItems.Add(item);
-    }
-
-    private void AddHighlightPreset(ToolStripMenuItem parent, int index)
-    {
-        var item = new ToolStripMenuItem($"Color {index + 1}");
-        item.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetCursorHighlightPresetColor(index);
-            }
-        };
-
-        _highlightColorItems.Add(item);
-        parent.DropDownItems.Add(item);
-    }
-
-    private void AddMaskColor(ToolStripMenuItem parent, int index)
-    {
-        var item = new ToolStripMenuItem($"Color {index + 1}");
-        item.Click += (_, _) =>
-        {
-            if (!_updating)
-            {
-                _controller.SetRegionMaskPresetColor(index);
-            }
-        };
-
-        _regionMaskColorItems.Add(item);
-        parent.DropDownItems.Add(item);
     }
 
     private string GetToolShortcut(AnnotationTool tool)
