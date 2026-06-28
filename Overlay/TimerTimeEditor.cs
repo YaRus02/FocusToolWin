@@ -12,17 +12,17 @@ internal static class TimerTimeEditor
             return 8;
         }
 
-        return use24HourTime ? 5 : 8;
+        return use24HourTime ? 8 : 11;
     }
 
     public static string ToolTip(TimerMode mode, bool use24HourTime)
     {
         if (mode != TimerMode.UntilTime)
         {
-            return "mm:ss or h:mm:ss";
+            return "hh:mm:ss";
         }
 
-        return use24HourTime ? "HH:mm" : "h:mm AM/PM";
+        return use24HourTime ? "HH:mm:ss" : "h:mm:ss AM/PM";
     }
 
     public static bool IsValidPartial(string text, TimerMode mode, bool use24HourTime)
@@ -43,8 +43,7 @@ internal static class TimerTimeEditor
         }
 
         var parts = text.Split(':');
-        var maxParts = mode == TimerMode.UntilTime ? 2 : 3;
-        if (parts.Length > maxParts)
+        if (parts.Length > 3)
         {
             return false;
         }
@@ -98,7 +97,10 @@ internal static class TimerTimeEditor
         {
             if (!DateTime.TryParseExact(
                 text.Trim().ToUpperInvariant(),
-                ["h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt"],
+                [
+                    "h:mm tt", "hh:mm tt", "h:mmtt", "hh:mmtt",
+                    "h:mm:ss tt", "hh:mm:ss tt", "h:mm:sstt", "hh:mm:sstt"
+                ],
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AllowWhiteSpaces,
                 out var parsed))
@@ -106,7 +108,7 @@ internal static class TimerTimeEditor
                 return false;
             }
 
-            target = new DateTime(now.Year, now.Month, now.Day, parsed.Hour, parsed.Minute, 0);
+            target = new DateTime(now.Year, now.Month, now.Day, parsed.Hour, parsed.Minute, parsed.Second);
             if (target <= now)
             {
                 target = target.AddDays(1);
@@ -116,7 +118,7 @@ internal static class TimerTimeEditor
         }
 
         var parts = text.Split(':');
-        if (parts.Length != 2)
+        if (parts.Length is < 2 or > 3)
         {
             return false;
         }
@@ -126,12 +128,18 @@ internal static class TimerTimeEditor
             return false;
         }
 
-        if (hours is < 0 or > 23 || minutes is < 0 or > 59)
+        var seconds = 0;
+        if (parts.Length == 3 && !int.TryParse(parts[2], out seconds))
         {
             return false;
         }
 
-        target = new DateTime(now.Year, now.Month, now.Day, hours, minutes, 0);
+        if (hours is < 0 or > 23 || minutes is < 0 or > 59 || seconds is < 0 or > 59)
+        {
+            return false;
+        }
+
+        target = new DateTime(now.Year, now.Month, now.Day, hours, minutes, seconds);
         if (target <= now)
         {
             target = target.AddDays(1);
@@ -142,7 +150,7 @@ internal static class TimerTimeEditor
 
     private static bool IsValidTwelveHourTargetPartial(string text)
     {
-        if (text.Length > 8 || text.Contains("::", StringComparison.Ordinal))
+        if (text.Length > 11 || text.Contains("::", StringComparison.Ordinal))
         {
             return false;
         }
@@ -179,6 +187,6 @@ internal static class TimerTimeEditor
 
         var timePart = markerIndex >= 0 ? upper[..markerIndex].TrimEnd() : upper;
         var parts = timePart.Split(':');
-        return parts.Length <= 2 && parts.All(part => part.Length <= 2);
+        return parts.Length <= 3 && parts.All(part => part.Length <= 2);
     }
 }

@@ -150,7 +150,7 @@ internal sealed class TimerModel
     public string DurationText() => FormatDuration(_countdownSeconds);
 
     public string TargetTimeText() =>
-        _targetTime.ToString(Use24HourTime ? "HH:mm" : "h:mm tt", CultureInfo.InvariantCulture);
+        _targetTime.ToString(Use24HourTime ? "HH:mm:ss" : "h:mm:ss tt", CultureInfo.InvariantCulture);
 
     public TimerSnapshot GetSnapshot(double nowMs)
     {
@@ -225,7 +225,7 @@ internal sealed class TimerModel
         var hours = seconds / 3600;
         var minutes = (seconds % 3600) / 60;
         var secs = seconds % 60;
-        return hours > 0 ? $"{hours}:{minutes:00}:{secs:00}" : $"{minutes:00}:{secs:00}";
+        return $"{hours:00}:{minutes:00}:{secs:00}";
     }
 
     private static string NormalizeTimeFormat(string? timeFormat) =>
