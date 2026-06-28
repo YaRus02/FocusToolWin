@@ -6,8 +6,6 @@ using System.Windows.Media;
 using FocusTool.Win.Models;
 using FocusTool.Win.Native;
 using FocusTool.Win.Services;
-using DrawingPoint = System.Drawing.Point;
-using Forms = System.Windows.Forms;
 using WpfBrush = System.Windows.Media.Brush;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfButton = System.Windows.Controls.Button;
@@ -32,6 +30,7 @@ internal sealed class OverlayToolbarWindow : Window
     private static readonly WpfBrush CaretActiveBrush = WpfBrushes.White;
 
     private readonly FocusToolController _controller;
+    private readonly ToolbarPositioner _positioner;
     private readonly Dictionary<AnnotationTool, WpfButton> _toolButtons = [];
     private readonly List<WpfButton> _colorButtons = [];
     private readonly List<WpfButton> _laserColorButtons = [];
@@ -103,13 +102,11 @@ internal sealed class OverlayToolbarWindow : Window
     private Border _activeDot = null!;
     private bool _updating;
     private bool _collapsed;
-    private bool _hasSavedPosition;
-    private int _savedLeft;
-    private int _savedTop;
 
     public OverlayToolbarWindow(FocusToolController controller)
     {
         _controller = controller;
+        _positioner = new ToolbarPositioner(this);
         _controller.StateChanged += OnControllerStateChanged;
 
         Title = "FocusTool Toolbar";
@@ -144,7 +141,7 @@ internal sealed class OverlayToolbarWindow : Window
 
         UpdateState();
         UpdateLayout();
-        PositionNearCursor();
+        _positioner.PositionNearCursor();
         Activate();
         ReassertTopmost();
     }
@@ -542,7 +539,7 @@ internal sealed class OverlayToolbarWindow : Window
             DragMove();
         }
 
-        SaveCurrentPosition();
+        _positioner.SaveCurrentPosition();
         if (!moved)
         {
             ExpandFromHandle();
@@ -567,7 +564,7 @@ internal sealed class OverlayToolbarWindow : Window
             if (args.ButtonState == MouseButtonState.Pressed)
             {
                 DragMove();
-                SaveCurrentPosition();
+                _positioner.SaveCurrentPosition();
             }
         };
 
@@ -610,7 +607,7 @@ internal sealed class OverlayToolbarWindow : Window
         _expandedRoot.Visibility = Visibility.Visible;
         UpdateState();
         UpdateLayout();
-        ClampOntoMonitor();
+        _positioner.ClampOntoMonitor();
         ReassertTopmost();
     }
 
@@ -805,7 +802,7 @@ internal sealed class OverlayToolbarWindow : Window
         _contextualHost.Visibility = Visibility.Visible;
         UpdateState();
         UpdateLayout();
-        ClampOntoMonitor();
+        _positioner.ClampOntoMonitor();
         ReassertTopmost();
     }
 
@@ -842,7 +839,7 @@ internal sealed class OverlayToolbarWindow : Window
         _stepOptionsRow.Visibility = _stepOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
         UpdateState();
         UpdateLayout();
-        ClampOntoMonitor();
+        _positioner.ClampOntoMonitor();
         ReassertTopmost();
     }
 
@@ -868,7 +865,7 @@ internal sealed class OverlayToolbarWindow : Window
         _fadeOptionsRow.Visibility = _fadeOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
         UpdateState();
         UpdateLayout();
-        ClampOntoMonitor();
+        _positioner.ClampOntoMonitor();
         ReassertTopmost();
     }
 
@@ -889,7 +886,7 @@ internal sealed class OverlayToolbarWindow : Window
         _pinOptionsRow.Visibility = _pinOptionsVisible ? Visibility.Visible : Visibility.Collapsed;
         UpdateState();
         UpdateLayout();
-        ClampOntoMonitor();
+        _positioner.ClampOntoMonitor();
         ReassertTopmost();
     }
 
@@ -1075,115 +1072,4 @@ internal sealed class OverlayToolbarWindow : Window
         button.Foreground = enabled ? WpfBrushes.White : new SolidColorBrush(MediaColor.FromRgb(140, 140, 140));
     }
 
-    private void PositionNearCursor()
-    {
-        var handle = new WindowInteropHelper(this).Handle;
-        if (handle == IntPtr.Zero)
-        {
-            var fallback = GetCursorScreen().WorkingArea;
-            Left = fallback.Left + 8;
-            Top = fallback.Top + 18;
-            return;
-        }
-
-        int left, top;
-        if (_hasSavedPosition)
-        {
-            (left, top) = ClampToWorkingArea(_savedLeft, _savedTop);
-        }
-        else
-        {
-            var area = GetCursorScreen().WorkingArea;
-            var scale = GetCursorMonitorScale();
-            var width = (int)Math.Round((ActualWidth > 1 ? ActualWidth : Width) * scale);
-            left = area.Left + (area.Width - width) / 2;
-            top = area.Top + (int)Math.Round(18 * scale);
-            (left, top) = ClampToWorkingArea(left, top);
-        }
-
-        MoveWindowPhysical(left, top);
-    }
-
-    private void SaveCurrentPosition()
-    {
-        var handle = new WindowInteropHelper(this).Handle;
-        if (handle != IntPtr.Zero && NativeMethods.GetWindowRect(handle, out var rect))
-        {
-            _savedLeft = rect.Left;
-            _savedTop = rect.Top;
-            _hasSavedPosition = true;
-        }
-    }
-
-    private void ClampOntoMonitor()
-    {
-        var handle = new WindowInteropHelper(this).Handle;
-        if (handle == IntPtr.Zero || !NativeMethods.GetWindowRect(handle, out var rect))
-        {
-            return;
-        }
-
-        var (left, top) = ClampToWorkingArea(rect.Left, rect.Top);
-        if (left != rect.Left || top != rect.Top)
-        {
-            MoveWindowPhysical(left, top);
-        }
-    }
-
-    private (int Left, int Top) ClampToWorkingArea(int left, int top)
-    {
-        var scale = GetMonitorScale(left, top);
-        var width = (int)Math.Round((ActualWidth > 1 ? ActualWidth : Width) * scale);
-        var height = (int)Math.Round((ActualHeight > 1 ? ActualHeight : Height) * scale);
-        var area = Forms.Screen.FromPoint(new DrawingPoint(left, top)).WorkingArea;
-        var clampedLeft = Math.Clamp(left, area.Left + 8, Math.Max(area.Left + 8, area.Right - width - 8));
-        var clampedTop = Math.Clamp(top, area.Top + 8, Math.Max(area.Top + 8, area.Bottom - height - 8));
-        return (clampedLeft, clampedTop);
-    }
-
-    private void MoveWindowPhysical(int left, int top)
-    {
-        var handle = new WindowInteropHelper(this).Handle;
-        if (handle == IntPtr.Zero)
-        {
-            return;
-        }
-
-        NativeMethods.SetWindowPos(
-            handle,
-            IntPtr.Zero,
-            left,
-            top,
-            0,
-            0,
-            NativeMethods.SwpNoSize | NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
-    }
-
-    private static double GetCursorMonitorScale()
-    {
-        return NativeMethods.GetCursorPos(out var point) ? GetMonitorScale(point.X, point.Y) : 1.0;
-    }
-
-    private static double GetMonitorScale(int x, int y)
-    {
-        var monitor = NativeMethods.MonitorFromPoint(new NativeMethods.Point { X = x, Y = y }, NativeMethods.MonitorDefaultToNearest);
-        if (monitor != IntPtr.Zero
-            && NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MdtEffectiveDpi, out var dpiX, out _) == 0
-            && dpiX > 0)
-        {
-            return dpiX / 96.0;
-        }
-
-        return 1.0;
-    }
-
-    private static Forms.Screen GetCursorScreen()
-    {
-        if (NativeMethods.GetCursorPos(out var point))
-        {
-            return Forms.Screen.FromPoint(new DrawingPoint(point.X, point.Y));
-        }
-
-        return Forms.Screen.PrimaryScreen ?? Forms.Screen.AllScreens[0];
-    }
 }
