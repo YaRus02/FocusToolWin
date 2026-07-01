@@ -218,6 +218,12 @@ internal sealed class RectToolsInputController
 
         if (mode == InteractionMode.ScreenshotRegionSelect)
         {
+            if ((key == Key.Back || key == Key.Delete) && modifiers == ModifierKeys.None)
+            {
+                DeletePendingScreenshotRegion();
+                return true;
+            }
+
             if (key == Key.Enter && modifiers == ModifierKeys.None)
             {
                 CommitPendingScreenshotRegion();
@@ -229,7 +235,7 @@ internal sealed class RectToolsInputController
 
         if (mode == InteractionMode.RegionSpotlightSelect)
         {
-            if (key == Key.Back && modifiers == ModifierKeys.None)
+            if ((key == Key.Back || key == Key.Delete) && modifiers == ModifierKeys.None)
             {
                 DeleteSelectedSpotlightRegion();
                 return true;
@@ -507,6 +513,18 @@ internal sealed class RectToolsInputController
             _registerHotKeys();
         }
 
+        _invalidateOverlay();
+        _notifyStateChanged();
+    }
+
+    private void DeletePendingScreenshotRegion()
+    {
+        if (!_selection.DeletePendingScreenshotRegion())
+        {
+            return;
+        }
+
+        _selection.CancelDraft();
         _invalidateOverlay();
         _notifyStateChanged();
     }

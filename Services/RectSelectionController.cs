@@ -195,6 +195,20 @@ internal sealed class RectSelectionController
         }
     }
 
+    public bool DeletePendingScreenshotRegion()
+    {
+        if (_pendingScreenshotRegion is null)
+        {
+            return false;
+        }
+
+        _pendingScreenshotRegion = null;
+        _screenshotEdit.Cancel();
+        _restoreToolbarAfterRectSelection = _restoreToolbarAfterRectSelection || _screenshotRegionToolbarRestorePending;
+        _screenshotRegionToolbarRestorePending = false;
+        return true;
+    }
+
     public void ResetRectStateForMode(InteractionMode mode)
     {
         _selection.Cancel();

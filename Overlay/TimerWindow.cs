@@ -567,6 +567,11 @@ internal sealed class TimerWindow : Window
                 _labelSession.Begin();
                 e.Handled = true;
                 return;
+            case Key.Back:
+            case Key.Delete:
+                Close();
+                e.Handled = true;
+                return;
             case Key.Escape:
                 ExitFocus();
                 e.Handled = true;
