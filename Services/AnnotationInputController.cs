@@ -143,14 +143,14 @@ internal sealed class AnnotationInputController
             return true;
         }
 
-        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.DeleteSelection))
+        if ((key == Key.Back || key == Key.Delete) && modifiers == ModifierKeys.None && _annotations.HasSelection)
         {
             _deleteSelection();
             _tryCompletePushToAnnotateExit();
             return true;
         }
 
-        if (key == Key.Delete && modifiers == ModifierKeys.None && _annotations.HasSelection)
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.DeleteSelection))
         {
             _deleteSelection();
             _tryCompletePushToAnnotateExit();
