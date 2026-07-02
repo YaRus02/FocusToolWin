@@ -120,6 +120,13 @@ internal sealed class AnnotationInputController
 
         if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ExitAnnotate))
         {
+            if (_settingsProvider().GetAnnotationTool() == AnnotationTool.Move && _annotations.HasSelection)
+            {
+                _annotations.ClearSelection();
+                _tryCompletePushToAnnotateExit();
+                return true;
+            }
+
             if (_annotations.IsObjectEditing)
             {
                 _annotations.EndObjectEdit();
