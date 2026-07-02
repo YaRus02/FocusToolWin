@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using System.Windows.Input;
 using FocusTool.Win.Models;
 using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
@@ -183,6 +184,32 @@ internal sealed class PinnedLensController : IDisposable
         return true;
     }
 
+    public bool TryAdjustZoomAt(ScreenPoint point, int delta, ModifierKeys modifiers)
+    {
+        if (delta == 0
+            || (modifiers & ModifierKeys.Control) == 0
+            || (modifiers & ~ModifierKeys.Control) != 0)
+        {
+            return false;
+        }
+
+        var target = FindHostAt(point) ?? (_selectedHost is not null && _hosts.Contains(_selectedHost) ? _selectedHost : null);
+        if (target is null)
+        {
+            return false;
+        }
+
+        target.AdjustZoom(Math.Sign(delta) * PinnedLensHostWindow.ZoomStep);
+        SelectHost(target);
+        return true;
+    }
+
+    public bool HasLiveControlTargetAt(ScreenPoint point)
+    {
+        return FindHostAt(point) is not null
+            || _selectedHost is not null && _hosts.Contains(_selectedHost);
+    }
+
     private async Task<bool> CaptureFreezeFrameAsync(PinnedLensHostWindow target, Func<bool> capture)
     {
         if (_isDisposed() || !_hosts.Contains(target))
@@ -301,6 +328,19 @@ internal sealed class PinnedLensController : IDisposable
         _selectedHost.SetSelected(true);
         EnsureSelectionHooks();
         _stateChanged();
+    }
+
+    private PinnedLensHostWindow? FindHostAt(ScreenPoint point)
+    {
+        for (var i = _hosts.Count - 1; i >= 0; i--)
+        {
+            if (_hosts[i].Contains(point))
+            {
+                return _hosts[i];
+            }
+        }
+
+        return null;
     }
 
     private void ClearSelection()

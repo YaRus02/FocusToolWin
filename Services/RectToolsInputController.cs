@@ -14,7 +14,6 @@ internal sealed class RectToolsInputController
     private readonly RegionSpotlightController _spotlights;
     private readonly Func<InteractionMode> _modeProvider;
     private readonly Func<AppSettings> _settingsProvider;
-    private readonly Action<AppSettings> _applySettings;
     private readonly Action<InteractionMode> _setMode;
     private readonly Action _invalidateOverlay;
     private readonly Action _notifyStateChanged;
@@ -29,7 +28,6 @@ internal sealed class RectToolsInputController
         RegionSpotlightController spotlights,
         Func<InteractionMode> modeProvider,
         Func<AppSettings> settingsProvider,
-        Action<AppSettings> applySettings,
         Action<InteractionMode> setMode,
         Action invalidateOverlay,
         Action notifyStateChanged,
@@ -43,7 +41,6 @@ internal sealed class RectToolsInputController
         _spotlights = spotlights;
         _modeProvider = modeProvider;
         _settingsProvider = settingsProvider;
-        _applySettings = applySettings;
         _setMode = setMode;
         _invalidateOverlay = invalidateOverlay;
         _notifyStateChanged = notifyStateChanged;
@@ -130,32 +127,7 @@ internal sealed class RectToolsInputController
 
     public bool HandleMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
     {
-        if (_modeProvider() != InteractionMode.RegionMaskSelect
-            || delta == 0
-            || (modifiers & ModifierKeys.Control) == 0
-            || (modifiers & ~(ModifierKeys.Control | ModifierKeys.Shift)) != 0)
-        {
-            return false;
-        }
-
-        if (!_masks.TryGetSelectedOrHit(point, out var mask))
-        {
-            return false;
-        }
-
-        var step = (modifiers & ModifierKeys.Shift) != 0 ? 0.01 : 0.05;
-        var nextOpacity = Math.Clamp(mask.Opacity + Math.Sign(delta) * step, 0.1, 1.0);
-        if (Math.Abs(mask.Opacity - nextOpacity) < 0.001)
-        {
-            return true;
-        }
-
-        var updated = _settingsProvider().Clone();
-        updated.RegionMaskOpacity = nextOpacity;
-        _applySettings(updated);
-        mask.SetOpacity(_settingsProvider().RegionMaskOpacity);
-        _invalidateOverlay();
-        return true;
+        return false;
     }
 
     public void HandleCaptureLost()

@@ -15,6 +15,7 @@ internal sealed class MouseHook : IDisposable
     }
 
     public event EventHandler<MouseHookClickEventArgs>? Clicked;
+    public event EventHandler<MouseHookWheelEventArgs>? Wheel;
 
     public bool IsInstalled => _hook != IntPtr.Zero;
 
@@ -72,6 +73,17 @@ internal sealed class MouseHook : IDisposable
                     this,
                     new MouseHookClickEventArgs(button, new ScreenPoint(data.Point.X, data.Point.Y)));
             }
+            else if (message == NativeMethods.WmMouseWheel)
+            {
+                var data = Marshal.PtrToStructure<NativeMethods.MouseHookStruct>(lParam);
+                var delta = unchecked((short)((data.MouseData >> 16) & 0xFFFF));
+                var args = new MouseHookWheelEventArgs(new ScreenPoint(data.Point.X, data.Point.Y), delta);
+                Wheel?.Invoke(this, args);
+                if (args.Handled)
+                {
+                    return new IntPtr(1);
+                }
+            }
         }
 
         return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
@@ -88,4 +100,17 @@ internal sealed class MouseHookClickEventArgs : EventArgs
 
     public CursorClickButton Button { get; }
     public ScreenPoint Point { get; }
+}
+
+internal sealed class MouseHookWheelEventArgs : EventArgs
+{
+    public MouseHookWheelEventArgs(ScreenPoint point, int delta)
+    {
+        Point = point;
+        Delta = delta;
+    }
+
+    public ScreenPoint Point { get; }
+    public int Delta { get; }
+    public bool Handled { get; set; }
 }

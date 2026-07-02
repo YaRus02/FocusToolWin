@@ -20,6 +20,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private static readonly TimeSpan IdleInterval = TimeSpan.FromMilliseconds(120);
     private const double MovementThresholdPixels = 0.75;
     private const string ExitVisualShortcut = "Esc";
+    private const double WheelAnnotationFontSizeStep = 2;
+    private const double WheelAnnotationThicknessStep = 1;
+    private const double WheelFocusRadiusStep = 16;
+    private const double WheelFocusZoomStep = 0.25;
+    private const double WheelSpotlightOpacityStep = 0.06;
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly SettingsPersistenceController _settingsPersistence;
@@ -40,6 +45,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly PinnedLensController _pinnedLenses;
     private readonly MagnifierController _magnifier;
     private readonly GlobalHotKeyController _hotKeys;
+    private readonly MouseHook _liveControlsMouseHook = new();
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
     private CaptureStageController _captureStage = null!;
@@ -198,7 +204,6 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             _regionSpotlights,
             () => _mode,
             () => Settings,
-            ApplySettings,
             SetInteractionMode,
             () => _overlayManager?.Invalidate(),
             () => StateChanged?.Invoke(this, EventArgs.Empty),
@@ -301,6 +306,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ToggleWhiteScreen,
             Exit,
             ExitVisualEffects);
+        _liveControlsMouseHook.Wheel += OnLiveControlsMouseWheel;
         CacheParsedSettings();
 
         Settings.SpotlightEnabled = false;
@@ -372,6 +378,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
         RegisterHotKeys();
         _pointerVisuals.StartMouseHook();
+        UpdateLiveControlsMouseHook();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         _overlayManager.Show();
@@ -780,6 +787,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         }
 
         _pointerVisuals.RefreshLaserAfterSettingsApplied(previousActivationMode);
+        UpdateLiveControlsMouseHook();
 
         _overlayManager?.Invalidate();
         StateChanged?.Invoke(this, EventArgs.Empty);
@@ -1011,6 +1019,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public bool HandleOverlayMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
     {
+        if (TryHandleLiveControlMouseWheel(point, delta, modifiers))
+        {
+            return true;
+        }
+
         if (IsRectSelectionMode(_mode))
         {
             return _rectTools.HandleMouseWheel(point, delta, modifiers);
@@ -1070,6 +1083,8 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _annotations.Changed -= OnAnnotationsChanged;
         _annotations.DraftProgressed -= OnAnnotationDraftProgressed;
         _regionMaskContextMenu.Dispose();
+        _liveControlsMouseHook.Wheel -= OnLiveControlsMouseWheel;
+        _liveControlsMouseHook.Dispose();
         _hotKeys.Dispose();
         CloseMagnifierHost();
         _captureStage.Dispose();
@@ -1086,6 +1101,122 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private void OnTimerTick(object? sender, EventArgs e)
     {
         _overlayTick.Tick();
+    }
+
+    private void OnLiveControlsMouseWheel(object? sender, MouseHookWheelEventArgs e)
+    {
+        if (e.Delta == 0)
+        {
+            return;
+        }
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            e.Handled = dispatcher.Invoke(() => TryHandleLiveControlMouseWheel(e.Point, e.Delta, Keyboard.Modifiers));
+            return;
+        }
+
+        e.Handled = TryHandleLiveControlMouseWheel(e.Point, e.Delta, Keyboard.Modifiers);
+    }
+
+    private bool TryHandleLiveControlMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
+    {
+        if (_disposed || delta == 0 || !IsLiveControlWheelModifiers(modifiers))
+        {
+            return false;
+        }
+
+        if (_pinnedLenses.HasLiveControlTargetAt(point))
+        {
+            return _pinnedLenses.TryAdjustZoomAt(point, delta, modifiers)
+                || (modifiers & ModifierKeys.Shift) != 0;
+        }
+
+        if (IsRectSelectionMode(_mode))
+        {
+            return false;
+        }
+
+        if (IsAnnotationMode(_mode))
+        {
+            return TryHandleAnnotationLiveControlMouseWheel(delta, modifiers);
+        }
+
+        var direction = Math.Sign(delta);
+        if (Settings.MagnifierEnabled)
+        {
+            if ((modifiers & ModifierKeys.Shift) != 0)
+            {
+                AdjustMagnifierRadius(direction * WheelFocusRadiusStep);
+            }
+            else
+            {
+                AdjustMagnifierZoom(direction * WheelFocusZoomStep);
+            }
+
+            return true;
+        }
+
+        if (_visualEffects.SpotlightEnabled)
+        {
+            if ((modifiers & ModifierKeys.Shift) != 0)
+            {
+                AdjustSpotlightRadius(direction * WheelFocusRadiusStep);
+            }
+            else
+            {
+                AdjustSpotlightOpacity(direction * WheelSpotlightOpacityStep);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryHandleAnnotationLiveControlMouseWheel(int delta, ModifierKeys modifiers)
+    {
+        if ((modifiers & ModifierKeys.Shift) != 0
+            || _annotations.HasTextInput
+            || !_annotations.HasSelection)
+        {
+            return false;
+        }
+
+        var direction = Math.Sign(delta);
+        var tool = CurrentTool;
+        if (tool == AnnotationTool.Text)
+        {
+            return _annotations.AdjustSelectedTextFontSize(direction * WheelAnnotationFontSizeStep);
+        }
+
+        if (IsThicknessLiveControlTool(tool))
+        {
+            return _annotations.AdjustSelectedThickness(direction * WheelAnnotationThicknessStep);
+        }
+
+        return false;
+    }
+
+    private void UpdateLiveControlsMouseHook()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (Settings.MagnifierEnabled || _visualEffects.SpotlightEnabled)
+        {
+            if (!_liveControlsMouseHook.Install())
+            {
+                AppLog.Error("Could not install low-level mouse hook for live controls.");
+            }
+
+            return;
+        }
+
+        _liveControlsMouseHook.Uninstall();
     }
 
     private void TryCompletePushToAnnotateExit()
@@ -1343,6 +1474,24 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private static bool IsVisualBoardMode(InteractionMode mode)
     {
         return mode is InteractionMode.ScreenBoard or InteractionMode.BlackScreen or InteractionMode.WhiteScreen;
+    }
+
+    private static bool IsLiveControlWheelModifiers(ModifierKeys modifiers)
+    {
+        return (modifiers & ModifierKeys.Control) != 0
+            && (modifiers & ~(ModifierKeys.Control | ModifierKeys.Shift)) == 0;
+    }
+
+    private static bool IsThicknessLiveControlTool(AnnotationTool tool)
+    {
+        return tool is AnnotationTool.Arrow
+            or AnnotationTool.Rectangle
+            or AnnotationTool.Ellipse
+            or AnnotationTool.Line
+            or AnnotationTool.Pencil
+            or AnnotationTool.Highlighter
+            or AnnotationTool.StepOval
+            or AnnotationTool.StepRect;
     }
 
     private double NowMs() => _clock.Elapsed.TotalMilliseconds;

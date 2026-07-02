@@ -93,7 +93,7 @@ internal sealed class PinnedLensHostForm : Form
 
     protected override void OnMouseWheel(MouseEventArgs e)
     {
-        if ((ModifierKeys & Keys.Control) == Keys.Control)
+        if ((ModifierKeys & (Keys.Control | Keys.Shift | Keys.Alt)) == Keys.Control)
         {
             _owner.AdjustZoom(e.Delta > 0 ? PinnedLensHostWindow.ZoomStep : -PinnedLensHostWindow.ZoomStep);
             return;
