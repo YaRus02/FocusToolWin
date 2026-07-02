@@ -14,6 +14,7 @@ internal sealed class TrayMenuItems
     public required ToolStripMenuItem CursorHighlightHoldModeItem { get; init; }
     public required ToolStripMenuItem CursorHighlightPulseItem { get; init; }
     public required ToolStripMenuItem SpotlightItem { get; init; }
+    public required ToolStripMenuItem RegionSpotlightMenuItem { get; init; }
     public required ToolStripMenuItem RegionSpotlightItem { get; init; }
     public required ToolStripMenuItem ClearRegionSpotlightsItem { get; init; }
     public required ToolStripMenuItem MagnifierItem { get; init; }

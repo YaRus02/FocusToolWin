@@ -466,44 +466,70 @@
                                 </GroupBox>
                             </StackPanel>
 
-                            <GroupBox Grid.Column="1" Header="Draw tools" Padding="10" Margin="4,0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="78" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
+                            <StackPanel Grid.Column="1" Margin="4,0">
+                                <GroupBox Header="Draw tools" Padding="10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="78" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                                    <TextBlock Grid.Row="0" Text="Pencil" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToolPencilBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="1" Text="Highlighter" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToolHighlighterBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="2" Text="Arrow" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToolArrowBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="3" Text="Line" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToolLineBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="4" Text="Rectangle" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToolRectangleBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="5" Text="Ellipse / Circle" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToolEllipseBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="6" Text="Text" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToolTextBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="7" Text="Step marker" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToolStepBox" Margin="8,3,0,3" />
-                                    <TextBlock Grid.Row="8" Text="Move selection" VerticalAlignment="Center" Margin="0,4" />
-                                    <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToolMoveBox" Margin="8,3,0,3" />
-                                </Grid>
-                            </GroupBox>
+                                        <TextBlock Grid.Row="0" Text="Pencil" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToolPencilBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="1" Text="Highlighter" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToolHighlighterBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="2" Text="Arrow" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToolArrowBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="3" Text="Line" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToolLineBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="4" Text="Rectangle" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToolRectangleBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="5" Text="Ellipse / Circle" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToolEllipseBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="6" Text="Text" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToolTextBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="7" Text="Step marker" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToolStepBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="8" Text="Move selection" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToolMoveBox" Margin="8,3,0,3" />
+                                    </Grid>
+                                </GroupBox>
+
+                                <GroupBox Header="App" Padding="10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="118" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="Timer" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToggleTimerBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="1" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="2" Text="Exit annotate" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="ExitAnnotateBox" Margin="8,3,0,3" />
+                                        <TextBlock Grid.Row="3" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
+                                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
+                                    </Grid>
+                                </GroupBox>
+                            </StackPanel>
 
                             <StackPanel Grid.Column="2" Margin="8,0,0,0">
                                 <GroupBox Header="Draw commands" Padding="10">
@@ -581,30 +607,6 @@
                                         <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToggleBlackScreenBox" Margin="8,3,0,3" />
                                         <TextBlock Grid.Row="4" Text="White board" VerticalAlignment="Center" Margin="0,4" />
                                         <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToggleWhiteScreenBox" Margin="8,3,0,3" />
-                                    </Grid>
-                                </GroupBox>
-
-                                <GroupBox Header="App" Padding="10">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="118" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-
-                                        <TextBlock Grid.Row="0" Text="Timer" VerticalAlignment="Center" Margin="0,4" />
-                                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToggleTimerBox" Margin="8,3,0,3" />
-                                        <TextBlock Grid.Row="1" Text="Toggle toolbar" VerticalAlignment="Center" Margin="0,4" />
-                                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToggleToolbarBox" Margin="8,3,0,3" />
-                                        <TextBlock Grid.Row="2" Text="Exit annotate" VerticalAlignment="Center" Margin="0,4" />
-                                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="ExitAnnotateBox" Margin="8,3,0,3" />
-                                        <TextBlock Grid.Row="3" Text="Exit FocusTool" VerticalAlignment="Center" Margin="0,4" />
-                                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="ExitAppBox" Margin="8,3,0,3" />
                                     </Grid>
                                 </GroupBox>
                             </StackPanel>

@@ -37,7 +37,8 @@ internal sealed class TrayMenuBuilder
         var cursorHighlightHoldModeItem = CreateCheckedItem("Hold key / mouse button", _ => _controller.SetCursorHighlightActivationMode(LaserActivationMode.Hold));
         var cursorHighlightPulseItem = CreateCheckedItem("Click pulse", item => _controller.SetClickPulseEnabled(item.Checked));
         var spotlightItem = CreateCheckedItem("Spotlight", item => _controller.SetSpotlightEnabled(item.Checked));
-        var regionSpotlightItem = CreateItem("Region Spotlight", _controller.ToggleRegionSpotlight);
+        var regionSpotlightMenuItem = new ToolStripMenuItem("Region Spotlight");
+        var regionSpotlightItem = CreateItem("Select area", _controller.ToggleRegionSpotlight);
         var clearRegionSpotlightsItem = new ToolStripMenuItem("Clear region spotlights", null, (_, _) => _controller.ClearRegionSpotlights());
         var magnifierItem = CreateCheckedItem("Zoom", item => _controller.SetMagnifierEnabled(item.Checked));
         var pinnedLensItem = CreateItem("New pin", _controller.TogglePinnedLens);
@@ -99,6 +100,9 @@ internal sealed class TrayMenuBuilder
         cursorHighlightMenu.DropDownItems.Add(highlightPresets);
         cursorHighlightMenu.DropDownItems.Add(cursorHighlightPulseItem);
 
+        regionSpotlightMenuItem.DropDownItems.Add(regionSpotlightItem);
+        regionSpotlightMenuItem.DropDownItems.Add(clearRegionSpotlightsItem);
+
         var drawMenu = new ToolStripMenuItem("Draw");
         drawMenu.DropDownItems.Add(modeItem);
         drawMenu.DropDownItems.Add(new ToolStripSeparator());
@@ -144,8 +148,7 @@ internal sealed class TrayMenuBuilder
         contextMenu.Items.Add(laserMenu);
         contextMenu.Items.Add(cursorHighlightMenu);
         contextMenu.Items.Add(spotlightItem);
-        contextMenu.Items.Add(regionSpotlightItem);
-        contextMenu.Items.Add(clearRegionSpotlightsItem);
+        contextMenu.Items.Add(regionSpotlightMenuItem);
         contextMenu.Items.Add(magnifierItem);
         contextMenu.Items.Add(pinnedLensMenu);
         contextMenu.Items.Add(new ToolStripSeparator());
@@ -173,6 +176,7 @@ internal sealed class TrayMenuBuilder
             CursorHighlightHoldModeItem = cursorHighlightHoldModeItem,
             CursorHighlightPulseItem = cursorHighlightPulseItem,
             SpotlightItem = spotlightItem,
+            RegionSpotlightMenuItem = regionSpotlightMenuItem,
             RegionSpotlightItem = regionSpotlightItem,
             ClearRegionSpotlightsItem = clearRegionSpotlightsItem,
             MagnifierItem = magnifierItem,

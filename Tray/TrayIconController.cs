@@ -20,6 +20,7 @@ internal sealed class TrayIconController : IDisposable
     private readonly ToolStripMenuItem _cursorHighlightHoldModeItem;
     private readonly ToolStripMenuItem _cursorHighlightPulseItem;
     private readonly ToolStripMenuItem _spotlightItem;
+    private readonly ToolStripMenuItem _regionSpotlightMenuItem;
     private readonly ToolStripMenuItem _regionSpotlightItem;
     private readonly ToolStripMenuItem _clearRegionSpotlightsItem;
     private readonly ToolStripMenuItem _magnifierItem;
@@ -65,6 +66,7 @@ internal sealed class TrayIconController : IDisposable
         _cursorHighlightHoldModeItem = menuItems.CursorHighlightHoldModeItem;
         _cursorHighlightPulseItem = menuItems.CursorHighlightPulseItem;
         _spotlightItem = menuItems.SpotlightItem;
+        _regionSpotlightMenuItem = menuItems.RegionSpotlightMenuItem;
         _regionSpotlightItem = menuItems.RegionSpotlightItem;
         _clearRegionSpotlightsItem = menuItems.ClearRegionSpotlightsItem;
         _magnifierItem = menuItems.MagnifierItem;
@@ -163,12 +165,14 @@ internal sealed class TrayIconController : IDisposable
 
         _spotlightItem.Checked = _controller.SpotlightEnabled;
         _spotlightItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleSpotlight;
-        _regionSpotlightItem.Checked = _controller.RegionSpotlightSelectionActive || _controller.RegionSpotlightActive;
-        _regionSpotlightItem.Text = _controller.RegionSpotlightSelectionActive
+        _regionSpotlightMenuItem.Checked = _controller.RegionSpotlightSelectionActive || _controller.RegionSpotlightActive;
+        _regionSpotlightMenuItem.Text = _controller.RegionSpotlightSelectionActive
             ? "Region Spotlight: select area"
             : _controller.RegionSpotlightCount > 0
                 ? $"Region Spotlight ({_controller.RegionSpotlightCount} active)"
                 : "Region Spotlight";
+        _regionSpotlightItem.Checked = _controller.RegionSpotlightSelectionActive;
+        _regionSpotlightItem.Text = _controller.RegionSpotlightSelectionActive ? "Selecting area" : "Select area";
         _regionSpotlightItem.ShortcutKeyDisplayString = _controller.RegionSpotlightShortcut;
         _clearRegionSpotlightsItem.Enabled = _controller.RegionSpotlightActive;
         _clearRegionSpotlightsItem.ShortcutKeyDisplayString = _controller.ClearRegionSpotlightsShortcut;
