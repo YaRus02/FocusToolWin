@@ -1,5 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using System.Windows.Media;
+using AnnotationToolEnum = FocusTool.Win.Models.AnnotationTool;
 using MediaColor = System.Windows.Media.Color;
 
 namespace FocusTool.Win.Models;
@@ -67,6 +68,7 @@ public sealed class AppSettings
     public string AnnotationColor { get; set; } = "#FFFF2020";
     public List<string> AnnotationColorPresets { get; set; } = [.. DefaultColorSlots];
     public double AnnotationThickness { get; set; } = 4;
+    public Dictionary<string, double> AnnotationToolThicknesses { get; set; } = [];
     public double AnnotationFontSize { get; set; } = 28;
     public string AnnotationTool { get; set; } = "Pencil";
     public bool FadingAnnotationsEnabled { get; set; }
@@ -108,6 +110,7 @@ public sealed class AppSettings
         AnnotationColor = AnnotationColor,
         AnnotationColorPresets = [.. AnnotationColorPresets],
         AnnotationThickness = AnnotationThickness,
+        AnnotationToolThicknesses = AnnotationToolThicknesses is null ? [] : new Dictionary<string, double>(AnnotationToolThicknesses),
         AnnotationFontSize = AnnotationFontSize,
         AnnotationTool = AnnotationTool,
         FadingAnnotationsEnabled = FadingAnnotationsEnabled,
@@ -150,6 +153,7 @@ public sealed class AppSettings
         AnnotationColor = other.AnnotationColor;
         AnnotationColorPresets = [.. other.AnnotationColorPresets];
         AnnotationThickness = other.AnnotationThickness;
+        AnnotationToolThicknesses = other.AnnotationToolThicknesses is null ? [] : new Dictionary<string, double>(other.AnnotationToolThicknesses);
         AnnotationFontSize = other.AnnotationFontSize;
         AnnotationTool = other.AnnotationTool;
         FadingAnnotationsEnabled = other.FadingAnnotationsEnabled;
@@ -179,10 +183,12 @@ public sealed class AppSettings
         }
         EnsureColorInPresets(AnnotationColor, AnnotationColorPresets, fallbackIndex: 4);
 
-        if (!Enum.TryParse<AnnotationTool>(AnnotationTool, true, out _))
+        if (!Enum.TryParse<AnnotationToolEnum>(AnnotationTool, true, out var annotationTool))
         {
-            AnnotationTool = FocusTool.Win.Models.AnnotationTool.Pencil.ToString();
+            annotationTool = AnnotationToolEnum.Pencil;
         }
+
+        AnnotationTool = annotationTool.ToString();
 
         if (!Enum.TryParse<LaserActivationMode>(LaserActivationMode, true, out var laserActivationMode))
         {
@@ -238,7 +244,13 @@ public sealed class AppSettings
         }
 
         RegionMaskStyle = regionMaskStyle.ToString();
-        AnnotationThickness = Math.Clamp(AnnotationThickness, 1, 32);
+        AnnotationThickness = NormalizeThickness(AnnotationThickness, fallback: 4);
+        NormalizeAnnotationToolThicknesses(AnnotationThickness);
+        if (UsesAnnotationThickness(annotationTool))
+        {
+            AnnotationThickness = GetAnnotationThickness(annotationTool);
+        }
+
         AnnotationFontSize = Math.Clamp(AnnotationFontSize, 8, 96);
         FadingAnnotationVisibleMs = Math.Clamp(FadingAnnotationVisibleMs, 500, 60000);
         FadingAnnotationFadeMs = Math.Clamp(FadingAnnotationFadeMs, 100, 10000);
@@ -312,16 +324,58 @@ public sealed class AppSettings
         return Colors.Red;
     }
 
-    internal AnnotationTool GetAnnotationTool()
+    internal AnnotationToolEnum GetAnnotationTool()
     {
-        return Enum.TryParse<AnnotationTool>(AnnotationTool, true, out var tool)
+        return Enum.TryParse<AnnotationToolEnum>(AnnotationTool, true, out var tool)
             ? tool
-            : FocusTool.Win.Models.AnnotationTool.Pencil;
+            : AnnotationToolEnum.Pencil;
     }
 
-    internal void SetAnnotationTool(AnnotationTool tool)
+    internal void SetAnnotationTool(AnnotationToolEnum tool)
     {
         AnnotationTool = tool.ToString();
+        if (UsesAnnotationThickness(tool))
+        {
+            AnnotationThickness = GetAnnotationThickness(tool);
+        }
+    }
+
+    internal double GetAnnotationThickness(AnnotationToolEnum tool)
+    {
+        var fallback = NormalizeThickness(AnnotationThickness, fallback: 4);
+        if (!UsesAnnotationThickness(tool))
+        {
+            return fallback;
+        }
+
+        return AnnotationToolThicknesses is not null
+            && AnnotationToolThicknesses.TryGetValue(AnnotationThicknessKey(tool), out var value)
+            ? NormalizeThickness(value, fallback)
+            : fallback;
+    }
+
+    internal void SetAnnotationThicknessForTool(AnnotationToolEnum tool, double thickness)
+    {
+        var clamped = NormalizeThickness(thickness, fallback: GetAnnotationThickness(tool));
+        if (UsesAnnotationThickness(tool))
+        {
+            AnnotationToolThicknesses ??= [];
+            AnnotationToolThicknesses[AnnotationThicknessKey(tool)] = clamped;
+        }
+
+        AnnotationThickness = clamped;
+    }
+
+    internal static bool UsesAnnotationThickness(AnnotationToolEnum tool)
+    {
+        return tool is AnnotationToolEnum.Arrow
+            or AnnotationToolEnum.Rectangle
+            or AnnotationToolEnum.Ellipse
+            or AnnotationToolEnum.Line
+            or AnnotationToolEnum.Pencil
+            or AnnotationToolEnum.Highlighter
+            or AnnotationToolEnum.StepOval
+            or AnnotationToolEnum.StepRect;
     }
 
     internal LaserActivationMode GetLaserActivationMode()
@@ -356,6 +410,40 @@ public sealed class AppSettings
         }
 
         return ToMediaColor();
+    }
+
+    private void NormalizeAnnotationToolThicknesses(double fallback)
+    {
+        AnnotationToolThicknesses ??= [];
+        foreach (var tool in AnnotationThicknessTools)
+        {
+            var key = AnnotationThicknessKey(tool);
+            var value = AnnotationToolThicknesses.TryGetValue(key, out var stored)
+                ? stored
+                : fallback;
+            AnnotationToolThicknesses[key] = NormalizeThickness(value, fallback);
+        }
+    }
+
+    private static readonly AnnotationToolEnum[] AnnotationThicknessTools =
+    [
+        AnnotationToolEnum.Arrow,
+        AnnotationToolEnum.Rectangle,
+        AnnotationToolEnum.Ellipse,
+        AnnotationToolEnum.Line,
+        AnnotationToolEnum.Pencil,
+        AnnotationToolEnum.Highlighter,
+        AnnotationToolEnum.StepOval,
+        AnnotationToolEnum.StepRect
+    ];
+
+    private static string AnnotationThicknessKey(AnnotationToolEnum tool) => tool.ToString();
+
+    private static double NormalizeThickness(double value, double fallback)
+    {
+        return double.IsFinite(value)
+            ? AnnotationGeometry.ClampThickness(value)
+            : AnnotationGeometry.ClampThickness(fallback);
     }
 
     public static bool TryParseColor(string value, out MediaColor color)

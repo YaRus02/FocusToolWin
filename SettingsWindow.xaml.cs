@@ -254,7 +254,7 @@ public partial class SettingsWindow : Window
         updated.FadingAnnotationsEnabled = FadingAnnotationsCheckBox.IsChecked == true;
         updated.FadingAnnotationVisibleMs = (int)Math.Round(FadingAnnotationVisibleSlider.Value * 1000);
         updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
-        updated.AnnotationThickness = AnnotationThicknessSlider.Value;
+        updated.SetAnnotationThicknessForTool(updated.GetAnnotationTool(), AnnotationThicknessSlider.Value);
         updated.AnnotationFontSize = AnnotationFontSizeSlider.Value;
 
         if (!_shortcuts.TryRead(updated))

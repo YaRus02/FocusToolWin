@@ -163,7 +163,12 @@ internal sealed class SettingsCommandController
 
     public void AdjustAnnotationThickness(double delta)
     {
-        Update(updated => updated.AnnotationThickness += delta);
+        var tool = _settingsProvider().GetAnnotationTool();
+        if (AppSettings.UsesAnnotationThickness(tool))
+        {
+            Update(updated => updated.SetAnnotationThicknessForTool(tool, updated.GetAnnotationThickness(tool) + delta));
+        }
+
         _annotations.AdjustSelectedThickness(delta);
     }
 
