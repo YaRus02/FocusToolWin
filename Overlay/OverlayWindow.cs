@@ -37,6 +37,7 @@ internal sealed class OverlayWindow : Window
         Func<int> regionMaskSelectionProvider,
         Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
         Func<int> spotlightRegionSelectionProvider,
+        Func<LiveAdjustmentHudFrame?> liveAdjustmentHudProvider,
         IOverlayInputHandler inputHandler)
     {
         _screen = screen;
@@ -56,6 +57,7 @@ internal sealed class OverlayWindow : Window
             regionMaskSelectionProvider,
             spotlightRegionProvider,
             spotlightRegionSelectionProvider,
+            liveAdjustmentHudProvider,
             new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom));
 
         Title = "FocusTool";
@@ -259,7 +261,15 @@ internal sealed class OverlayWindow : Window
             96 * dpi.DpiScaleX,
             96 * dpi.DpiScaleY,
             PixelFormats.Pbgra32);
-        bitmap.Render(_surface);
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var target = new System.Windows.Rect(0, 0, _surface.ActualWidth, _surface.ActualHeight);
+            dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, target);
+            _surface.RenderSnapshot(dc, OverlayRenderOptions.CaptureStage);
+        }
+
+        bitmap.Render(visual);
         bitmap.Freeze();
         return bitmap;
     }

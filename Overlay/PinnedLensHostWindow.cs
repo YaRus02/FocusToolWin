@@ -20,6 +20,7 @@ internal sealed class PinnedLensHostWindow : IDisposable
     private readonly ScreenRect _sourceRect;
     private readonly double _maximumZoom;
     private readonly Func<PinnedLensHostWindow, Func<bool>, Task<bool>> _freezeFrameCaptureCoordinator;
+    private readonly Action<ScreenPoint, double> _showZoomHud;
     private PinnedLensHostForm? _host;
     private PinnedLensTransparentChildNativeWindow? _magnifierSubclass;
     private MagnificationRuntime? _runtime;
@@ -38,10 +39,12 @@ internal sealed class PinnedLensHostWindow : IDisposable
         ScreenRect sourceRect,
         AppSettings settings,
         Action? closeAll,
-        Func<PinnedLensHostWindow, Func<bool>, Task<bool>> freezeFrameCaptureCoordinator)
+        Func<PinnedLensHostWindow, Func<bool>, Task<bool>> freezeFrameCaptureCoordinator,
+        Action<ScreenPoint, double> showZoomHud)
     {
         CloseAllRequested = closeAll;
         _freezeFrameCaptureCoordinator = freezeFrameCaptureCoordinator;
+        _showZoomHud = showZoomHud;
         _sourceRect = NormalizeSourceRect(sourceRect);
         _runtime = MagnificationRuntime.Acquire("pinned lens");
         IsAvailable = _runtime is not null;
@@ -224,6 +227,12 @@ internal sealed class PinnedLensHostWindow : IDisposable
     public void AdjustZoom(double delta)
     {
         SetZoom(_zoom + delta);
+    }
+
+    public void AdjustZoomFromWheel(double delta, ScreenPoint anchor)
+    {
+        AdjustZoom(delta);
+        _showZoomHud(anchor, _zoom);
     }
 
     public void SetZoom(double zoom)

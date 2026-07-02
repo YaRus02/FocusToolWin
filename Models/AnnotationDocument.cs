@@ -468,6 +468,16 @@ internal sealed class AnnotationDocument
         return true;
     }
 
+    public bool TryGetSelectedTextFontSizeSummary(out double fontSize, out bool mixedValue, out AnnotationTool? singleTool)
+    {
+        return TryGetSelectedAdjustmentSummary(
+            shape => shape.Tool == AnnotationTool.Text,
+            shape => shape.FontSize,
+            out fontSize,
+            out mixedValue,
+            out singleTool);
+    }
+
     public bool AdjustSelectedThickness(double delta)
     {
         if (Math.Abs(delta) < 0.001)
@@ -498,6 +508,16 @@ internal sealed class AnnotationDocument
         RefreshSelectionBoundsCore();
         OnChanged();
         return true;
+    }
+
+    public bool TryGetSelectedThicknessSummary(out double thickness, out bool mixedValue, out AnnotationTool? singleTool)
+    {
+        return TryGetSelectedAdjustmentSummary(
+            shape => shape.Tool is not AnnotationTool.Text and not AnnotationTool.Image,
+            shape => shape.Thickness,
+            out thickness,
+            out mixedValue,
+            out singleTool);
     }
 
     public bool DeleteSelection()
@@ -897,6 +917,38 @@ internal sealed class AnnotationDocument
         return _selectedIndices
             .Where(index => index >= 0 && index < _shapes.Count)
             .Distinct();
+    }
+
+    private bool TryGetSelectedAdjustmentSummary(
+        Func<AnnotationShape, bool> predicate,
+        Func<AnnotationShape, double> valueSelector,
+        out double value,
+        out bool mixedValue,
+        out AnnotationTool? singleTool)
+    {
+        var shapes = SelectedShapeIndices()
+            .Select(index => _shapes[index])
+            .Where(predicate)
+            .ToList();
+
+        value = 0;
+        mixedValue = false;
+        singleTool = null;
+        if (shapes.Count == 0)
+        {
+            return false;
+        }
+
+        var firstValue = valueSelector(shapes[0]);
+        value = firstValue;
+        mixedValue = shapes.Any(shape => Math.Abs(valueSelector(shape) - firstValue) >= 0.001);
+        var tool = shapes[0].Tool;
+        if (shapes.All(shape => shape.Tool == tool))
+        {
+            singleTool = tool;
+        }
+
+        return true;
     }
 
     private void Restore(IEnumerable<AnnotationShape> snapshot, double nowMs)

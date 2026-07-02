@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -43,6 +44,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly CaptureController _capture;
     private readonly BoardController _boards;
     private readonly PinnedLensController _pinnedLenses;
+    private readonly LiveAdjustmentHudController _liveAdjustmentHud = new();
     private readonly MagnifierController _magnifier;
     private readonly GlobalHotKeyController _hotKeys;
     private readonly MouseHook _liveControlsMouseHook = new();
@@ -186,6 +188,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             CaptureController.WaitForScreenRefreshAsync,
             () => _overlayManager?.ReassertTopmost(),
             (title, text) => _trayIcon?.ShowMessage(title, text),
+            ShowPinnedLensZoomHud,
             () => StateChanged?.Invoke(this, EventArgs.Empty));
         _toolbar = new OverlayToolbarController(
             this,
@@ -372,7 +375,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public void Start()
     {
-        _overlayManager = new OverlayManager(_pointerVisuals.Trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, _pointerVisuals.GetCursorHighlightFrame, () => _boards.Frame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
+        _overlayManager = new OverlayManager(_pointerVisuals.Trail, _annotations, () => Settings, () => _mode, NowMs, GetSpotlightPoint, _pointerVisuals.GetCursorHighlightFrame, () => _boards.Frame, GetRectOverlayVisual, () => _regionMasks.Masks, () => _regionMasks.SelectedMaskId, () => _regionSpotlights.Regions, () => _regionSpotlights.SelectedIndex, GetLiveAdjustmentHudFrame, this, ReassertPinnedLensTopmost, ReassertFloatingChromeTopmost);
         _captureStage = new CaptureStageController(CaptureOverlaySnapshot);
         _trayIcon = new TrayIconController(this);
         _timerController = new TimerController(NowMs, () => Settings.Timer, ApplyTimerDefaults, AddTimerLabelToHistory, OnTimerActiveCountChanged);
@@ -1101,6 +1104,40 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private void OnTimerTick(object? sender, EventArgs e)
     {
         _overlayTick.Tick();
+        UpdateLiveAdjustmentHud();
+    }
+
+    private LiveAdjustmentHudFrame? GetLiveAdjustmentHudFrame()
+    {
+        return _liveAdjustmentHud.GetFrame(NowMs());
+    }
+
+    private void ShowLiveAdjustmentHud(ScreenPoint point, string text)
+    {
+        _liveAdjustmentHud.Show(text, point, NowMs());
+        _timer.Interval = FadeInterval;
+        _overlayManager?.Invalidate();
+    }
+
+    private void ShowPinnedLensZoomHud(ScreenPoint point, double zoom)
+    {
+        ShowLiveAdjustmentHud(point, $"Lens {FormatZoom(zoom)}");
+    }
+
+    private void UpdateLiveAdjustmentHud()
+    {
+        var nowMs = NowMs();
+        if (_liveAdjustmentHud.IsVisible(nowMs))
+        {
+            _timer.Interval = FadeInterval;
+            _overlayManager?.Invalidate();
+            return;
+        }
+
+        if (_liveAdjustmentHud.ClearExpired(nowMs))
+        {
+            _overlayManager?.Invalidate();
+        }
     }
 
     private void OnLiveControlsMouseWheel(object? sender, MouseHookWheelEventArgs e)
@@ -1129,8 +1166,13 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (_pinnedLenses.HasLiveControlTargetAt(point))
         {
-            return _pinnedLenses.TryAdjustZoomAt(point, delta, modifiers)
-                || (modifiers & ModifierKeys.Shift) != 0;
+            if (_pinnedLenses.TryAdjustZoomAt(point, delta, modifiers, out var pinnedLensZoom))
+            {
+                ShowPinnedLensZoomHud(point, pinnedLensZoom);
+                return true;
+            }
+
+            return (modifiers & ModifierKeys.Shift) != 0;
         }
 
         if (IsRectSelectionMode(_mode))
@@ -1140,7 +1182,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         if (IsAnnotationMode(_mode))
         {
-            return TryHandleAnnotationLiveControlMouseWheel(delta, modifiers);
+            return TryHandleAnnotationLiveControlMouseWheel(point, delta, modifiers);
         }
 
         var direction = Math.Sign(delta);
@@ -1149,10 +1191,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if ((modifiers & ModifierKeys.Shift) != 0)
             {
                 AdjustMagnifierRadius(direction * WheelFocusRadiusStep);
+                ShowLiveAdjustmentHud(point, $"Radius {FormatPixels(Settings.MagnifierRadius)}");
             }
             else
             {
                 AdjustMagnifierZoom(direction * WheelFocusZoomStep);
+                ShowLiveAdjustmentHud(point, $"Zoom {FormatZoom(Settings.MagnifierZoom)}");
             }
 
             return true;
@@ -1163,10 +1207,12 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             if ((modifiers & ModifierKeys.Shift) != 0)
             {
                 AdjustSpotlightRadius(direction * WheelFocusRadiusStep);
+                ShowLiveAdjustmentHud(point, $"Radius {FormatPixels(Settings.SpotlightRadius)}");
             }
             else
             {
                 AdjustSpotlightOpacity(direction * WheelSpotlightOpacityStep);
+                ShowLiveAdjustmentHud(point, $"Dim {FormatPercent(Settings.SpotlightOpacity)}");
             }
 
             return true;
@@ -1175,7 +1221,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         return false;
     }
 
-    private bool TryHandleAnnotationLiveControlMouseWheel(int delta, ModifierKeys modifiers)
+    private bool TryHandleAnnotationLiveControlMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
     {
         if ((modifiers & ModifierKeys.Shift) != 0
             || _annotations.HasTextInput
@@ -1188,15 +1234,98 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         var tool = CurrentTool;
         if (tool == AnnotationTool.Text)
         {
-            return _annotations.AdjustSelectedTextFontSize(direction * WheelAnnotationFontSizeStep);
+            var amount = direction * WheelAnnotationFontSizeStep;
+            if (!_annotations.AdjustSelectedTextFontSize(amount))
+            {
+                return false;
+            }
+
+            ShowLiveAdjustmentHud(point, FormatAnnotationFontSizeHud(amount));
+            return true;
         }
 
         if (IsThicknessLiveControlTool(tool))
         {
-            return _annotations.AdjustSelectedThickness(direction * WheelAnnotationThicknessStep);
+            var amount = direction * WheelAnnotationThicknessStep;
+            if (!_annotations.AdjustSelectedThickness(amount))
+            {
+                return false;
+            }
+
+            ShowLiveAdjustmentHud(point, FormatAnnotationThicknessHud(tool, amount));
+            return true;
         }
 
         return false;
+    }
+
+    private string FormatAnnotationFontSizeHud(double delta)
+    {
+        if (!_annotations.TryGetSelectedTextFontSizeSummary(out var fontSize, out var mixedValue, out var singleTool))
+        {
+            return $"Text {FormatSignedPixels(delta)}";
+        }
+
+        var label = FormatAnnotationHudLabel(singleTool, AnnotationTool.Text);
+        return mixedValue
+            ? $"{label} {FormatSignedPixels(delta)}"
+            : $"{label} {FormatPixels(fontSize)}";
+    }
+
+    private string FormatAnnotationThicknessHud(AnnotationTool fallbackTool, double delta)
+    {
+        if (!_annotations.TryGetSelectedThicknessSummary(out var thickness, out var mixedValue, out var singleTool))
+        {
+            return $"{FormatAnnotationHudLabel(null, fallbackTool)} {FormatSignedPixels(delta)}";
+        }
+
+        var label = FormatAnnotationHudLabel(singleTool, fallbackTool);
+        return mixedValue
+            ? $"{label} {FormatSignedPixels(delta)}"
+            : $"{label} {FormatPixels(thickness)}";
+    }
+
+    private static string FormatAnnotationHudLabel(AnnotationTool? selectedTool, AnnotationTool fallbackTool)
+    {
+        if (selectedTool is null)
+        {
+            return "Selection";
+        }
+
+        var tool = selectedTool.Value;
+        return tool switch
+        {
+            AnnotationTool.Pencil => "Pencil",
+            AnnotationTool.Highlighter => "Highlighter",
+            AnnotationTool.Arrow => "Arrow",
+            AnnotationTool.Line => "Line",
+            AnnotationTool.Rectangle => "Rectangle",
+            AnnotationTool.Ellipse => "Ellipse",
+            AnnotationTool.Text => "Text",
+            AnnotationTool.StepOval or AnnotationTool.StepRect => "Step",
+            _ => fallbackTool.ToString()
+        };
+    }
+
+    private static string FormatZoom(double zoom)
+    {
+        return zoom.ToString("0.##", CultureInfo.InvariantCulture) + "x";
+    }
+
+    private static string FormatPixels(double value)
+    {
+        return value.ToString("0", CultureInfo.InvariantCulture) + " px";
+    }
+
+    private static string FormatSignedPixels(double value)
+    {
+        var sign = value > 0 ? "+" : string.Empty;
+        return sign + value.ToString("0", CultureInfo.InvariantCulture) + " px";
+    }
+
+    private static string FormatPercent(double value)
+    {
+        return (value * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
     }
 
     private void UpdateLiveControlsMouseHook()

@@ -16,6 +16,7 @@ internal sealed class PinnedLensController : IDisposable
     private readonly Func<Task> _waitForScreenRefreshAsync;
     private readonly Action _reassertOverlayTopmost;
     private readonly Action<string, string> _showMessage;
+    private readonly Action<ScreenPoint, double> _showZoomHud;
     private readonly Action _stateChanged;
     private readonly KeyboardHook _deleteKeyHook = new();
     private readonly MouseHook _selectionMouseHook = new();
@@ -28,6 +29,7 @@ internal sealed class PinnedLensController : IDisposable
         Func<Task> waitForScreenRefreshAsync,
         Action reassertOverlayTopmost,
         Action<string, string> showMessage,
+        Action<ScreenPoint, double> showZoomHud,
         Action stateChanged)
     {
         _settingsProvider = settingsProvider;
@@ -36,6 +38,7 @@ internal sealed class PinnedLensController : IDisposable
         _waitForScreenRefreshAsync = waitForScreenRefreshAsync;
         _reassertOverlayTopmost = reassertOverlayTopmost;
         _showMessage = showMessage;
+        _showZoomHud = showZoomHud;
         _stateChanged = stateChanged;
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Render);
         _refreshTimer.Tick += OnRefreshTick;
@@ -50,7 +53,7 @@ internal sealed class PinnedLensController : IDisposable
 
     public void Open(ScreenRect sourceRect)
     {
-        var host = new PinnedLensHostWindow(sourceRect, _settingsProvider(), CloseAll, CaptureFreezeFrameAsync);
+        var host = new PinnedLensHostWindow(sourceRect, _settingsProvider(), CloseAll, CaptureFreezeFrameAsync, _showZoomHud);
         if (!host.IsAvailable)
         {
             host.Dispose();
@@ -184,8 +187,9 @@ internal sealed class PinnedLensController : IDisposable
         return true;
     }
 
-    public bool TryAdjustZoomAt(ScreenPoint point, int delta, ModifierKeys modifiers)
+    public bool TryAdjustZoomAt(ScreenPoint point, int delta, ModifierKeys modifiers, out double zoom)
     {
+        zoom = 0;
         if (delta == 0
             || (modifiers & ModifierKeys.Control) == 0
             || (modifiers & ~ModifierKeys.Control) != 0)
@@ -200,6 +204,7 @@ internal sealed class PinnedLensController : IDisposable
         }
 
         target.AdjustZoom(Math.Sign(delta) * PinnedLensHostWindow.ZoomStep);
+        zoom = target.Zoom;
         SelectHost(target);
         return true;
     }

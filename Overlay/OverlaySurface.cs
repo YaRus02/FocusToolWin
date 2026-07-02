@@ -24,6 +24,7 @@ internal sealed class OverlaySurface : FrameworkElement
     private readonly Func<int> _regionMaskSelectionProvider;
     private readonly Func<IReadOnlyList<ScreenRect>> _spotlightRegionProvider;
     private readonly Func<int> _spotlightRegionSelectionProvider;
+    private readonly Func<LiveAdjustmentHudFrame?> _liveAdjustmentHudProvider;
     private readonly ScreenRect _screenBounds;
     private bool _annotationInputEnabled;
     // Single-slot cache for the spotlight dim mask: the Exclude boolean op is
@@ -37,6 +38,7 @@ internal sealed class OverlaySurface : FrameworkElement
     private readonly RegionSpotlightRenderer _regionSpotlightRenderer;
     private readonly CursorEffectsRenderer _cursorEffectsRenderer;
     private readonly AnnotationRenderer _annotationRenderer;
+    private readonly LiveAdjustmentHudRenderer _liveAdjustmentHudRenderer;
 
     public OverlaySurface(
         TrailModel trailModel,
@@ -52,6 +54,7 @@ internal sealed class OverlaySurface : FrameworkElement
         Func<int> regionMaskSelectionProvider,
         Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
         Func<int> spotlightRegionSelectionProvider,
+        Func<LiveAdjustmentHudFrame?> liveAdjustmentHudProvider,
         ScreenRect screenBounds)
     {
         _trailModel = trailModel;
@@ -67,6 +70,7 @@ internal sealed class OverlaySurface : FrameworkElement
         _regionMaskSelectionProvider = regionMaskSelectionProvider;
         _spotlightRegionProvider = spotlightRegionProvider;
         _spotlightRegionSelectionProvider = spotlightRegionSelectionProvider;
+        _liveAdjustmentHudProvider = liveAdjustmentHudProvider;
         _screenBounds = screenBounds;
         _laserTrailRenderer = new LaserTrailRenderer(
             _trailModel,
@@ -112,6 +116,11 @@ internal sealed class OverlaySurface : FrameworkElement
             CreatePen,
             GetFormattedText,
             RegionMaskHandleSize);
+        _liveAdjustmentHudRenderer = new LiveAdjustmentHudRenderer(
+            ToLocal,
+            GetFormattedText,
+            GetBrush,
+            CreatePen);
         _annotations.Changed += OnAnnotationsChanged;
         SnapsToDevicePixels = false;
         Focusable = false;
@@ -236,6 +245,10 @@ internal sealed class OverlaySurface : FrameworkElement
             DrawAnnotateBorder(drawingContext);
         }
 
+        if (!options.SuppressLiveAdjustmentHud)
+        {
+            DrawLiveAdjustmentHud(drawingContext);
+        }
     }
 
     private void DrawInputCatcher(DrawingContext drawingContext)
@@ -273,6 +286,21 @@ internal sealed class OverlaySurface : FrameworkElement
     private void DrawAnnotations(DrawingContext drawingContext)
     {
         _annotationRenderer.Draw(drawingContext);
+    }
+
+    private void DrawLiveAdjustmentHud(DrawingContext drawingContext)
+    {
+        if (_liveAdjustmentHudProvider() is not { } frame)
+        {
+            return;
+        }
+
+        _liveAdjustmentHudRenderer.Draw(
+            drawingContext,
+            frame,
+            _screenBounds,
+            ActualWidth,
+            ActualHeight);
     }
 
     // The dashed selection outline is identical every frame, so build it once and

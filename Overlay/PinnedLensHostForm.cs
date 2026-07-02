@@ -95,7 +95,10 @@ internal sealed class PinnedLensHostForm : Form
     {
         if ((ModifierKeys & (Keys.Control | Keys.Shift | Keys.Alt)) == Keys.Control)
         {
-            _owner.AdjustZoom(e.Delta > 0 ? PinnedLensHostWindow.ZoomStep : -PinnedLensHostWindow.ZoomStep);
+            var point = PointToScreen(e.Location);
+            _owner.AdjustZoomFromWheel(
+                e.Delta > 0 ? PinnedLensHostWindow.ZoomStep : -PinnedLensHostWindow.ZoomStep,
+                new ScreenPoint(point.X, point.Y));
             return;
         }
 

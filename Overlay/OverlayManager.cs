@@ -21,6 +21,7 @@ internal sealed class OverlayManager : IDisposable
     private readonly Func<int> _regionMaskSelectionProvider;
     private readonly Func<IReadOnlyList<ScreenRect>> _spotlightRegionProvider;
     private readonly Func<int> _spotlightRegionSelectionProvider;
+    private readonly Func<LiveAdjustmentHudFrame?> _liveAdjustmentHudProvider;
     private readonly IOverlayInputHandler _inputHandler;
     private readonly Action? _beforeTopmostReassert;
     private readonly Action? _afterTopmostReassert;
@@ -43,6 +44,7 @@ internal sealed class OverlayManager : IDisposable
         Func<int> regionMaskSelectionProvider,
         Func<IReadOnlyList<ScreenRect>> spotlightRegionProvider,
         Func<int> spotlightRegionSelectionProvider,
+        Func<LiveAdjustmentHudFrame?> liveAdjustmentHudProvider,
         IOverlayInputHandler inputHandler,
         Action? beforeTopmostReassert = null,
         Action? afterTopmostReassert = null)
@@ -60,6 +62,7 @@ internal sealed class OverlayManager : IDisposable
         _regionMaskSelectionProvider = regionMaskSelectionProvider;
         _spotlightRegionProvider = spotlightRegionProvider;
         _spotlightRegionSelectionProvider = spotlightRegionSelectionProvider;
+        _liveAdjustmentHudProvider = liveAdjustmentHudProvider;
         _inputHandler = inputHandler;
         _beforeTopmostReassert = beforeTopmostReassert;
         _afterTopmostReassert = afterTopmostReassert;
@@ -308,7 +311,23 @@ internal sealed class OverlayManager : IDisposable
 
         foreach (var screen in Screen.AllScreens)
         {
-            _windows.Add(new OverlayWindow(screen, _trailModel, _annotations, _settingsProvider, _modeProvider, _clockProvider, _spotlightProvider, _cursorHighlightProvider, _screenBoardProvider, _rectOverlayProvider, _regionMaskProvider, _regionMaskSelectionProvider, _spotlightRegionProvider, _spotlightRegionSelectionProvider, _inputHandler));
+            _windows.Add(new OverlayWindow(
+                screen,
+                _trailModel,
+                _annotations,
+                _settingsProvider,
+                _modeProvider,
+                _clockProvider,
+                _spotlightProvider,
+                _cursorHighlightProvider,
+                _screenBoardProvider,
+                _rectOverlayProvider,
+                _regionMaskProvider,
+                _regionMaskSelectionProvider,
+                _spotlightRegionProvider,
+                _spotlightRegionSelectionProvider,
+                _liveAdjustmentHudProvider,
+                _inputHandler));
         }
     }
 
