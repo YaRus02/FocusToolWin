@@ -27,7 +27,11 @@ It adds, on top of the desktop:
 The main idea of FocusTool is minimum visual noise and fast access through
 hotkeys, the tray menu, and a compact panel over the screen.
 
-Documentation is current for version 3.0.2.
+Documentation is current for version 3.1.0.
+
+Development note: AI assistance was used while building FocusTool as an
+engineering aid. Architecture, integration, behavior checks, and final changes
+were reviewed and controlled manually.
 
 
 1. Which file to run
@@ -143,6 +147,25 @@ Colors and size:
   [                 - decrease line thickness
   ]                 - increase line thickness
 
+Quick live adjustments:
+
+  Ctrl + mouse wheel
+    Adjusts the main parameter of the active overlay tool directly on screen.
+
+  Ctrl + Shift + mouse wheel
+    Adjusts the secondary parameter where available.
+
+  Examples:
+    Zoom active: zoom level / radius
+    Spotlight active: radius / dim opacity
+    Region Mask mode: selected or hovered mask opacity
+    Draw tool selected: current tool thickness
+    Text tool selected: text size
+    Pinned Lens focused or hovered: pinned lens zoom
+
+  A small Live Adjustment HUD confirms fast changes such as zoom, radius,
+  opacity, line thickness, or text size.
+
 Annotation commands:
 
   Ctrl+Z            - Undo
@@ -257,7 +280,7 @@ Settings:
 - zoom.
 
 It uses the Windows Magnification API. Region masks stay visible in the
-magnified area so a hidden fragment cannot be revealed through zoom. Pointer
+magnified area, so the magnified copy shows the same covered fragment. Pointer
 visuals such as the laser / cursor highlight are suppressed while the magnifier
 is active to avoid artifacts inside the enlarged image.
 
@@ -287,13 +310,13 @@ Supported:
 - delete the selected lens with Backspace / Delete.
 
 Annotations are drawn over pinned lens windows. Region masks stay visible inside
-the enlarged image.
+the enlarged image, so the enlarged copy shows the same covered area.
 
 
 11. Region Mask
 ---------------
 
-Region Mask hides selected rectangular areas of the screen.
+Region Mask covers selected rectangular areas of the screen.
 
 Start:
 
@@ -306,7 +329,7 @@ Clear all masks:
 Behavior:
 
 - several masks can be created in a row;
-- a mask is a top privacy layer;
+- a mask is a top hiding layer;
 - masks are visible in screenshots, screen board, magnifier, and pinned lens;
 - a selected mask can be moved;
 - it can be resized from corners;
@@ -359,6 +382,8 @@ Editing:
 - outside edit mode, normal tools create new objects;
 - selected objects can be deleted with Backspace;
 - color, thickness, and text size can be applied live;
+- Pen, Highlighter, Arrow, Line, Shapes, and Step markers remember their last
+  thickness separately;
 - Text is edited in place;
 - Enter commits text input;
 - Esc closes or cancels input;
