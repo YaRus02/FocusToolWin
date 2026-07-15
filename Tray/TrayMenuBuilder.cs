@@ -37,18 +37,18 @@ internal sealed class TrayMenuBuilder
         var cursorHighlightHoldModeItem = CreateCheckedItem("Hold key / mouse button", _ => _controller.SetCursorHighlightActivationMode(LaserActivationMode.Hold));
         var cursorHighlightPulseItem = CreateCheckedItem("Click pulse", item => _controller.SetClickPulseEnabled(item.Checked));
         var spotlightItem = CreateCheckedItem("Spotlight", item => _controller.SetSpotlightEnabled(item.Checked));
-        var regionSpotlightMenuItem = new ToolStripMenuItem("Region Spotlight");
+        var regionSpotlightMenuItem = new ToolStripMenuItem("Region spotlight");
         var regionSpotlightItem = CreateItem("Select area", _controller.ToggleRegionSpotlight);
         var clearRegionSpotlightsItem = new ToolStripMenuItem("Clear region spotlights", null, (_, _) => _controller.ClearRegionSpotlights());
         var magnifierItem = CreateCheckedItem("Zoom", item => _controller.SetMagnifierEnabled(item.Checked));
-        var pinnedLensItem = CreateItem("New pin", _controller.TogglePinnedLens);
-        var closePinnedLensesItem = new ToolStripMenuItem("Close all pins", null, (_, _) => _controller.ClosePinnedLenses());
+        var pinnedLensItem = CreateItem("New pinned lens", _controller.TogglePinnedLens);
+        var closePinnedLensesItem = new ToolStripMenuItem("Close all pinned lenses", null, (_, _) => _controller.ClosePinnedLenses());
         var regionMaskItem = CreateItem("Mask", _controller.ToggleRegionMask);
         var clearRegionMasksItem = new ToolStripMenuItem("Clear masks", null, (_, _) => _controller.ClearRegionMasks());
         var fadingAnnotationsItem = CreateCheckedItem("Fading annotations", item => _controller.SetFadingAnnotationsEnabled(item.Checked));
         var toolbarItem = CreateCheckedItem("Toolbar", _ => _controller.ToggleToolbar());
-        var screenshotItem = new ToolStripMenuItem("Monitor", null, (_, _) => _controller.TakeScreenshot());
-        var regionScreenshotItem = new ToolStripMenuItem("Region Screenshot", null, (_, _) => _controller.TakeRegionScreenshot());
+        var screenshotItem = new ToolStripMenuItem("Current monitor", null, (_, _) => _controller.TakeScreenshot());
+        var regionScreenshotItem = new ToolStripMenuItem("Region screenshot", null, (_, _) => _controller.TakeRegionScreenshot());
         var newTimerItem = CreateItem("New timer", _controller.NewTimer);
         var closeTimersItem = new ToolStripMenuItem("Close all timers", null, (_, _) => _controller.CloseAllTimers());
         var screenBoardItem = CreateCheckedItem("Screen board", _ => _controller.ToggleScreenBoard());
@@ -93,7 +93,7 @@ internal sealed class TrayMenuBuilder
         laserMenu.DropDownItems.Add(laserPresets);
         laserMenu.DropDownItems.Add(glowItem);
 
-        var cursorHighlightMenu = new ToolStripMenuItem("Cursor Highlight");
+        var cursorHighlightMenu = new ToolStripMenuItem("Cursor highlight");
         cursorHighlightMenu.DropDownItems.Add(cursorHighlightAlwaysModeItem);
         cursorHighlightMenu.DropDownItems.Add(cursorHighlightHoldModeItem);
         cursorHighlightMenu.DropDownItems.Add(new ToolStripSeparator());
@@ -114,7 +114,7 @@ internal sealed class TrayMenuBuilder
         drawMenu.DropDownItems.Add(redoItem);
         drawMenu.DropDownItems.Add(clearItem);
 
-        var pinnedLensMenu = new ToolStripMenuItem("Pin");
+        var pinnedLensMenu = new ToolStripMenuItem("Pinned lens");
         pinnedLensMenu.DropDownItems.Add(pinnedLensItem);
         pinnedLensMenu.DropDownItems.Add(closePinnedLensesItem);
 

@@ -2,12 +2,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using FocusTool.Win.Models;
+using FocusTool.Win.Services;
 using WpfBrush = System.Windows.Media.Brush;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfButton = System.Windows.Controls.Button;
 using WpfCursors = System.Windows.Input.Cursors;
 using WpfHorizontalAlignment = System.Windows.HorizontalAlignment;
 using WpfOrientation = System.Windows.Controls.Orientation;
+using WpfToolTip = System.Windows.Controls.ToolTip;
 using MediaColor = System.Windows.Media.Color;
 
 namespace FocusTool.Win.Overlay;
@@ -41,7 +43,6 @@ internal static class ToolbarStyles
         var button = new WpfButton
         {
             Content = text,
-            ToolTip = tooltip,
             Width = width,
             Height = 26,
             Margin = new Thickness(1, 0, 1, 0),
@@ -56,8 +57,16 @@ internal static class ToolbarStyles
             VerticalContentAlignment = VerticalAlignment.Center
         };
 
+        SetToolTip(button, tooltip);
         button.Click += onClick;
         return button;
+    }
+
+    public static void SetToolTip(FrameworkElement element, string text)
+    {
+        var toolTip = new WpfToolTip { Content = text };
+        WpfTopmostToolTipHelper.Attach(toolTip);
+        element.ToolTip = toolTip;
     }
 
     public static WpfButton CreateStepperButton(string text, string tooltip, RoutedEventHandler onClick)

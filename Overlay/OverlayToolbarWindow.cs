@@ -91,6 +91,7 @@ internal sealed class OverlayToolbarWindow : Window
             0,
             0,
             NativeMethods.SwpNoMove | NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+        WpfTopmostToolTipHelper.ReassertOpen();
     }
 
     protected override void OnClosed(EventArgs e)

@@ -77,8 +77,8 @@ internal sealed class ToolbarLayoutBuilder
         primary.Children.Add(CreateHandle());
         primary.Children.Add(ToolbarStyles.CreateSeparator());
 
-        _controls.LaserButton = AddSplitButton(primary, "Laser", "Toggle laser always/hold", 45, (_, _) => _controller.ToggleLaserActivationMode(), "laser");
-        _controls.HighlightButton = AddSplitButton(primary, "Cursor", "Toggle cursor highlight", 48, (_, _) => _controller.ToggleCursorHighlight(), "highlight");
+        _controls.LaserButton = AddSplitButton(primary, "Laser", "Switch laser between Always and Hold", 45, (_, _) => _controller.ToggleLaserActivationMode(), "laser");
+        _controls.HighlightButton = AddSplitButton(primary, "Cursor", "Switch cursor highlight between Always and Hold", 48, (_, _) => _controller.ToggleCursorHighlight(), "highlight");
         _controls.SpotButton = AddSplitButton(primary, "Spot", "Toggle spotlight", 39, (_, _) => _controller.ToggleSpotlight(), "spot");
         _controls.ZoomButton = AddSplitButton(primary, "Zoom", "Toggle zoom", 43, (_, _) => _controller.ToggleMagnifierMode(), "zoom");
         primary.Children.Add(ToolbarStyles.CreateSeparator());
@@ -254,7 +254,7 @@ internal sealed class ToolbarLayoutBuilder
         _controls.ZoomZoomText = CreateStepper(zoomRow, "Zoom", () => _controller.AdjustMagnifierZoom(-0.25), () => _controller.AdjustMagnifierZoom(0.25));
         _controls.ZoomRadiusText = CreateStepper(zoomRow, "Radius", () => _controller.AdjustMagnifierRadius(-16), () => _controller.AdjustMagnifierRadius(16));
         zoomRow.Children.Add(ToolbarStyles.CreateSeparator());
-        _controls.PinButton = ToolbarStyles.CreateButton("Pin", "Select a live pinned lens area", (_, _) => _controller.TogglePinnedLens(), width: 34);
+        _controls.PinButton = ToolbarStyles.CreateButton("Pin", "Select an area for a live pinned lens", (_, _) => _controller.TogglePinnedLens(), width: 34);
         zoomRow.Children.Add(_controls.PinButton);
         _controls.PinOptionsButton = ToolbarStyles.CreateInlineOptionsButton("Pin settings", _callbacks.TogglePinOptions);
         zoomRow.Children.Add(_controls.PinOptionsButton);
@@ -282,7 +282,7 @@ internal sealed class ToolbarLayoutBuilder
         _controls.PinZoomText = CreateStepper(pinRow, "Zoom", () => _controller.AdjustPinnedLensZoom(-0.25), () => _controller.AdjustPinnedLensZoom(0.25));
         _controls.PinFpsText = CreateStepper(pinRow, "Fps", () => _controller.AdjustPinnedLensRefreshFps(-5), () => _controller.AdjustPinnedLensRefreshFps(5));
         pinRow.Children.Add(ToolbarStyles.CreateSeparator());
-        _controls.ClosePinsButton = ToolbarStyles.CreateButton("Close all", "Close all pins", (_, _) => _controller.ClosePinnedLenses(), width: 64);
+        _controls.ClosePinsButton = ToolbarStyles.CreateButton("Close all", "Close all pinned lenses", (_, _) => _controller.ClosePinnedLenses(), width: 64);
         pinRow.Children.Add(_controls.ClosePinsButton);
         return pinRow;
     }
@@ -352,9 +352,9 @@ internal sealed class ToolbarLayoutBuilder
             CornerRadius = new CornerRadius(7),
             Width = 28,
             Height = 28,
-            Cursor = WpfCursors.SizeAll,
-            ToolTip = "Drag to move, click to expand"
+            Cursor = WpfCursors.SizeAll
         };
+        ToolbarStyles.SetToolTip(grip, "Drag to move, click to expand");
 
         var content = new Grid();
         content.Children.Add(new TextBlock
@@ -432,7 +432,6 @@ internal sealed class ToolbarLayoutBuilder
             var caret = new WpfButton
             {
                 Content = "˅",
-                ToolTip = "Show options",
                 Width = width,
                 Height = 12,
                 Padding = new Thickness(0),
@@ -445,6 +444,7 @@ internal sealed class ToolbarLayoutBuilder
                 HorizontalContentAlignment = WpfHorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center
             };
+            ToolbarStyles.SetToolTip(caret, "Show options");
             caret.Click += (_, _) => _callbacks.ShowContextualRow(rowKey);
             container.Children.Add(caret);
             _controls.Carets[rowKey] = caret;

@@ -140,8 +140,8 @@ internal sealed class TrayIconController : IDisposable
             InteractionMode.Annotate => "Mode: Annotate",
             InteractionMode.PinnedLensSelect => "Mode: Select pin area",
             InteractionMode.RegionMaskSelect => "Mode: Select mask areas",
-            InteractionMode.ScreenshotRegionSelect => "Mode: Select Region Screenshot",
-            InteractionMode.RegionSpotlightSelect => "Mode: Select Region Spotlight",
+            InteractionMode.ScreenshotRegionSelect => "Mode: Select region screenshot",
+            InteractionMode.RegionSpotlightSelect => "Mode: Select region spotlight",
             InteractionMode.ScreenBoard => "Mode: Screen board",
             InteractionMode.BlackScreen => "Mode: Black board",
             InteractionMode.WhiteScreen => "Mode: White board",
@@ -170,10 +170,10 @@ internal sealed class TrayIconController : IDisposable
             : $"{_controller.Settings.Shortcuts.ToggleSpotlight} / hold {_controller.Settings.Shortcuts.HoldSpotlight}";
         _regionSpotlightMenuItem.Checked = _controller.RegionSpotlightSelectionActive || _controller.RegionSpotlightActive;
         _regionSpotlightMenuItem.Text = _controller.RegionSpotlightSelectionActive
-            ? "Region Spotlight: select area"
+            ? "Region spotlight: select area"
             : _controller.RegionSpotlightCount > 0
-                ? $"Region Spotlight ({_controller.RegionSpotlightCount} active)"
-                : "Region Spotlight";
+                ? $"Region spotlight ({_controller.RegionSpotlightCount} active)"
+                : "Region spotlight";
         _regionSpotlightItem.Checked = _controller.RegionSpotlightSelectionActive;
         _regionSpotlightItem.Text = _controller.RegionSpotlightSelectionActive ? "Selecting area" : "Select area";
         _regionSpotlightItem.ShortcutKeyDisplayString = _controller.RegionSpotlightShortcut;
@@ -185,10 +185,10 @@ internal sealed class TrayIconController : IDisposable
 
         _pinnedLensItem.Checked = _controller.PinnedLensActive || _controller.PinnedLensSelectionActive;
         _pinnedLensItem.Text = _controller.PinnedLensSelectionActive
-            ? "Pin: select area"
+            ? "Pinned lens: select area"
             : _controller.PinnedLensCount > 0
-                ? $"New pin ({_controller.PinnedLensCount} active)"
-                : "New pin";
+                ? $"New pinned lens ({_controller.PinnedLensCount} active)"
+                : "New pinned lens";
         _pinnedLensItem.ShortcutKeyDisplayString = _controller.PinnedLensShortcut;
         _closePinnedLensesItem.Enabled = _controller.PinnedLensActive;
 
@@ -259,9 +259,9 @@ internal sealed class TrayIconController : IDisposable
             : _controller.RegionMaskActive
                 ? $"FocusTool: {_controller.RegionMaskCount} region masks"
             : _controller.ScreenshotRegionSelectionActive
-                ? "FocusTool: Select Region Screenshot"
+                ? "FocusTool: Select region screenshot"
             : _controller.RegionSpotlightSelectionActive
-                ? "FocusTool: Select Region Spotlight"
+                ? "FocusTool: Select region spotlight"
             : _controller.RegionSpotlightActive
                 ? $"FocusTool: {_controller.RegionSpotlightCount} region spotlights"
             : _controller.BlackScreenEnabled

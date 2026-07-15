@@ -1577,6 +1577,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
         _pinnedLenses.ReassertContextMenuTopmost();
         _regionMaskContextMenu.ReassertTopmostIfVisible();
+        WpfTopmostToolTipHelper.ReassertOpen();
     }
 
     private void ReassertPinnedLensTopmost()
