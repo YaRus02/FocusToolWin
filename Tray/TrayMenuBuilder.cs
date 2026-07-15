@@ -69,6 +69,7 @@ internal sealed class TrayMenuBuilder
         AddTool(tools, AnnotationTool.Line, "Line");
         AddTool(tools, AnnotationTool.Pencil, "Pencil");
         AddTool(tools, AnnotationTool.Highlighter, "Highlighter");
+        AddTool(tools, AnnotationTool.Eraser, "Eraser");
         AddTool(tools, AnnotationTool.Text, "Text");
         AddTool(tools, AnnotationTool.Move, "Move selection");
         AddTool(tools, AnnotationTool.StepOval, "Step oval");

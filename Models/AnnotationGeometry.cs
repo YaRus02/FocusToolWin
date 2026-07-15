@@ -101,7 +101,9 @@ internal static class AnnotationGeometry
     {
         return shape.Tool switch
         {
-            AnnotationTool.Pencil or AnnotationTool.Highlighter => shape.Points.Count > 1,
+            AnnotationTool.Pencil or AnnotationTool.Highlighter => shape.HighlighterStraightened
+                ? shape.Start.DistanceTo(shape.End) >= 2.0
+                : shape.Points.Count > 0,
             AnnotationTool.StepOval => true,
             _ => shape.Start.DistanceTo(shape.End) >= 2.0
         };

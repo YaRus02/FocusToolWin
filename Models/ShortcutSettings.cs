@@ -3,7 +3,7 @@ namespace FocusTool.Win.Models;
 public sealed class ShortcutSettings
 {
     public const string DisabledShortcut = "None";
-    public const int CurrentLayoutVersion = 1;
+    public const int CurrentLayoutVersion = 2;
 
     public int LayoutVersion { get; set; } = CurrentLayoutVersion;
     public string ToggleLaserActivation { get; set; } = "Ctrl+Alt+Z";
@@ -34,6 +34,7 @@ public sealed class ShortcutSettings
     public string ToolLine { get; set; } = "S";
     public string ToolPencil { get; set; } = "W";
     public string ToolHighlighter { get; set; } = "F";
+    public string ToolEraser { get; set; } = "E";
     public string ToolText { get; set; } = "T";
     public string ToolMove { get; set; } = "Q";
     public string ToolStep { get; set; } = "D";
@@ -82,6 +83,7 @@ public sealed class ShortcutSettings
         ToolLine = ToolLine,
         ToolPencil = ToolPencil,
         ToolHighlighter = ToolHighlighter,
+        ToolEraser = ToolEraser,
         ToolText = ToolText,
         ToolMove = ToolMove,
         ToolStep = ToolStep,
@@ -131,6 +133,7 @@ public sealed class ShortcutSettings
         ToolLine = NormalizeShortcut(ToolLine, "S");
         ToolPencil = NormalizeShortcut(ToolPencil, "W");
         ToolHighlighter = NormalizeShortcut(ToolHighlighter, "F");
+        ToolEraser = NormalizeShortcut(ToolEraser, "E");
         ToolText = NormalizeShortcut(ToolText, "T");
         ToolMove = NormalizeShortcut(ToolMove, "Q");
         ToolStep = NormalizeShortcut(ToolStep, "D");
@@ -151,48 +154,63 @@ public sealed class ShortcutSettings
 
     private void MigrateLegacyLayout(bool allowLegacyDefaultMigration)
     {
-        if (LayoutVersion >= CurrentLayoutVersion)
+        if (LayoutVersion < 1)
         {
-            return;
+            if (allowLegacyDefaultMigration && UsesLegacyDefaultLayout())
+            {
+                ToggleLaserActivation = "Ctrl+Alt+Z";
+                ToggleAnnotate = "Ctrl+Alt+A";
+                ToggleCursorHighlight = "Ctrl+Alt+X";
+                ToggleClickPulse = "Ctrl+Alt+C";
+                HoldSpotlight = "Alt+S";
+                ToggleMagnifier = "Ctrl+Alt+V";
+                TogglePinnedLens = "Ctrl+Alt+F";
+                ToggleRegionMask = "Ctrl+Alt+R";
+                ClearRegionMasks = DisabledShortcut;
+                ClearRegionSpotlights = DisabledShortcut;
+                ToggleFadingAnnotations = "Ctrl+Alt+D";
+                ToggleTimer = "Ctrl+Alt+T";
+                ToggleToolbar = "Ctrl+Alt+G";
+                TakeScreenshot = "Ctrl+Alt+E";
+                TakeRegionScreenshot = "Ctrl+Alt+Shift+E";
+                ToggleScreenBoard = "Ctrl+Alt+B";
+                ToggleBlackScreen = "Ctrl+Alt+Shift+B";
+                ExitApp = "Ctrl+Alt+Shift+Q";
+                ToolLine = "S";
+                ToolPencil = "W";
+                ToolHighlighter = "F";
+                ToolMove = "Q";
+                ToolStep = "D";
+                ThicknessDown = "Shift+Z";
+                ThicknessUp = "Shift+X";
+                Redo = "Ctrl+Shift+Z";
+                ClearAlternate = "Shift+E";
+            }
+            else
+            {
+                ToggleClickPulse = DisabledShortcut;
+                HoldSpotlight = DisabledShortcut;
+            }
+
+            LayoutVersion = 1;
         }
 
-        if (allowLegacyDefaultMigration && UsesLegacyDefaultLayout())
+        if (LayoutVersion < 2)
         {
-            ToggleLaserActivation = "Ctrl+Alt+Z";
-            ToggleAnnotate = "Ctrl+Alt+A";
-            ToggleCursorHighlight = "Ctrl+Alt+X";
-            ToggleClickPulse = "Ctrl+Alt+C";
-            HoldSpotlight = "Alt+S";
-            ToggleMagnifier = "Ctrl+Alt+V";
-            TogglePinnedLens = "Ctrl+Alt+F";
-            ToggleRegionMask = "Ctrl+Alt+R";
-            ClearRegionMasks = DisabledShortcut;
-            ClearRegionSpotlights = DisabledShortcut;
-            ToggleFadingAnnotations = "Ctrl+Alt+D";
-            ToggleTimer = "Ctrl+Alt+T";
-            ToggleToolbar = "Ctrl+Alt+G";
-            TakeScreenshot = "Ctrl+Alt+E";
-            TakeRegionScreenshot = "Ctrl+Alt+Shift+E";
-            ToggleScreenBoard = "Ctrl+Alt+B";
-            ToggleBlackScreen = "Ctrl+Alt+Shift+B";
-            ExitApp = "Ctrl+Alt+Shift+Q";
-            ToolLine = "S";
-            ToolPencil = "W";
-            ToolHighlighter = "F";
-            ToolMove = "Q";
-            ToolStep = "D";
-            ThicknessDown = "Shift+Z";
-            ThicknessUp = "Shift+X";
-            Redo = "Ctrl+Shift+Z";
-            ClearAlternate = "Shift+E";
+            ToolEraser = UsesExistingShortcut("E") ? DisabledShortcut : "E";
+            LayoutVersion = 2;
         }
-        else
-        {
-            ToggleClickPulse = DisabledShortcut;
-            HoldSpotlight = DisabledShortcut;
-        }
+    }
 
-        LayoutVersion = CurrentLayoutVersion;
+    private bool UsesExistingShortcut(string shortcut)
+    {
+        return new[]
+        {
+            ToolArrow, ToolRectangle, ToolEllipse, ToolLine, ToolPencil, ToolHighlighter,
+            ToolText, ToolMove, ToolStep, Color1, Color2, Color3, Color4, Color5,
+            ThicknessDown, ThicknessUp, Undo, Redo, DeleteSelection, Clear, ClearAlternate,
+            ExitAnnotate
+        }.Any(value => string.Equals(value?.Trim(), shortcut, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool UsesLegacyDefaultLayout()

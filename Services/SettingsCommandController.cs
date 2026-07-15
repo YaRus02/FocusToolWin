@@ -146,6 +146,11 @@ internal sealed class SettingsCommandController
 
         Update(updated => updated.SetAnnotationTool(tool));
 
+        if (tool != AnnotationTool.Eraser)
+        {
+            _annotations.ClearEraserHover();
+        }
+
         if (tool != AnnotationTool.Move)
         {
             _annotations.ClearSelection();

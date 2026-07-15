@@ -71,6 +71,7 @@ public sealed class AppSettings
     public Dictionary<string, double> AnnotationToolThicknesses { get; set; } = [];
     public double AnnotationFontSize { get; set; } = 28;
     public string AnnotationTool { get; set; } = "Pencil";
+    public string StrokeSmoothing { get; set; } = StrokeSmoothingLevel.Balanced.ToString();
     public bool FadingAnnotationsEnabled { get; set; }
     public int FadingAnnotationVisibleMs { get; set; } = 6000;
     public int FadingAnnotationFadeMs { get; set; } = 1200;
@@ -113,6 +114,7 @@ public sealed class AppSettings
         AnnotationToolThicknesses = AnnotationToolThicknesses is null ? [] : new Dictionary<string, double>(AnnotationToolThicknesses),
         AnnotationFontSize = AnnotationFontSize,
         AnnotationTool = AnnotationTool,
+        StrokeSmoothing = StrokeSmoothing,
         FadingAnnotationsEnabled = FadingAnnotationsEnabled,
         FadingAnnotationVisibleMs = FadingAnnotationVisibleMs,
         FadingAnnotationFadeMs = FadingAnnotationFadeMs,
@@ -156,6 +158,7 @@ public sealed class AppSettings
         AnnotationToolThicknesses = other.AnnotationToolThicknesses is null ? [] : new Dictionary<string, double>(other.AnnotationToolThicknesses);
         AnnotationFontSize = other.AnnotationFontSize;
         AnnotationTool = other.AnnotationTool;
+        StrokeSmoothing = other.StrokeSmoothing;
         FadingAnnotationsEnabled = other.FadingAnnotationsEnabled;
         FadingAnnotationVisibleMs = other.FadingAnnotationVisibleMs;
         FadingAnnotationFadeMs = other.FadingAnnotationFadeMs;
@@ -189,6 +192,12 @@ public sealed class AppSettings
         }
 
         AnnotationTool = annotationTool.ToString();
+        if (!Enum.TryParse<StrokeSmoothingLevel>(StrokeSmoothing, true, out var smoothingLevel))
+        {
+            smoothingLevel = StrokeSmoothingLevel.Balanced;
+        }
+
+        StrokeSmoothing = smoothingLevel.ToString();
 
         if (!Enum.TryParse<LaserActivationMode>(LaserActivationMode, true, out var laserActivationMode))
         {
@@ -331,6 +340,13 @@ public sealed class AppSettings
         return Enum.TryParse<AnnotationToolEnum>(AnnotationTool, true, out var tool)
             ? tool
             : AnnotationToolEnum.Pencil;
+    }
+
+    internal StrokeSmoothingLevel GetStrokeSmoothingLevel()
+    {
+        return Enum.TryParse<StrokeSmoothingLevel>(StrokeSmoothing, true, out var level)
+            ? level
+            : StrokeSmoothingLevel.Balanced;
     }
 
     internal void SetAnnotationTool(AnnotationToolEnum tool)

@@ -12,6 +12,7 @@ internal sealed class AnnotationRenderer
 {
     private readonly AnnotationDocument _annotations;
     private readonly Func<double> _clockProvider;
+    private readonly Func<AppSettings> _settingsProvider;
     private readonly Func<ScreenPoint, WpfPoint> _toLocal;
     private readonly Func<ScreenPoint, ScreenPoint, Rect> _toRect;
     private readonly RectSelectionRenderer _rectSelectionRenderer;
@@ -25,6 +26,7 @@ internal sealed class AnnotationRenderer
     public AnnotationRenderer(
         AnnotationDocument annotations,
         Func<double> clockProvider,
+        Func<AppSettings> settingsProvider,
         Func<ScreenPoint, WpfPoint> toLocal,
         Func<ScreenPoint, ScreenPoint, Rect> toRect,
         RectSelectionRenderer rectSelectionRenderer,
@@ -36,6 +38,7 @@ internal sealed class AnnotationRenderer
     {
         _annotations = annotations;
         _clockProvider = clockProvider;
+        _settingsProvider = settingsProvider;
         _toLocal = toLocal;
         _toRect = toRect;
         _rectSelectionRenderer = rectSelectionRenderer;
@@ -102,6 +105,8 @@ internal sealed class AnnotationRenderer
         {
             _rectSelectionRenderer.DrawSelectionRectangle(drawingContext, draftBounds, isDraft: true);
         }
+
+        DrawEraserPreview(drawingContext);
     }
 
     private void DrawShape(DrawingContext drawingContext, AnnotationShape shape, bool isDraft, double opacityScale, int? stepNumber = null)
@@ -141,7 +146,6 @@ internal sealed class AnnotationRenderer
                 drawingContext.DrawLine(pen, _toLocal(shape.Start), _toLocal(shape.End));
                 break;
             case AnnotationTool.Pencil:
-                DrawPencil(drawingContext, shape, haloPen);
                 DrawPencil(drawingContext, shape, pen);
                 break;
             case AnnotationTool.Highlighter:
@@ -160,9 +164,42 @@ internal sealed class AnnotationRenderer
             case AnnotationTool.StepRect:
                 DrawStepRect(drawingContext, shape, color, haloPen, pen, opacity, stepNumber ?? 1);
                 break;
+            case AnnotationTool.Eraser:
             case AnnotationTool.Move:
                 break;
         }
+    }
+
+    private void DrawEraserPreview(DrawingContext drawingContext)
+    {
+        if (_annotations.EraserPoint is not { } point)
+        {
+            return;
+        }
+
+        var center = _toLocal(point);
+        var radiusX = Math.Abs(_toLocal(point.Offset(AnnotationHitTesting.EraserRadius, 0)).X - center.X);
+        var radiusY = Math.Abs(_toLocal(point.Offset(0, AnnotationHitTesting.EraserRadius)).Y - center.Y);
+        var hasHover = _annotations.EraserHoverShape is not null;
+        var color = hasHover ? Colors.OrangeRed : Colors.White;
+        var outline = _createPen(color, hasHover ? 0.84 : 0.42, hasHover ? 1.2 : 1.0);
+        drawingContext.DrawEllipse(null, outline, center, Math.Max(3, radiusX), Math.Max(3, radiusY));
+
+        if (_annotations.EraserHoverShape is not { } hoverShape)
+        {
+            return;
+        }
+
+        var bounds = hoverShape.GetBounds();
+        var hoverPen = new WpfPen(_getBrush(Colors.OrangeRed, 0.7), 1.2)
+        {
+            DashStyle = DashStyles.Dash
+        };
+        hoverPen.Freeze();
+        drawingContext.DrawRectangle(
+            _getBrush(Colors.OrangeRed, 0.05),
+            hoverPen,
+            _toRect(new ScreenPoint(bounds.Left, bounds.Top), new ScreenPoint(bounds.Right, bounds.Bottom)));
     }
 
     private static bool IsStepTool(AnnotationTool tool)
@@ -236,21 +273,23 @@ internal sealed class AnnotationRenderer
 
     private void DrawHighlighter(DrawingContext drawingContext, AnnotationShape shape, MediaColor color, bool isDraft, double opacityScale)
     {
-        if (shape.Points.Count < 2)
-        {
-            return;
-        }
-
-        DrawPencil(
-            drawingContext,
-            shape,
-            _createPen(color, (isDraft ? 0.28 : 0.36) * opacityScale, Math.Max(12, shape.Thickness * 4.2)));
+        drawingContext.DrawGeometry(
+            _getBrush(color, (isDraft ? 0.28 : 0.36) * opacityScale),
+            null,
+            GetStrokeGeometry(shape));
     }
 
     private void DrawPencil(DrawingContext drawingContext, AnnotationShape shape, WpfPen pen)
     {
-        if (shape.Points.Count < 2)
+        if (shape.Points.Count == 0)
         {
+            return;
+        }
+
+        if (shape.Points.Count == 1)
+        {
+            var center = _toLocal(shape.Points[0]);
+            drawingContext.DrawEllipse(pen.Brush, null, center, pen.Thickness / 2, pen.Thickness / 2);
             return;
         }
 
@@ -259,33 +298,99 @@ internal sealed class AnnotationRenderer
 
     private Geometry GetStrokeGeometry(AnnotationShape shape)
     {
-        if (ReferenceEquals(_annotations.Draft, shape))
+        var smoothing = _settingsProvider().GetStrokeSmoothingLevel();
+        var isDraft = ReferenceEquals(_annotations.Draft, shape);
+        if (isDraft)
         {
-            return BuildStrokeGeometry(shape);
+            return shape.Tool == AnnotationTool.Highlighter
+                ? BuildHighlighterGeometry(shape, smoothing, finalize: false)
+                : BuildStrokeGeometry(shape, smoothing, finalize: false);
         }
 
         if (_strokeGeometryCache.TryGetValue(shape, out var cached)
-            && cached.Version == shape.GeometryVersion)
+            && cached.Version == shape.GeometryVersion
+            && cached.Smoothing == smoothing)
         {
             return cached.Geometry;
         }
 
-        var geometry = BuildStrokeGeometry(shape);
+        var geometry = shape.Tool == AnnotationTool.Highlighter
+            ? BuildHighlighterGeometry(shape, smoothing, finalize: true)
+            : BuildStrokeGeometry(shape, smoothing, finalize: true);
         _strokeGeometryCache[shape] = new CachedStrokeGeometry(
             shape.GeometryVersion,
+            smoothing,
             geometry);
         return geometry;
     }
 
-    private Geometry BuildStrokeGeometry(AnnotationShape shape)
+    private Geometry BuildStrokeGeometry(AnnotationShape shape, StrokeSmoothingLevel smoothing, bool finalize)
     {
+        var points = AnnotationStrokeGeometry.Smooth(shape.Points, smoothing, finalize);
         var geometry = new StreamGeometry();
         using (var context = geometry.Open())
         {
-            context.BeginFigure(_toLocal(shape.Points[0]), isFilled: false, isClosed: false);
-            for (var i = 1; i < shape.Points.Count; i++)
+            context.BeginFigure(_toLocal(points[0]), isFilled: false, isClosed: false);
+            if (smoothing == StrokeSmoothingLevel.Off || points.Count < 3)
             {
-                context.LineTo(_toLocal(shape.Points[i]), isStroked: true, isSmoothJoin: true);
+                for (var i = 1; i < points.Count; i++)
+                {
+                    context.LineTo(_toLocal(points[i]), isStroked: true, isSmoothJoin: true);
+                }
+            }
+            else
+            {
+                for (var i = 1; i < points.Count - 1; i++)
+                {
+                    var midpoint = new ScreenPoint(
+                        (points[i].X + points[i + 1].X) / 2,
+                        (points[i].Y + points[i + 1].Y) / 2);
+                    context.QuadraticBezierTo(
+                        _toLocal(points[i]),
+                        _toLocal(midpoint),
+                        isStroked: true,
+                        isSmoothJoin: true);
+                }
+
+                context.LineTo(_toLocal(points[^1]), isStroked: true, isSmoothJoin: true);
+            }
+        }
+
+        geometry.Freeze();
+        return geometry;
+    }
+
+    private Geometry BuildHighlighterGeometry(AnnotationShape shape, StrokeSmoothingLevel smoothing, bool finalize)
+    {
+        IReadOnlyList<ScreenPoint> centerLine = shape.HighlighterStraightened
+            ? [shape.Start, shape.End]
+            : AnnotationStrokeGeometry.Smooth(shape.Points, smoothing, finalize);
+        var nibHeight = Math.Max(12, shape.Thickness * 4.2);
+        var nibWidth = Math.Max(2, shape.Thickness * 0.72);
+        var sweeps = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+            centerLine,
+            nibWidth,
+            nibHeight);
+        if (sweeps.Count == 0)
+        {
+            return Geometry.Empty;
+        }
+
+        var geometry = new StreamGeometry { FillRule = FillRule.Nonzero };
+        using (var context = geometry.Open())
+        {
+            foreach (var sweep in sweeps)
+            {
+                if (sweep.Count < 3)
+                {
+                    continue;
+                }
+
+                context.BeginFigure(_toLocal(sweep[0]), isFilled: true, isClosed: true);
+                for (var i = 1; i < sweep.Count; i++)
+                {
+                    context.LineTo(_toLocal(sweep[i]), isStroked: true, isSmoothJoin: false);
+                }
             }
         }
 
@@ -423,5 +528,8 @@ internal sealed class AnnotationRenderer
         return luminance > 0.58 ? Colors.Black : Colors.White;
     }
 
-    private readonly record struct CachedStrokeGeometry(int Version, Geometry Geometry);
+    private readonly record struct CachedStrokeGeometry(
+        int Version,
+        StrokeSmoothingLevel Smoothing,
+        Geometry Geometry);
 }

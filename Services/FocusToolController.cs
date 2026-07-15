@@ -1119,6 +1119,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
+        _annotationMouse.UpdateHighlighterHold();
         _overlayTick.Tick();
         UpdateLiveAdjustmentHud();
     }
@@ -1313,6 +1314,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             AnnotationTool.Pencil => "Pencil",
             AnnotationTool.Highlighter => "Highlighter",
+            AnnotationTool.Eraser => "Eraser",
             AnnotationTool.Arrow => "Arrow",
             AnnotationTool.Line => "Line",
             AnnotationTool.Rectangle => "Rectangle",

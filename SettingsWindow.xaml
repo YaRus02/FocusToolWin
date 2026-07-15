@@ -300,6 +300,14 @@
                                     <TextBlock x:Name="AnnotationFontSizeValue" DockPanel.Dock="Right" Margin="12,0,0,0" />
                                 </DockPanel>
                                 <Slider x:Name="AnnotationFontSizeSlider" Minimum="8" Maximum="96" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="Slider_OnValueChanged" />
+
+                                <TextBlock Text="Stroke smoothing" Style="{StaticResource FieldLabelTextStyle}" Margin="0,12,0,0" />
+                                <ComboBox x:Name="StrokeSmoothingBox" Margin="0,6,0,0">
+                                    <ComboBoxItem Content="Off" Tag="Off" />
+                                    <ComboBoxItem Content="Balanced" Tag="Balanced" />
+                                    <ComboBoxItem Content="Strong" Tag="Strong" />
+                                </ComboBox>
+                                <TextBlock Text="Applies to Pencil and Highlighter strokes." Foreground="#666666" FontSize="11" Margin="0,5,0,0" />
                             </StackPanel>
                         </GroupBox>
 
@@ -489,26 +497,29 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
                                         <TextBlock Grid.Row="0" Text="Pencil" VerticalAlignment="Center" Margin="0,2" />
                                         <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToolPencilBox" Margin="8,1,0,1" />
                                         <TextBlock Grid.Row="1" Text="Highlighter" VerticalAlignment="Center" Margin="0,2" />
                                         <TextBox Grid.Row="1" Grid.Column="1" x:Name="ToolHighlighterBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="2" Text="Arrow" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToolArrowBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="3" Text="Line" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToolLineBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="4" Text="Rectangle" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToolRectangleBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="5" Text="Ellipse / circle" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToolEllipseBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="6" Text="Text" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToolTextBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="7" Text="Step marker" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToolStepBox" Margin="8,1,0,1" />
-                                        <TextBlock Grid.Row="8" Text="Move selection" VerticalAlignment="Center" Margin="0,2" />
-                                        <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToolMoveBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="2" Text="Eraser" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="ToolEraserBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="3" Text="Arrow" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="ToolArrowBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="4" Text="Line" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="4" Grid.Column="1" x:Name="ToolLineBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="5" Text="Rectangle" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="5" Grid.Column="1" x:Name="ToolRectangleBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="6" Text="Ellipse / circle" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="6" Grid.Column="1" x:Name="ToolEllipseBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="7" Text="Text" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="7" Grid.Column="1" x:Name="ToolTextBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="8" Text="Step marker" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="8" Grid.Column="1" x:Name="ToolStepBox" Margin="8,1,0,1" />
+                                        <TextBlock Grid.Row="9" Text="Move selection" VerticalAlignment="Center" Margin="0,2" />
+                                        <TextBox Grid.Row="9" Grid.Column="1" x:Name="ToolMoveBox" Margin="8,1,0,1" />
                                     </Grid>
                                 </GroupBox>
 

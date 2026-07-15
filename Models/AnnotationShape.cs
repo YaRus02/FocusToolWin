@@ -19,6 +19,7 @@ internal sealed class AnnotationShape
     public string Text { get; set; } = string.Empty;
     public BitmapSource? Image { get; set; }
     public double FontSize { get; set; } = 28;
+    public bool HighlighterStraightened { get; private set; }
     public bool IsTemporary { get; set; }
     public double CreatedAtMs { get; set; }
     public int TemporaryVisibleMs { get; set; }
@@ -39,6 +40,7 @@ internal sealed class AnnotationShape
             Text = Text,
             Image = Image,
             FontSize = FontSize,
+            HighlighterStraightened = HighlighterStraightened,
             IsTemporary = IsTemporary,
             CreatedAtMs = CreatedAtMs,
             TemporaryVisibleMs = TemporaryVisibleMs,
@@ -104,6 +106,7 @@ internal sealed class AnnotationShape
     {
         var bounds = Tool switch
         {
+            AnnotationTool.Highlighter when HighlighterStraightened => ScreenRect.FromPoints(Start, End),
             AnnotationTool.Pencil or AnnotationTool.Highlighter when Points.Count > 0 => BoundsFromPoints(Points),
             AnnotationTool.Text => TextBounds(),
             AnnotationTool.Image => ImageBounds(),
@@ -132,6 +135,7 @@ internal sealed class AnnotationShape
             AnnotationTool.Arrow => SegmentIntersectsRect(Start, End, selection.Inflate(Math.Max(6, Thickness * 3))),
             AnnotationTool.Rectangle => RectangleOutlineIntersects(selection),
             AnnotationTool.Ellipse => EllipseOutlineIntersects(selection),
+            AnnotationTool.Highlighter when HighlighterStraightened => SegmentIntersectsRect(Start, End, selection.Inflate(StrokePadding())),
             AnnotationTool.Pencil or AnnotationTool.Highlighter => PolylineIntersects(selection),
             AnnotationTool.StepRect => StepRectIntersects(selection),
             AnnotationTool.Text or AnnotationTool.Image or AnnotationTool.StepOval => GetBounds().Intersects(selection),
@@ -156,6 +160,18 @@ internal sealed class AnnotationShape
     {
         Start = start;
         End = end;
+        GeometryVersion++;
+    }
+
+    public void StraightenHighlighter(ScreenPoint endpoint)
+    {
+        if (Tool != AnnotationTool.Highlighter)
+        {
+            return;
+        }
+
+        HighlighterStraightened = true;
+        End = endpoint;
         GeometryVersion++;
     }
 

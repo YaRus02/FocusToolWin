@@ -276,6 +276,12 @@ internal sealed class AnnotationInputController
             return true;
         }
 
+        if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolEraser))
+        {
+            _setTool(AnnotationTool.Eraser);
+            return true;
+        }
+
         if (MatchesAnnotationShortcut(key, modifiers, shortcuts.ToolText))
         {
             _setTool(AnnotationTool.Text);

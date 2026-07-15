@@ -96,6 +96,7 @@ internal static class AnnotationHistory
             && string.Equals(left.Text, right.Text, StringComparison.Ordinal)
             && ReferenceEquals(left.Image, right.Image)
             && Math.Abs(left.FontSize - right.FontSize) < 0.0001
+            && left.HighlighterStraightened == right.HighlighterStraightened
             && left.IsTemporary == right.IsTemporary
             && Math.Abs(left.CreatedAtMs - right.CreatedAtMs) < 0.0001
             && left.TemporaryVisibleMs == right.TemporaryVisibleMs

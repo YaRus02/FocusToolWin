@@ -4,13 +4,25 @@ namespace FocusTool.Win.Models;
 
 internal static class AnnotationHitTesting
 {
-    public static bool TryFindShapeAt(IReadOnlyList<AnnotationShape> shapes, ScreenPoint point, out int index)
+    public const double EraserRadius = 10;
+
+    public static bool TryFindShapeAt(
+        IReadOnlyList<AnnotationShape> shapes,
+        ScreenPoint point,
+        out int index,
+        double tolerance = 6,
+        double? nowMs = null)
     {
-        var hitRect = new ScreenRect(point.X, point.Y, point.X, point.Y).Inflate(6);
+        var hitRect = new ScreenRect(point.X, point.Y, point.X, point.Y).Inflate(tolerance);
         for (var i = shapes.Count - 1; i >= 0; i--)
         {
+            if (nowMs is { } currentTime && shapes[i].IsExpired(currentTime))
+            {
+                continue;
+            }
+
             if (shapes[i].Tool == AnnotationTool.Text
-                ? shapes[i].GetBounds().Contains(point)
+                ? shapes[i].GetBounds().Inflate(tolerance).Contains(point)
                 : shapes[i].IntersectsSelection(hitRect))
             {
                 index = i;
@@ -35,6 +47,30 @@ internal static class AnnotationHitTesting
 
         index = -1;
         return false;
+    }
+
+    public static IReadOnlyList<AnnotationShape> FindShapesAlongPath(
+        IReadOnlyList<AnnotationShape> shapes,
+        ScreenPoint start,
+        ScreenPoint end,
+        double nowMs)
+    {
+        var distance = start.DistanceTo(end);
+        var sampleCount = Math.Max(1, (int)Math.Ceiling(distance / Math.Max(2, EraserRadius * 0.55)));
+        var hits = new HashSet<AnnotationShape>();
+        for (var sample = 0; sample <= sampleCount; sample++)
+        {
+            var amount = sample / (double)sampleCount;
+            var point = new ScreenPoint(
+                start.X + (end.X - start.X) * amount,
+                start.Y + (end.Y - start.Y) * amount);
+            if (TryFindShapeAt(shapes, point, out var index, EraserRadius, nowMs))
+            {
+                hits.Add(shapes[index]);
+            }
+        }
+
+        return hits.ToList();
     }
 
     public static bool TryHitEditHandle(AnnotationShape shape, ScreenPoint point, out AnnotationEditHandle handle)

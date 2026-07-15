@@ -97,6 +97,7 @@ internal sealed class OverlayManager : IDisposable
             window.PositionOverScreen();
         }
 
+        ActivateKeyboardInputWindow(_modeProvider());
         ReassertTopmost();
         _topmostTimer.Start();
     }
@@ -155,6 +156,33 @@ internal sealed class OverlayManager : IDisposable
         {
             window.SetInteractionMode(mode);
         }
+
+        ActivateKeyboardInputWindow(mode);
+    }
+
+    private void ActivateKeyboardInputWindow(InteractionMode mode)
+    {
+        if (!IsOverlayInputMode(mode) || _windows.Count == 0)
+        {
+            return;
+        }
+
+        var cursor = System.Windows.Forms.Cursor.Position;
+        var point = new ScreenPoint(cursor.X, cursor.Y);
+        var target = _windows.FirstOrDefault(window => window.Contains(point)) ?? _windows[0];
+        target.ActivateKeyboardInput();
+    }
+
+    private static bool IsOverlayInputMode(InteractionMode mode)
+    {
+        return mode is InteractionMode.Annotate
+            or InteractionMode.PinnedLensSelect
+            or InteractionMode.RegionMaskSelect
+            or InteractionMode.ScreenshotRegionSelect
+            or InteractionMode.RegionSpotlightSelect
+            or InteractionMode.ScreenBoard
+            or InteractionMode.BlackScreen
+            or InteractionMode.WhiteScreen;
     }
 
     public IReadOnlyList<IntPtr> GetWindowHandles()

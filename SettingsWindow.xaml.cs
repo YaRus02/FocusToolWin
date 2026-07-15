@@ -78,6 +78,7 @@ public partial class SettingsWindow : Window
 
         AnnotationThicknessSlider.Value = settings.AnnotationThickness;
         AnnotationFontSizeSlider.Value = settings.AnnotationFontSize;
+        SelectStrokeSmoothing(settings.GetStrokeSmoothingLevel());
         SettingsPathText.Text = $"JSON: {settingsPath}";
         _shortcuts.Load(settings);
 
@@ -257,6 +258,7 @@ public partial class SettingsWindow : Window
         updated.FadingAnnotationFadeMs = (int)Math.Round(FadingAnnotationFadeSlider.Value * 1000);
         updated.SetAnnotationThicknessForTool(updated.GetAnnotationTool(), AnnotationThicknessSlider.Value);
         updated.AnnotationFontSize = AnnotationFontSizeSlider.Value;
+        updated.StrokeSmoothing = ReadStrokeSmoothing().ToString();
 
         if (!_shortcuts.TryRead(updated))
         {
@@ -315,6 +317,7 @@ public partial class SettingsWindow : Window
         new(ToolLineBox, "Line", s => s.ToolLine, (s, v) => s.ToolLine = v, false),
         new(ToolPencilBox, "Pencil", s => s.ToolPencil, (s, v) => s.ToolPencil = v, false),
         new(ToolHighlighterBox, "Highlighter", s => s.ToolHighlighter, (s, v) => s.ToolHighlighter = v, false),
+        new(ToolEraserBox, "Eraser", s => s.ToolEraser, (s, v) => s.ToolEraser = v, false),
         new(ToolTextBox, "Text", s => s.ToolText, (s, v) => s.ToolText = v, false),
         new(ToolMoveBox, "Move selection", s => s.ToolMove, (s, v) => s.ToolMove = v, false),
         new(ToolStepBox, "Step marker", s => s.ToolStep, (s, v) => s.ToolStep = v, false),
@@ -421,6 +424,28 @@ public partial class SettingsWindow : Window
         }
 
         return LaserActivationMode.Hold;
+    }
+
+    private void SelectStrokeSmoothing(StrokeSmoothingLevel level)
+    {
+        foreach (var item in StrokeSmoothingBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag?.ToString()?.Equals(level.ToString(), StringComparison.OrdinalIgnoreCase) == true)
+            {
+                StrokeSmoothingBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        StrokeSmoothingBox.SelectedIndex = 1;
+    }
+
+    private StrokeSmoothingLevel ReadStrokeSmoothing()
+    {
+        return StrokeSmoothingBox.SelectedItem is ComboBoxItem item
+            && Enum.TryParse<StrokeSmoothingLevel>(item.Tag?.ToString(), true, out var level)
+                ? level
+                : StrokeSmoothingLevel.Balanced;
     }
 
     private void SelectRegionMaskStyle(string styleText)

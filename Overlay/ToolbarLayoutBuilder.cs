@@ -164,6 +164,7 @@ internal sealed class ToolbarLayoutBuilder
         var row = ToolbarStyles.CreateRow();
         row.Children.Add(CreateToolButton(AnnotationTool.Pencil, "Pen", "Pencil", 34));
         row.Children.Add(CreateToolButton(AnnotationTool.Highlighter, "Mark", "Highlighter", 40));
+        row.Children.Add(CreateToolButton(AnnotationTool.Eraser, "Erase", "Erase whole annotation objects", 43));
         row.Children.Add(ToolbarStyles.CreateSeparator());
         row.Children.Add(CreateToolButton(AnnotationTool.Arrow, "Arrow", "Arrow", 43));
         row.Children.Add(CreateToolButton(AnnotationTool.Line, "Line", "Line", 37));

@@ -172,11 +172,9 @@ internal sealed class OverlayWindow : Window
         _applyingBounds = true;
         try
         {
-            var flags = NativeMethods.SwpShowWindow;
-            if (!_annotateInputEnabled)
-            {
-                flags |= NativeMethods.SwpNoActivate;
-            }
+            // Positioning one window per monitor must not also choose the
+            // keyboard target. OverlayManager activates one explicit window.
+            var flags = NativeMethods.SwpShowWindow | NativeMethods.SwpNoActivate;
 
             NativeMethods.SetWindowPos(
                 handle,
@@ -228,15 +226,35 @@ internal sealed class OverlayWindow : Window
         if (_sourceReady)
         {
             ApplyWindowStyles(_annotateInputEnabled);
-            if (_annotateInputEnabled)
-            {
-                Activate();
-                Focus();
-                _surface.Focus();
-            }
         }
 
         _surface.InvalidateVisual();
+    }
+
+    public void ActivateKeyboardInput()
+    {
+        if (!_sourceReady || !_annotateInputEnabled || !IsVisible)
+        {
+            return;
+        }
+
+        FocusKeyboardInputCore();
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Input,
+            FocusKeyboardInputCore);
+    }
+
+    private void FocusKeyboardInputCore()
+    {
+        if (!_sourceReady || !_annotateInputEnabled || !IsVisible)
+        {
+            return;
+        }
+
+        Activate();
+        Focus();
+        _surface.Focus();
+        Keyboard.Focus(_surface);
     }
 
     public void Refresh()

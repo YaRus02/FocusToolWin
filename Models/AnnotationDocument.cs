@@ -7,6 +7,7 @@ namespace FocusTool.Win.Models;
 internal sealed class AnnotationDocument
 {
     private const int MaximumHistoryEntries = 100;
+    private const double HighlighterHoldThresholdMs = 480;
 
     private readonly List<AnnotationShape> _shapes = [];
     private readonly Stack<List<AnnotationShape>> _undo = new();
@@ -22,6 +23,14 @@ internal sealed class AnnotationDocument
     private bool _historyMayContainTemporaryAnnotations;
     private bool _movingSelection;
     private bool _selectionUndoPushed;
+    private bool _eraserGestureActive;
+    private bool _eraserUndoPushed;
+    private ScreenPoint _eraserLastPoint;
+    private ScreenPoint _eraserGestureStart;
+    private bool _eraserMoved;
+    private int _eraserHoverIndex = -1;
+    private double _highlighterHoldStartedMs;
+    private ScreenPoint _highlighterHoldAnchor;
 
     public IReadOnlyList<AnnotationShape> Shapes => _shapes;
     public AnnotationShape? Draft { get; private set; }
@@ -37,6 +46,10 @@ internal sealed class AnnotationDocument
     public bool HasSelection => _selectedIndices.Count > 0 && SelectionBounds is not null;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
+    public ScreenPoint? EraserPoint { get; private set; }
+    public AnnotationShape? EraserHoverShape => _eraserHoverIndex >= 0 && _eraserHoverIndex < _shapes.Count
+        ? _shapes[_eraserHoverIndex]
+        : null;
 
     // Raised for structural changes (add/commit/undo/redo/clear/delete) - listeners
     // do a full UI sync. DraftProgressed is the high-frequency in-progress signal
@@ -68,6 +81,12 @@ internal sealed class AnnotationDocument
         if (tool is AnnotationTool.Pencil or AnnotationTool.Highlighter)
         {
             Draft.Points.Add(start);
+        }
+
+        if (tool == AnnotationTool.Highlighter)
+        {
+            _highlighterHoldAnchor = start;
+            _highlighterHoldStartedMs = _clockProvider();
         }
 
         OnChanged();
@@ -109,9 +128,24 @@ internal sealed class AnnotationDocument
 
         if (Draft.Tool is AnnotationTool.Pencil or AnnotationTool.Highlighter)
         {
+            if (Draft.Tool == AnnotationTool.Highlighter && Draft.HighlighterStraightened)
+            {
+                Draft.StraightenHighlighter(current);
+                OnDraftProgressed();
+                return;
+            }
+
             if (Draft.Points.Count == 0 || Draft.Points[^1].DistanceTo(current) >= 1.0)
             {
                 Draft.Points.Add(current);
+            }
+
+            Draft.End = current;
+            if (Draft.Tool == AnnotationTool.Highlighter
+                && _highlighterHoldAnchor.DistanceTo(current) > 4)
+            {
+                _highlighterHoldAnchor = current;
+                _highlighterHoldStartedMs = _clockProvider();
             }
         }
         else
@@ -466,6 +500,110 @@ internal sealed class AnnotationDocument
         RefreshSelectionBoundsCore();
         OnChanged();
         return true;
+    }
+
+    public void UpdateEraserHover(ScreenPoint point)
+    {
+        EraserPoint = point;
+        _eraserHoverIndex = AnnotationHitTesting.TryFindShapeAt(
+            _shapes,
+            point,
+            out var index,
+            AnnotationHitTesting.EraserRadius,
+            _clockProvider()) ? index : -1;
+        OnDraftProgressed();
+    }
+
+    public bool TryLockHighlighterHold(double nowMs)
+    {
+        if (Draft is not { Tool: AnnotationTool.Highlighter, HighlighterStraightened: false } highlighter
+            || highlighter.Start.DistanceTo(_highlighterHoldAnchor) < 2
+            || nowMs - _highlighterHoldStartedMs < HighlighterHoldThresholdMs)
+        {
+            return false;
+        }
+
+        highlighter.StraightenHighlighter(_highlighterHoldAnchor);
+        OnDraftProgressed();
+        return true;
+    }
+
+    public void ClearEraserHover()
+    {
+        if (EraserPoint is null && _eraserHoverIndex < 0)
+        {
+            return;
+        }
+
+        EraserPoint = null;
+        _eraserHoverIndex = -1;
+        OnDraftProgressed();
+    }
+
+    public void BeginEraseGesture(ScreenPoint point)
+    {
+        CommitTextInput();
+        ClearSelectionCore();
+        _eraserGestureActive = true;
+        _eraserUndoPushed = false;
+        _eraserLastPoint = point;
+        _eraserGestureStart = point;
+        _eraserMoved = false;
+        EraserPoint = point;
+        EraseTopmostAt(point);
+    }
+
+    public void ContinueEraseGesture(ScreenPoint point)
+    {
+        if (!_eraserGestureActive)
+        {
+            return;
+        }
+
+        EraserPoint = point;
+        if (!_eraserMoved)
+        {
+            if (_eraserGestureStart.DistanceTo(point) < 3)
+            {
+                UpdateEraserHoverIndex(point);
+                OnDraftProgressed();
+                return;
+            }
+
+            _eraserMoved = true;
+        }
+
+        var hits = AnnotationHitTesting.FindShapesAlongPath(_shapes, _eraserLastPoint, point, _clockProvider());
+        _eraserLastPoint = point;
+        RemoveEraserHits(hits);
+        UpdateEraserHoverIndex(point);
+        OnDraftProgressed();
+    }
+
+    public void EndEraseGesture(ScreenPoint point)
+    {
+        if (!_eraserGestureActive)
+        {
+            return;
+        }
+
+        ContinueEraseGesture(point);
+        _eraserGestureActive = false;
+        _eraserUndoPushed = false;
+        UpdateEraserHoverIndex(point);
+        OnChanged();
+    }
+
+    public void CancelEraseGesture()
+    {
+        var changed = _eraserUndoPushed;
+        _eraserGestureActive = false;
+        _eraserUndoPushed = false;
+        ClearEraserHover();
+        if (changed)
+        {
+            OnChanged();
+        }
     }
 
     public bool TryGetSelectedTextFontSizeSummary(out double fontSize, out bool mixedValue, out AnnotationTool? singleTool)
@@ -917,6 +1055,53 @@ internal sealed class AnnotationDocument
         return _selectedIndices
             .Where(index => index >= 0 && index < _shapes.Count)
             .Distinct();
+    }
+
+    private void EraseTopmostAt(ScreenPoint point)
+    {
+        if (!AnnotationHitTesting.TryFindShapeAt(
+                _shapes,
+                point,
+                out var index,
+                AnnotationHitTesting.EraserRadius,
+                _clockProvider()))
+        {
+            UpdateEraserHoverIndex(point);
+            OnDraftProgressed();
+            return;
+        }
+
+        RemoveEraserHits([_shapes[index]]);
+        UpdateEraserHoverIndex(point);
+        OnChanged();
+    }
+
+    private void RemoveEraserHits(IReadOnlyList<AnnotationShape> hits)
+    {
+        if (hits.Count == 0)
+        {
+            return;
+        }
+
+        if (!_eraserUndoPushed)
+        {
+            PushUndo();
+            _eraserUndoPushed = true;
+        }
+
+        var hitSet = new HashSet<AnnotationShape>(hits);
+        _shapes.RemoveAll(shape => hitSet.Contains(shape));
+        ClearSelectionCore();
+    }
+
+    private void UpdateEraserHoverIndex(ScreenPoint point)
+    {
+        _eraserHoverIndex = AnnotationHitTesting.TryFindShapeAt(
+            _shapes,
+            point,
+            out var index,
+            AnnotationHitTesting.EraserRadius,
+            _clockProvider()) ? index : -1;
     }
 
     private bool TryGetSelectedAdjustmentSummary(

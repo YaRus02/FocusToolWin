@@ -8,6 +8,7 @@ internal enum AnnotationTool
     Line,
     Pencil,
     Highlighter,
+    Eraser,
     Text,
     Image,
     Move,

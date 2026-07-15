@@ -46,7 +46,9 @@
 
 ### Draw / Annotations
 
-- **Pen**, **Highlighter**, **Arrow**, **Line**, **Rectangle**, **Oval**, **Text**, **Move**.
+- **Pencil**, **Highlighter**, **Eraser**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, **Move**.
+- **Stroke smoothing** - `Off / Balanced / Strong` для Pencil и Highlighter. Highlighter рисуется плоской полосой; удержание endpoint выпрямляет текущий stroke.
+- **Object Eraser** - клик удаляет верхний объект целиком, drag удаляет пересечённые объекты как одну операцию Undo.
 - **Numbered Step markers** - нумерованные маркеры для пошаговых объяснений. Есть oval-режим по клику и rect-режим с выделением области. Нумерация идет отдельно по цветовому слоту.
 - **Text editing** - двойной клик по тексту открывает редактирование на месте. `Enter` завершает, `Esc` отменяет/закрывает, `Shift+Enter` добавляет строку.
 - **Object edit by double-click** - одиночные объекты редактируются только после явного двойного клика. Это снижает риск случайного перемещения при рисовании рядом с существующими аннотациями.
@@ -131,8 +133,9 @@
 | Rectangle | `R` |
 | Oval / Circle | `C` |
 | Line | `S` |
-| Pen | `W` |
+| Pencil | `W` |
 | Highlighter | `F` |
+| Eraser | `E` |
 | Text | `T` |
 | Move | `Q` |
 | Step marker | `D` |

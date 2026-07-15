@@ -44,6 +44,14 @@ internal sealed class AnnotationMouseController
 
     public bool HasActiveOperation => _drawing || _movingSelection || _draggingAnnotationEditHandle;
 
+    public void UpdateHighlighterHold()
+    {
+        if (_drawing && _currentToolProvider() == AnnotationTool.Highlighter)
+        {
+            _annotations.TryLockHighlighterHold(_clock());
+        }
+    }
+
     public void OnLeavingAnnotationInput()
     {
         if (_annotations.HasTextInput)
@@ -58,12 +66,20 @@ internal sealed class AnnotationMouseController
         _drawing = false;
         _movingSelection = false;
         _annotations.EndSelectionMove();
+        _annotations.CancelEraseGesture();
     }
 
     public void HandleMouseDown(ScreenPoint point)
     {
         var currentTool = _currentToolProvider();
         var settings = _settingsProvider();
+
+        if (currentTool == AnnotationTool.Eraser)
+        {
+            _drawing = true;
+            _annotations.BeginEraseGesture(point);
+            return;
+        }
 
         if (HandleTextObjectClick(point, currentTool))
         {
@@ -120,6 +136,20 @@ internal sealed class AnnotationMouseController
     public void HandleMouseMove(ScreenPoint point, ModifierKeys modifiers)
     {
         var currentTool = _currentToolProvider();
+
+        if (currentTool == AnnotationTool.Eraser)
+        {
+            if (_drawing)
+            {
+                _annotations.ContinueEraseGesture(point);
+            }
+            else
+            {
+                _annotations.UpdateEraserHover(point);
+            }
+
+            return;
+        }
 
         if (_pendingTextEditMove)
         {
@@ -199,6 +229,14 @@ internal sealed class AnnotationMouseController
             return;
         }
 
+        if (currentTool == AnnotationTool.Eraser)
+        {
+            _annotations.EndEraseGesture(point);
+            _drawing = false;
+            _tryCompletePushToAnnotateExit();
+            return;
+        }
+
         if (currentTool == AnnotationTool.Move)
         {
             _annotations.UpdateSelection(point);
@@ -232,7 +270,15 @@ internal sealed class AnnotationMouseController
 
         if (_drawing)
         {
-            _annotations.CancelDraft();
+            if (_currentToolProvider() == AnnotationTool.Eraser)
+            {
+                _annotations.CancelEraseGesture();
+            }
+            else
+            {
+                _annotations.CancelDraft();
+            }
+
             _drawing = false;
         }
 

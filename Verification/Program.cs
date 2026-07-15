@@ -20,6 +20,11 @@ internal static class Program
             VerifyLegacyDefaultShortcutsMigrate();
             VerifyCustomizedLegacyShortcutsArePreserved();
             VerifyCustomizedLegacyHoldShortcutIsPreserved();
+            VerifyEraserShortcutMigrationAvoidsConflict();
+            VerifyObjectEraserGestureUndoRedo();
+            VerifyStrokeSmoothingPreservesEndpointsAndCorners();
+            VerifyHighlighterUsesFixedRectangularNib();
+            VerifyHighlighterDrawAndHoldLocksAndTracksEndpoint();
             Console.WriteLine("FocusTool verification checks passed.");
             return 0;
         }
@@ -141,6 +146,160 @@ internal static class Program
         {
             throw new InvalidOperationException("A customized legacy hold shortcut did not prevent automatic layout migration.");
         }
+    }
+
+    private static void VerifyEraserShortcutMigrationAvoidsConflict()
+    {
+        var available = new ShortcutSettings { LayoutVersion = 1 };
+        available.Normalize();
+        if (available.ToolEraser != "E")
+        {
+            throw new InvalidOperationException("Eraser did not receive the available E shortcut.");
+        }
+
+        var occupied = new ShortcutSettings
+        {
+            LayoutVersion = 1,
+            ClearAlternate = "E"
+        };
+        occupied.Normalize();
+        if (occupied.ToolEraser != ShortcutSettings.DisabledShortcut)
+        {
+            throw new InvalidOperationException("Eraser migration introduced a shortcut conflict.");
+        }
+    }
+
+    private static void VerifyObjectEraserGestureUndoRedo()
+    {
+        var document = new AnnotationDocument(() => 1000);
+        var settings = new AppSettings();
+        AddLine(document, settings, 20, "#FFFF0000");
+        AddLine(document, settings, 60, "#FF00FF00");
+        AddLine(document, settings, 100, "#FF0000FF");
+
+        document.BeginEraseGesture(new ScreenPoint(20, 50));
+        document.ContinueEraseGesture(new ScreenPoint(100, 50));
+        document.EndEraseGesture(new ScreenPoint(100, 50));
+        if (document.Shapes.Count != 0)
+        {
+            throw new InvalidOperationException("Eraser drag did not remove each crossed object.");
+        }
+
+        document.Undo();
+        if (document.Shapes.Count != 3
+            || document.Shapes[0].Color != "#FFFF0000"
+            || document.Shapes[2].Color != "#FF0000FF")
+        {
+            throw new InvalidOperationException("One eraser gesture was not restored as one ordered undo operation.");
+        }
+
+        document.Redo();
+        if (document.Shapes.Count != 0)
+        {
+            throw new InvalidOperationException("Redo did not repeat the eraser gesture.");
+        }
+
+        var overlap = new AnnotationDocument(() => 1000);
+        AddLine(overlap, settings, 40, "#FFFF0000");
+        AddLine(overlap, settings, 40, "#FF0000FF");
+        overlap.BeginEraseGesture(new ScreenPoint(40, 50));
+        overlap.EndEraseGesture(new ScreenPoint(40, 50));
+        if (overlap.Shapes.Count != 1 || overlap.Shapes[0].Color != "#FFFF0000")
+        {
+            throw new InvalidOperationException("Eraser click did not remove only the topmost object.");
+        }
+    }
+
+    private static void VerifyStrokeSmoothingPreservesEndpointsAndCorners()
+    {
+        var raw = new[]
+        {
+            new ScreenPoint(0, 0),
+            new ScreenPoint(20, 1),
+            new ScreenPoint(40, 0),
+            new ScreenPoint(40, 30),
+            new ScreenPoint(40, 60)
+        };
+        var smoothed = AnnotationStrokeGeometry.Smooth(raw, StrokeSmoothingLevel.Strong, finalize: true);
+        if (smoothed[0] != raw[0]
+            || smoothed[^1] != raw[^1]
+            || smoothed.Min(point => point.DistanceTo(raw[2])) > 2)
+        {
+            throw new InvalidOperationException("Stroke smoothing changed an endpoint or rounded away a sharp corner.");
+        }
+
+        var noisy = Enumerable.Range(0, 31)
+            .Select(index => new ScreenPoint(index * 4, index is 0 or 30 ? 0 : index % 2 == 0 ? 2 : -2))
+            .ToArray();
+        var stabilized = AnnotationStrokeGeometry.Smooth(noisy, StrokeSmoothingLevel.Strong, finalize: true);
+        var rawNoise = noisy.Skip(2).SkipLast(2).Average(point => Math.Abs(point.Y));
+        var stabilizedNoise = stabilized.Skip(4).SkipLast(4).Average(point => Math.Abs(point.Y));
+        if (stabilizedNoise >= rawNoise * 0.4)
+        {
+            throw new InvalidOperationException("Strong final smoothing did not suppress high-frequency pointer noise.");
+        }
+    }
+
+    private static void VerifyHighlighterUsesFixedRectangularNib()
+    {
+        var horizontal = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+            [new ScreenPoint(10, 20), new ScreenPoint(110, 20)],
+            4,
+            24).Single();
+        var vertical = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+            [new ScreenPoint(10, 20), new ScreenPoint(10, 120)],
+            4,
+            24).Single();
+        var horizontalThickness = horizontal.Max(point => point.Y) - horizontal.Min(point => point.Y);
+        var verticalThickness = vertical.Max(point => point.X) - vertical.Min(point => point.X);
+        if (Math.Abs(horizontalThickness - 24) > 0.001
+            || Math.Abs(verticalThickness - 4) > 0.001)
+        {
+            throw new InvalidOperationException("Highlighter tip rotated with the stroke instead of staying fixed.");
+        }
+
+        var corner = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+            [new ScreenPoint(10, 20), new ScreenPoint(110, 20), new ScreenPoint(110, 120)],
+            4,
+            24);
+        if (corner.Count != 2 || !corner.All(sweep => sweep.Count >= 4))
+        {
+            throw new InvalidOperationException("Fixed highlighter sweeps left a disconnected corner.");
+        }
+    }
+
+    private static void VerifyHighlighterDrawAndHoldLocksAndTracksEndpoint()
+    {
+        var nowMs = 0.0;
+        var document = new AnnotationDocument(() => nowMs);
+        var settings = new AppSettings();
+        document.BeginStroke(AnnotationTool.Highlighter, new ScreenPoint(10, 10), settings);
+        document.UpdateStroke(new ScreenPoint(90, 30), shift: false);
+        nowMs = 479;
+        if (document.TryLockHighlighterHold(nowMs))
+        {
+            throw new InvalidOperationException("Highlighter hold locked before the threshold.");
+        }
+
+        nowMs = 480;
+        if (!document.TryLockHighlighterHold(nowMs) || document.Draft?.HighlighterStraightened != true)
+        {
+            throw new InvalidOperationException("Highlighter hold did not lock at the threshold.");
+        }
+
+        document.UpdateStroke(new ScreenPoint(120, 45), shift: false);
+        if (document.Draft?.End != new ScreenPoint(120, 45))
+        {
+            throw new InvalidOperationException("Locked highlighter endpoint could not be adjusted before release.");
+        }
+    }
+
+    private static void AddLine(AnnotationDocument document, AppSettings settings, double x, string color)
+    {
+        settings.AnnotationColor = color;
+        document.BeginStroke(AnnotationTool.Line, new ScreenPoint(x, 10), settings);
+        document.UpdateStroke(new ScreenPoint(x, 90), shift: false);
+        document.CommitStroke();
     }
 
     private static ShortcutSettings CreateLegacyShortcuts()

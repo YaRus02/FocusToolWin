@@ -108,6 +108,7 @@ internal sealed class OverlaySurface : FrameworkElement
         _annotationRenderer = new AnnotationRenderer(
             _annotations,
             _clockProvider,
+            _settingsProvider,
             ToLocal,
             ToRect,
             _rectSelectionRenderer,
