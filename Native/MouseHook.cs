@@ -6,12 +6,14 @@ namespace FocusTool.Win.Native;
 internal sealed class MouseHook : IDisposable
 {
     private readonly NativeMethods.LowLevelMouseProc _callback;
+    private readonly Action<Exception>? _callbackErrorHandler;
     private IntPtr _hook;
     private bool _disposed;
 
-    public MouseHook()
+    public MouseHook(Action<Exception>? callbackErrorHandler = null)
     {
         _callback = HookCallback;
+        _callbackErrorHandler = callbackErrorHandler;
     }
 
     public event EventHandler<MouseHookClickEventArgs>? Clicked;
@@ -60,33 +62,52 @@ internal sealed class MouseHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0)
+        try
         {
-            var message = wParam.ToInt32();
-            if (message is NativeMethods.WmLButtonDown or NativeMethods.WmRButtonDown)
+            if (nCode >= 0)
             {
-                var data = Marshal.PtrToStructure<NativeMethods.MouseHookStruct>(lParam);
-                var button = message == NativeMethods.WmRButtonDown
-                    ? CursorClickButton.Right
-                    : CursorClickButton.Left;
-                Clicked?.Invoke(
-                    this,
-                    new MouseHookClickEventArgs(button, new ScreenPoint(data.Point.X, data.Point.Y)));
-            }
-            else if (message == NativeMethods.WmMouseWheel)
-            {
-                var data = Marshal.PtrToStructure<NativeMethods.MouseHookStruct>(lParam);
-                var delta = unchecked((short)((data.MouseData >> 16) & 0xFFFF));
-                var args = new MouseHookWheelEventArgs(new ScreenPoint(data.Point.X, data.Point.Y), delta);
-                Wheel?.Invoke(this, args);
-                if (args.Handled)
+                var message = wParam.ToInt32();
+                if (message is NativeMethods.WmLButtonDown or NativeMethods.WmRButtonDown)
                 {
-                    return new IntPtr(1);
+                    var data = Marshal.PtrToStructure<NativeMethods.MouseHookStruct>(lParam);
+                    var button = message == NativeMethods.WmRButtonDown
+                        ? CursorClickButton.Right
+                        : CursorClickButton.Left;
+                    Clicked?.Invoke(
+                        this,
+                        new MouseHookClickEventArgs(button, new ScreenPoint(data.Point.X, data.Point.Y)));
+                }
+                else if (message == NativeMethods.WmMouseWheel)
+                {
+                    var data = Marshal.PtrToStructure<NativeMethods.MouseHookStruct>(lParam);
+                    var delta = unchecked((short)((data.MouseData >> 16) & 0xFFFF));
+                    var args = new MouseHookWheelEventArgs(new ScreenPoint(data.Point.X, data.Point.Y), delta);
+                    Wheel?.Invoke(this, args);
+                    if (args.Handled)
+                    {
+                        return new IntPtr(1);
+                    }
                 }
             }
         }
+        catch (Exception ex)
+        {
+            ReportCallbackError(ex);
+        }
 
         return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+    }
+
+    private void ReportCallbackError(Exception exception)
+    {
+        try
+        {
+            _callbackErrorHandler?.Invoke(exception);
+        }
+        catch
+        {
+            // Exceptions must never cross the native callback boundary.
+        }
     }
 }
 

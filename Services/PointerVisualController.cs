@@ -73,7 +73,7 @@ internal sealed class PointerVisualController : IDisposable
             return;
         }
 
-        _mouseHook = new MouseHook();
+        _mouseHook = new MouseHook(ex => AppLog.Error("Cursor click hook callback failed.", ex));
         _mouseHook.Clicked += OnMouseHookClicked;
         UpdateMouseHook();
     }

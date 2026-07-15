@@ -5,12 +5,14 @@ namespace FocusTool.Win.Native;
 internal sealed class KeyboardHook : IDisposable
 {
     private readonly NativeMethods.LowLevelKeyboardProc _callback;
+    private readonly Action<Exception>? _callbackErrorHandler;
     private IntPtr _hook;
     private bool _disposed;
 
-    public KeyboardHook()
+    public KeyboardHook(Action<Exception>? callbackErrorHandler = null)
     {
         _callback = HookCallback;
+        _callbackErrorHandler = callbackErrorHandler;
     }
 
     public event EventHandler<KeyboardHookKeyEventArgs>? KeyDown;
@@ -58,22 +60,41 @@ internal sealed class KeyboardHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0)
+        try
         {
-            var message = wParam.ToInt32();
-            if (message is NativeMethods.WmKeyDown or NativeMethods.WmSysKeyDown)
+            if (nCode >= 0)
             {
-                var data = Marshal.PtrToStructure<NativeMethods.KeyboardHookStruct>(lParam);
-                var args = new KeyboardHookKeyEventArgs((int)data.VkCode);
-                KeyDown?.Invoke(this, args);
-                if (args.Handled)
+                var message = wParam.ToInt32();
+                if (message is NativeMethods.WmKeyDown or NativeMethods.WmSysKeyDown)
                 {
-                    return new IntPtr(1);
+                    var data = Marshal.PtrToStructure<NativeMethods.KeyboardHookStruct>(lParam);
+                    var args = new KeyboardHookKeyEventArgs((int)data.VkCode);
+                    KeyDown?.Invoke(this, args);
+                    if (args.Handled)
+                    {
+                        return new IntPtr(1);
+                    }
                 }
             }
         }
+        catch (Exception ex)
+        {
+            ReportCallbackError(ex);
+        }
 
         return NativeMethods.CallNextHookEx(_hook, nCode, wParam, lParam);
+    }
+
+    private void ReportCallbackError(Exception exception)
+    {
+        try
+        {
+            _callbackErrorHandler?.Invoke(exception);
+        }
+        catch
+        {
+            // Exceptions must never cross the native callback boundary.
+        }
     }
 }
 

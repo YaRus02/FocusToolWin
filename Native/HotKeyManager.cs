@@ -11,12 +11,14 @@ internal sealed class HotKeyManager : IDisposable
     private readonly Dictionary<int, Action> _actions = [];
     private readonly List<string> _registrationErrors = [];
     private readonly HwndSource _source;
+    private readonly Action<Exception>? _callbackErrorHandler;
     private bool _disposed;
 
     public IReadOnlyList<string> RegistrationErrors => _registrationErrors;
 
-    public HotKeyManager()
+    public HotKeyManager(Action<Exception>? callbackErrorHandler = null)
     {
+        _callbackErrorHandler = callbackErrorHandler;
         var parameters = new HwndSourceParameters("FocusToolHotkeySink")
         {
             Width = 0,
@@ -101,7 +103,22 @@ internal sealed class HotKeyManager : IDisposable
     {
         if (msg == NativeMethods.WmHotkey && _actions.TryGetValue(wParam.ToInt32(), out var action))
         {
-            action();
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    _callbackErrorHandler?.Invoke(ex);
+                }
+                catch
+                {
+                    // Exceptions must never escape the HwndSource hook.
+                }
+            }
+
             handled = true;
         }
 

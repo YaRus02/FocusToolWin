@@ -18,8 +18,8 @@ internal sealed class PinnedLensController : IDisposable
     private readonly Action<string, string> _showMessage;
     private readonly Action<ScreenPoint, double> _showZoomHud;
     private readonly Action _stateChanged;
-    private readonly KeyboardHook _deleteKeyHook = new();
-    private readonly MouseHook _selectionMouseHook = new();
+    private readonly KeyboardHook _deleteKeyHook;
+    private readonly MouseHook _selectionMouseHook;
     private PinnedLensHostWindow? _selectedHost;
 
     public PinnedLensController(
@@ -32,6 +32,8 @@ internal sealed class PinnedLensController : IDisposable
         Action<ScreenPoint, double> showZoomHud,
         Action stateChanged)
     {
+        _deleteKeyHook = new KeyboardHook(ex => AppLog.Error("Pinned lens keyboard hook callback failed.", ex));
+        _selectionMouseHook = new MouseHook(ex => AppLog.Error("Pinned lens mouse hook callback failed.", ex));
         _settingsProvider = settingsProvider;
         _excludedWindowsProvider = excludedWindowsProvider;
         _isDisposed = isDisposed;

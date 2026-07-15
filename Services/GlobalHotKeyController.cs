@@ -106,7 +106,7 @@ internal sealed class GlobalHotKeyController : IDisposable
             registrations.Add(new HotKeyRegistration(exitVisualShortcut, _exitVisualEffects));
         }
 
-        _manager ??= new HotKeyManager();
+        _manager ??= new HotKeyManager(ex => AppLog.Error("Global hotkey action failed.", ex));
         _manager.SetRegistrations(registrations);
 
         if (_manager.RegistrationErrors.Count > 0)

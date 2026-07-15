@@ -47,10 +47,10 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     private readonly LiveAdjustmentHudController _liveAdjustmentHud = new();
     private readonly MagnifierController _magnifier;
     private readonly GlobalHotKeyController _hotKeys;
-    private readonly MouseHook _liveControlsMouseHook = new();
+    private readonly MouseHook _liveControlsMouseHook;
     private readonly RegionMaskController _regionMasks = new();
     private readonly RegionSpotlightController _regionSpotlights = new();
-    private CaptureStageController _captureStage = null!;
+    private CaptureStageController? _captureStage;
     private readonly RectSelectionController _rectSelection;
     private readonly RectToolsInputController _rectTools;
     private readonly InteractionModeTransitionController _modeTransitions;
@@ -108,6 +108,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
 
     public FocusToolController()
     {
+        _liveControlsMouseHook = new MouseHook(ex => AppLog.Error("Live controls mouse hook callback failed.", ex));
         _annotations = new AnnotationDocument(NowMs);
         _settingsPersistence = new SettingsPersistenceController(() => Settings, () => _disposed);
         _regionMaskContextMenu = new RegionMaskContextMenuController(
@@ -1095,7 +1096,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _liveControlsMouseHook.Dispose();
         _hotKeys.Dispose();
         CloseMagnifierHost();
-        _captureStage.Dispose();
+        _captureStage?.Dispose();
         _pinnedLenses.Dispose();
         _timerController?.Dispose();
         _trayIcon?.Dispose();
@@ -1493,7 +1494,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         _pinnedLenses.CloseAll();
     }
 
-    public bool HasCaptureStages => _captureStage.HasStages;
+    public bool HasCaptureStages => _captureStage?.HasStages == true;
 
     public void StartCaptureStageForLastWindow()
     {
@@ -1503,17 +1504,17 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
-        _captureStage.StartForWindow(source);
+        _captureStage?.StartForWindow(source);
     }
 
     public Task StartCaptureStageWithPickerAsync()
     {
-        return _captureStage.StartWithPickerAsync();
+        return _captureStage?.StartWithPickerAsync() ?? Task.CompletedTask;
     }
 
     public void CloseCaptureStages()
     {
-        _captureStage.CloseAll();
+        _captureStage?.CloseAll();
     }
 
     private OverlaySnapshotData? CaptureOverlaySnapshot(ScreenRect rect)
