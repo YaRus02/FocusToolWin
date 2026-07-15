@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>FocusTool 3.2.0 — полное руководство</title>
+  <title>FocusTool 3.2.1 — полное руководство</title>
   <style>
     :root{--bg:#f4f6f8;--panel:#fff;--text:#20252b;--muted:#64707d;--line:#dce2e8;--accent:#2468d8;--accent2:#eaf2ff;--note:#eef7ff;--warn:#fff5df;--limit:#fff0f0;--code:#edf1f5;--shadow:0 8px 28px rgba(25,39,52,.08)}
     @media(prefers-color-scheme:dark){:root{--bg:#11151a;--panel:#1a2027;--text:#e7ebef;--muted:#a6b0bb;--line:#343d47;--accent:#79aaff;--accent2:#1d3150;--note:#172c3b;--warn:#382e19;--limit:#3b2023;--code:#252c34;--shadow:none}}
@@ -14,7 +14,7 @@
 <body id="top">
 <div class="layout">
   <aside class="side">
-    <div class="brand">FocusTool</div><div class="version">Полное руководство · 3.2.0</div>
+    <div class="brand">FocusTool</div><div class="version">Полное руководство · 3.2.1</div>
     <nav aria-label="Содержание">
       <a href="#start">1. Быстрый старт</a><a href="#model">2. Как устроена утилита</a><a href="#pointer">3. Указатель</a><a href="#focus">4. Фокус и увеличение</a><a href="#draw">5. Рисование</a><a href="#masks">6. Маски и области</a><a href="#timer">7. Таймеры</a><a href="#capture">8. Снимки и доски</a><a href="#stage">9. Capture Stage</a><a href="#toolbar">10. Панель и трей</a><a href="#settings">11. Настройки</a><a href="#hotkeys">12. Горячие клавиши</a><a href="#live">13. Быстрая настройка</a><a href="#files">14. Файлы и данные</a><a href="#limits">15. Ограничения</a><a href="#problems">16. Решение проблем</a><a href="#workflow">17. Практические сценарии</a>
     </nav>
@@ -22,7 +22,7 @@
   <main>
     <header class="hero">
       <span class="tag">Офлайн-руководство</span>
-      <h1>FocusTool 3.2.0</h1>
+      <h1>FocusTool 3.2.1</h1>
       <p class="lead">Указатель, подсветка, рисование поверх экрана, визуальные маски, таймеры, снимки, доски и представление окна — в одном приложении для Windows.</p>
       <div class="actions"><a class="button" href="#start">Начать работу</a><a class="button" href="#hotkeys">Таблица клавиш</a><a class="button" href="FocusTool-Manual-EN.html" lang="en">English manual</a></div>
       <div class="callout"><strong>Назначение.</strong> FocusTool дополняет демонстрируемые приложения визуальными инструментами и не изменяет их исходное содержимое.</div>
@@ -107,8 +107,8 @@
       <h3>Fading Annotations</h3>
       <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> включает временные аннотации. В настройках задаются время показа и длительность затухания. Это удобно для кратких пояснений без ручной очистки.</p>
       <h3>Push-to-annotate</h3>
-      <p>Удерживайте <kbd>Alt</kbd>+<kbd>A</kbd>, чтобы открыть Draw только на время пояснения. Пока сочетание зажато, можно переключать основные инструменты их буквенными клавишами и выбирать цвет клавишами <kbd>1</kbd>–<kbd>5</kbd>, не открывая панель. Отпускание сочетания не обрывает активный штрих: выход завершается после текущего действия.</p>
-      <div class="callout"><strong>Удобная комбинация.</strong> Один раз включите Fading Annotations, затем используйте Push-to-annotate. Нарисованное временное пояснение появится только на заданный срок, а после отпускания <kbd>Alt</kbd>+<kbd>A</kbd> управление сразу вернётся исходному приложению.</div>
+      <p>Для входа нажмите полное назначенное сочетание Push-to-annotate. После входа Draw остаётся активным, пока удерживается хотя бы одна клавиша этого сочетания. Клавиши, уже зажатые в момент входа, не выполняют локальные команды: при стандартном <kbd>Alt</kbd>+<kbd>A</kbd> Arrow не выбирается автоматически. Можно отпустить <kbd>A</kbd>, продолжая держать <kbd>Alt</kbd>, затем нажимать <kbd>W</kbd>, <kbd>F</kbd>, <kbd>1</kbd>–<kbd>5</kbd> или повторно <kbd>A</kbd>. После отпускания всех клавиш режим завершится, но активный штрих сначала будет корректно закончен. Правило работает с любым назначенным клавиатурным сочетанием.</p>
+      <div class="callout"><strong>Удобная комбинация.</strong> Один раз включите Fading Annotations, нажмите <kbd>Alt</kbd>+<kbd>A</kbd>, отпустите <kbd>A</kbd>, оставив <kbd>Alt</kbd> зажатым, выберите инструмент и рисуйте. После отпускания <kbd>Alt</kbd> управление вернётся исходному приложению, а пояснение исчезнет через заданное время.</div>
     </section>
 
     <section class="section" id="masks">
@@ -254,7 +254,7 @@
       <h3>Наглядная демонстрация действий мышью</h3><ol><li>Включите Cursor Highlight, чтобы положение курсора читалось стабильнее.</li><li>Добавьте Click Pulse для обратной связи при щелчках.</li><li>При необходимости временно удерживайте Laser, чтобы показать следующий элемент.</li></ol>
       <p class="top"><a href="#top">Наверх ↑</a></p>
     </section>
-    <footer>FocusTool 3.2.0 · Полное офлайн-руководство</footer>
+    <footer>FocusTool 3.2.1 · Полное офлайн-руководство</footer>
   </main>
 </div>
 </body>

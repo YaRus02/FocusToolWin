@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>FocusTool 3.2.0 — complete guide</title>
+  <title>FocusTool 3.2.1 — complete guide</title>
   <style>
     :root{--bg:#f4f6f8;--panel:#fff;--text:#20252b;--muted:#64707d;--line:#dce2e8;--accent:#2468d8;--accent2:#eaf2ff;--note:#eef7ff;--warn:#fff5df;--limit:#fff0f0;--code:#edf1f5;--shadow:0 8px 28px rgba(25,39,52,.08)}
     @media(prefers-color-scheme:dark){:root{--bg:#11151a;--panel:#1a2027;--text:#e7ebef;--muted:#a6b0bb;--line:#343d47;--accent:#79aaff;--accent2:#1d3150;--note:#172c3b;--warn:#382e19;--limit:#3b2023;--code:#252c34;--shadow:none}}
@@ -14,7 +14,7 @@
 <body id="top">
 <div class="layout">
   <aside class="side">
-    <div class="brand">FocusTool</div><div class="version">Complete guide · 3.2.0</div>
+    <div class="brand">FocusTool</div><div class="version">Complete guide · 3.2.1</div>
     <nav aria-label="Contents">
       <a href="#start">1. Quick start</a><a href="#model">2. How it works</a><a href="#pointer">3. Pointer tools</a><a href="#focus">4. Focus and zoom</a><a href="#draw">5. Drawing</a><a href="#masks">6. Masks and regions</a><a href="#timer">7. Timers</a><a href="#capture">8. Captures and boards</a><a href="#stage">9. Capture Stage</a><a href="#toolbar">10. Toolbar and tray</a><a href="#settings">11. Settings</a><a href="#hotkeys">12. Shortcuts</a><a href="#live">13. Live controls</a><a href="#files">14. Files and data</a><a href="#limits">15. Limitations</a><a href="#problems">16. Troubleshooting</a><a href="#workflow">17. Workflows</a>
     </nav>
@@ -22,7 +22,7 @@
   <main>
     <header class="hero">
       <span class="tag">Offline guide</span>
-      <h1>FocusTool 3.2.0</h1>
+      <h1>FocusTool 3.2.1</h1>
       <p class="lead">Pointer effects, screen annotation, visual masks, timers, captures, boards, and a window presentation view in one Windows utility.</p>
       <div class="actions"><a class="button" href="#start">Get started</a><a class="button" href="#hotkeys">Shortcut table</a><a class="button" href="FocusTool-Manual-RU.html" lang="ru">Русское руководство</a></div>
       <div class="callout"><strong>Purpose.</strong> FocusTool adds visual presentation tools to other applications without modifying their source content.</div>
@@ -86,8 +86,8 @@
       <h3>Text, images, and editing</h3><p>Paste text or an image from the clipboard with <kbd>Ctrl</kbd>+<kbd>V</kbd>. <kbd>Enter</kbd> completes text input and <kbd>Shift</kbd>+<kbd>Enter</kbd> inserts a new line. Move can box-select one or several objects and drag them. Double-click text to edit it or a supported shape to reveal editing handles. <kbd>Ctrl</kbd>+wheel changes the thickness of a selected shape or the size of selected text. <kbd>Backspace</kbd> deletes the selection. Step numbering has an independent sequence for each color slot.</p>
       <h3>History and clearing</h3><p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes. <kbd>Delete</kbd> or <kbd>Shift</kbd>+<kbd>E</kbd> clears annotations. <kbd>Esc</kbd> first cancels active editing/selection and then exits Draw, so a sub-mode can require a second press.</p>
       <h3>Fading Annotations</h3><p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> enables temporary annotations. Settings control the visible and fade durations. Use this for brief explanations that should disappear without manual clearing.</p>
-      <h3>Push-to-annotate</h3><p>Hold <kbd>Alt</kbd>+<kbd>A</kbd> to open Draw only for the duration of an explanation. While holding it, switch common tools with their letter keys and select a color with <kbd>1</kbd>–<kbd>5</kbd>, without opening the toolbar. Releasing the shortcut does not cut off an active stroke: exit completes after the current action.</p>
-      <div class="callout"><strong>Useful combination.</strong> Enable Fading Annotations once, then use Push-to-annotate. A temporary explanation remains for the configured time, while releasing <kbd>Alt</kbd>+<kbd>A</kbd> immediately returns control to the source application.</div>
+      <h3>Push-to-annotate</h3><p>Press the complete assigned Push-to-annotate shortcut to enter. Draw then stays active while any key from that shortcut remains held. Keys already down at entry do not execute local commands: with the default <kbd>Alt</kbd>+<kbd>A</kbd>, Arrow is not selected automatically. Release <kbd>A</kbd> while keeping <kbd>Alt</kbd> held, then press <kbd>W</kbd>, <kbd>F</kbd>, <kbd>1</kbd>–<kbd>5</kbd>, or <kbd>A</kbd> again. After every shortcut key is released, the mode exits once the active stroke has completed. The rule works with any assigned keyboard combination.</p>
+      <div class="callout"><strong>Useful combination.</strong> Enable Fading Annotations once, press <kbd>Alt</kbd>+<kbd>A</kbd>, release <kbd>A</kbd> while keeping <kbd>Alt</kbd> held, select a tool, and draw. Releasing <kbd>Alt</kbd> returns control to the source application while the explanation fades after the configured time.</div>
     </section>
 
     <section class="section" id="masks">
@@ -185,7 +185,7 @@
       <h3>Make mouse actions easy to follow</h3><ol><li>Enable Cursor Highlight so the pointer position is consistently visible.</li><li>Add Click Pulse for feedback on clicks.</li><li>Hold Laser temporarily when you need to point out the next element.</li></ol>
       <p class="top"><a href="#top">Back to top ↑</a></p>
     </section>
-    <footer>FocusTool 3.2.0 · Complete offline guide</footer>
+    <footer>FocusTool 3.2.1 · Complete offline guide</footer>
   </main>
 </div>
 </body>

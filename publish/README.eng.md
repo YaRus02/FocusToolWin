@@ -1,6 +1,6 @@
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
-![Version](https://img.shields.io/badge/version-3.2.0-2468D8)
+![Version](https://img.shields.io/badge/version-3.2.1-2468D8)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 # FocusTool
@@ -9,7 +9,7 @@ FocusTool is a compact Windows utility for presentations, online lessons, screen
 
 Its main principle is fast access to frequently used actions with minimal visual noise. Modes are available through global shortcuts, the system tray, or a compact overlay toolbar.
 
-Documentation is current for version **3.2.0**.
+Documentation is current for version **3.2.1**.
 
 > Development note: AI assistance was used while building FocusTool as an engineering aid. Architecture, integration, behavior checks, and final changes were reviewed and controlled manually.
 
@@ -56,9 +56,9 @@ Full documentation:
 - Object Eraser removes complete annotations and leaves pasted images untouched.
 - Undo/Redo, multi-object selection, per-tool thickness memory, and five color slots.
 - **Fading Annotations** removes temporary explanations automatically.
-- **Push-to-annotate** enables Draw while `Alt+A` is held and never cuts off an unfinished stroke.
+- **Push-to-annotate** starts when the complete assigned shortcut is pressed and stays active while any of its keys remains held. The initial key does not select a matching tool; it can do so after being released and pressed again. An active stroke always completes before exit.
 
-A useful live-presentation combination is to enable Fading Annotations once, then hold `Alt+A`, draw, and release. Control returns to the source application while the explanation disappears on its own.
+A useful live-presentation combination is to enable Fading Annotations once, press `Alt+A`, release `A` while keeping `Alt` held, select a tool, and draw. Releasing `Alt` returns control to the source application while the explanation disappears on its own.
 
 ### Masks, boards, and capture
 
