@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>FocusTool 3.2.0 — complete guide</title>
+  <style>
+    :root{--bg:#f4f6f8;--panel:#fff;--text:#20252b;--muted:#64707d;--line:#dce2e8;--accent:#2468d8;--accent2:#eaf2ff;--note:#eef7ff;--warn:#fff5df;--limit:#fff0f0;--code:#edf1f5;--shadow:0 8px 28px rgba(25,39,52,.08)}
+    @media(prefers-color-scheme:dark){:root{--bg:#11151a;--panel:#1a2027;--text:#e7ebef;--muted:#a6b0bb;--line:#343d47;--accent:#79aaff;--accent2:#1d3150;--note:#172c3b;--warn:#382e19;--limit:#3b2023;--code:#252c34;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:1rem}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.62 system-ui,-apple-system,"Segoe UI",sans-serif}a{color:var(--accent)}.layout{display:grid;grid-template-columns:285px minmax(0,860px);gap:32px;max-width:1210px;margin:auto;padding:24px}.side{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}.brand{font-size:1.25rem;font-weight:750}.version,.muted{color:var(--muted)}nav{margin-top:16px}nav a{display:block;padding:5px 8px;border-radius:7px;color:var(--text);text-decoration:none}nav a:hover{background:var(--accent2);color:var(--accent)}main{min-width:0}.hero,.section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:30px;margin-bottom:22px;box-shadow:var(--shadow)}h1{font-size:2.25rem;line-height:1.15;margin:.2em 0}h2{font-size:1.55rem;line-height:1.25;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}h3{font-size:1.12rem;margin:24px 0 8px}p{margin:8px 0 14px}ul,ol{padding-left:23px}li+li{margin-top:5px}.lead{font-size:1.08rem;color:var(--muted)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.button{display:inline-block;padding:8px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;background:var(--accent2)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:10px;padding:15px}.card h3{margin:0 0 6px}.callout{border-left:4px solid var(--accent);background:var(--note);padding:13px 15px;margin:16px 0;border-radius:6px}.warning{background:var(--warn);border-color:#d38a16}.limit{background:var(--limit);border-color:#d14b56}table{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:.95rem}th,td{padding:9px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:650}kbd{display:inline-block;white-space:nowrap;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--code);padding:0 5px;font:600 .86em/1.6 system-ui}.tag{display:inline-block;padding:2px 7px;border-radius:999px;background:var(--accent2);color:var(--accent);font-size:.82rem}.top{text-align:right;font-size:.9rem}.checklist li{margin-bottom:7px}footer{text-align:center;color:var(--muted);padding:8px 20px 30px}@media(max-width:850px){.layout{display:block;padding:12px}.side{position:static;max-height:none;margin-bottom:16px}.side nav{columns:2}.hero,.section{padding:22px}.grid{grid-template-columns:1fr}}@media(max-width:520px){.side nav{columns:1}h1{font-size:1.8rem}.hero,.section{padding:18px;overflow-x:auto}}@media print{body{background:#fff;color:#000;font-size:11pt}.layout{display:block;max-width:none;padding:0}.side{display:none}.hero,.section{box-shadow:none;border:0;border-radius:0;padding:0;margin:0 0 24px;break-inside:avoid}.button,.top{display:none}a{color:#000;text-decoration:none}}
+  </style>
+</head>
+<body id="top">
+<div class="layout">
+  <aside class="side">
+    <div class="brand">FocusTool</div><div class="version">Complete guide · 3.2.0</div>
+    <nav aria-label="Contents">
+      <a href="#start">1. Quick start</a><a href="#model">2. How it works</a><a href="#pointer">3. Pointer tools</a><a href="#focus">4. Focus and zoom</a><a href="#draw">5. Drawing</a><a href="#masks">6. Masks and regions</a><a href="#timer">7. Timers</a><a href="#capture">8. Captures and boards</a><a href="#stage">9. Capture Stage</a><a href="#toolbar">10. Toolbar and tray</a><a href="#settings">11. Settings</a><a href="#hotkeys">12. Shortcuts</a><a href="#live">13. Live controls</a><a href="#files">14. Files and data</a><a href="#limits">15. Limitations</a><a href="#problems">16. Troubleshooting</a><a href="#workflow">17. Workflows</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="hero">
+      <span class="tag">Offline guide</span>
+      <h1>FocusTool 3.2.0</h1>
+      <p class="lead">Pointer effects, screen annotation, visual masks, timers, captures, boards, and a window presentation view in one Windows utility.</p>
+      <div class="actions"><a class="button" href="#start">Get started</a><a class="button" href="#hotkeys">Shortcut table</a><a class="button" href="FocusTool-Manual-RU.html" lang="ru">Русское руководство</a></div>
+      <div class="callout"><strong>Purpose.</strong> FocusTool adds visual presentation tools to other applications without modifying their source content.</div>
+    </header>
+
+    <section class="section" id="start">
+      <h2>1. Quick start</h2>
+      <ol class="checklist">
+        <li>Run <strong>FocusTool.exe</strong>. Its icon appears in the Windows notification area.</li>
+        <li>Open the toolbar with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>, or use the tray icon menu.</li>
+        <li>For a brief pointer, hold <kbd>Alt</kbd>+<kbd>Z</kbd> (laser) or <kbd>Alt</kbd>+<kbd>X</kbd> (cursor highlight).</li>
+        <li>Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd> to draw. Pick a toolbar tool or press its key, such as <kbd>W</kbd> for Pencil or <kbd>F</kbd> for Highlighter.</li>
+        <li>Press <kbd>Esc</kbd> to cancel the current operation or leave an interactive mode. If an editor is active, the first <kbd>Esc</kbd> closes that editor.</li>
+      </ol>
+      <p>All shortcuts shown here are defaults. Change or disable them under <strong>Settings → Shortcuts</strong>. Existing customized settings from an earlier version are preserved.</p>
+      <div class="callout warning"><strong>Windows SmartScreen.</strong> Windows may warn about an unsigned build. Only run an archive obtained from a source you trust.</div>
+    </section>
+
+    <section class="section" id="model">
+      <h2>2. How the utility works</h2>
+      <div class="grid">
+        <div class="card"><h3>Global modes</h3><p>Laser, highlights, timers, and other tools can be enabled over your current work without switching to a FocusTool window.</p></div>
+        <div class="card"><h3>Interactive modes</h3><p>Drawing, region selection, and boards accept mouse and keyboard input. <kbd>Esc</kbd> cancels a sub-mode or closes them.</p></div>
+        <div class="card"><h3>Multiple monitors</h3><p>Overlays use desktop coordinates across multiple displays. A full screenshot applies to the current monitor.</p></div>
+        <div class="card"><h3>Above windows</h3><p>The overlays are intended for normal desktop windows. Exclusive full-screen apps, protected video, and some system surfaces may bypass them.</p></div>
+      </div>
+      <p>Most modes are available from the toolbar, tray menu, or an assigned global shortcut. A <em>Hold</em> shortcut works only while held; a <em>Toggle</em> shortcut switches a persistent mode.</p>
+    </section>
+
+    <section class="section" id="pointer">
+      <h2>3. Pointer and click feedback</h2>
+      <h3>Laser Pointer</h3>
+      <p>A colored point follows the cursor and leaves a fading trail. Color slots, point size, trail and fade duration, glow, and Always/Hold behavior are configurable. Toggle: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Z</kbd>; hold: <kbd>Alt</kbd>+<kbd>Z</kbd>.</p>
+      <h3>Cursor Highlight</h3>
+      <p>A stable ring around the cursor, with colors, radius, and thickness independent of the laser. Toggle: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd>; hold: <kbd>Alt</kbd>+<kbd>X</kbd>.</p>
+      <h3>Click Pulse</h3>
+      <p>A brief visual pulse at the click position. It is enabled independently of the cursor ring and has its own <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> shortcut. It is visual feedback, not an input logger.</p>
+      <div class="callout"><strong>Tip.</strong> For left-hand control, keep brief actions on <kbd>Alt</kbd>+<kbd>Z</kbd>/<kbd>X</kbd> and persistent modes on the corresponding <kbd>Ctrl</kbd> combinations.</div>
+    </section>
+
+    <section class="section" id="focus">
+      <h2>4. Focus and magnification</h2>
+      <h3>Spotlight</h3><p>Dims everything outside a circle around the cursor. Configure its radius and dim opacity. Toggle it with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd>, or hold <kbd>Alt</kbd>+<kbd>S</kbd> temporarily. While active, <kbd>Ctrl</kbd>+wheel changes dim opacity and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+wheel changes the radius.</p>
+      <h3>Magnifier</h3><p>A circular cursor-following magnifier with configurable radius and zoom. Toggle it with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd>. Use <kbd>Ctrl</kbd>+wheel for zoom and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+wheel for radius. It is briefly hidden during a regular capture so it does not obscure the chosen area.</p>
+      <h3>Spotlight with Magnifier</h3><p>Both modes can be enabled together. Content is magnified inside the clear area while the rest of the screen remains dimmed. The shared opening follows the Magnifier radius, creating a focused lens that works well for presenting small interface elements.</p>
+      <h3>Pinned Lens</h3><p>Create a separate pinned lens with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>: first select a source region, then position the new window. Multiple lenses are supported. Move, resize, zoom, freeze, and close them. <kbd>Ctrl</kbd>+wheel over a lens changes its zoom. The context menu offers <strong>Freeze/Unfreeze</strong>, zoom in/out, Close, and Close all. Freeze is useful for comparing a fixed state with a changing screen.</p>
+      <h3>Region Spotlight</h3><p>Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> and draw a rectangle; the outside is dimmed. The regular circular Spotlight is turned off when region selection begins so it does not interfere. Create multiple regions, then move or resize them. Arrow keys move the selected region by 1 pixel and <kbd>Shift</kbd>+arrow by 10; <kbd>Delete</kbd> removes it and <kbd>Enter</kbd> finishes editing. Clear all regions from the toolbar or tray; no clear shortcut is assigned by default.</p>
+      <div class="callout"><strong>Compatibility.</strong> Lenses use the desktop image made available by Windows. Protected video and some hardware surfaces may not provide a frame for magnification.</div>
+      <p class="muted">Spotlight and Magnifier are hidden on Screen, Black, and White Board so the board remains a self-contained workspace.</p>
+    </section>
+
+    <section class="section" id="draw">
+      <h2>5. Drawing and annotations</h2>
+      <p>Toggle Draw with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd>, or hold <kbd>Alt</kbd>+<kbd>A</kbd> for a brief annotation. Thickness is remembered per tool.</p>
+      <table><thead><tr><th>Tool</th><th>Key</th><th>Behavior</th></tr></thead><tbody>
+        <tr><td>Arrow</td><td><kbd>A</kbd></td><td>An arrow from the start to the end point.</td></tr><tr><td>Rectangle</td><td><kbd>R</kbd></td><td>A rectangular outline.</td></tr><tr><td>Ellipse</td><td><kbd>C</kbd></td><td>An elliptical outline.</td></tr><tr><td>Line</td><td><kbd>S</kbd></td><td>A straight segment.</td></tr><tr><td>Pencil</td><td><kbd>W</kbd></td><td>A freehand opaque stroke with smoothing.</td></tr><tr><td>Highlighter</td><td><kbd>F</kbd></td><td>A translucent stroke with a screen-aligned rectangular nib.</td></tr><tr><td>Eraser</td><td><kbd>E</kbd></td><td>Deletes complete annotations, not individual pixels; pasted images are left untouched.</td></tr><tr><td>Text</td><td><kbd>T</kbd></td><td>Adds text in the selected color and size.</td></tr><tr><td>Move</td><td><kbd>Q</kbd></td><td>Selects, moves, and edits objects.</td></tr><tr><td>Step</td><td><kbd>D</kbd></td><td>Numbered oval or rectangular markers.</td></tr>
+      </tbody></table>
+      <h3>Pencil and Highlighter</h3><p><strong>Off</strong>, <strong>Balanced</strong>, and <strong>Strong</strong> smoothing reduce edge jitter. They do not recognize shapes or simulate pressure. The Highlighter has a fixed rectangular nib: a horizontal stroke is broad, a vertical stroke is narrow, and a diagonal stroke has an intermediate visible width. Briefly holding the endpoint straightens the current stroke.</p>
+      <h3>Precise geometry with Shift</h3><p>Hold <kbd>Shift</kbd> while drawing: Rectangle becomes a square, Ellipse becomes a true circle, Step Rectangle becomes a square marker, and Line snaps in 45-degree increments. The same constraints apply while resizing existing shapes; an Arrow endpoint can also snap to 45-degree directions while being edited. A pasted image always resizes with its original aspect ratio preserved.</p>
+      <h3>Eraser</h3><p>A click removes the top erasable annotation under the pointer; dragging removes intersected annotations as one undoable action. Pasted images are skipped, so they can serve as a background and are removed deliberately with Move and <kbd>Backspace</kbd>/<kbd>Delete</kbd>. The cursor circle indicates the hit radius and can change color over a target. It is a live tool indicator and is never added to the drawing.</p>
+      <h3>Text, images, and editing</h3><p>Paste text or an image from the clipboard with <kbd>Ctrl</kbd>+<kbd>V</kbd>. <kbd>Enter</kbd> completes text input and <kbd>Shift</kbd>+<kbd>Enter</kbd> inserts a new line. Move can box-select one or several objects and drag them. Double-click text to edit it or a supported shape to reveal editing handles. <kbd>Ctrl</kbd>+wheel changes the thickness of a selected shape or the size of selected text. <kbd>Backspace</kbd> deletes the selection. Step numbering has an independent sequence for each color slot.</p>
+      <h3>History and clearing</h3><p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes. <kbd>Delete</kbd> or <kbd>Shift</kbd>+<kbd>E</kbd> clears annotations. <kbd>Esc</kbd> first cancels active editing/selection and then exits Draw, so a sub-mode can require a second press.</p>
+      <h3>Fading Annotations</h3><p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> enables temporary annotations. Settings control the visible and fade durations. Use this for brief explanations that should disappear without manual clearing.</p>
+      <h3>Push-to-annotate</h3><p>Hold <kbd>Alt</kbd>+<kbd>A</kbd> to open Draw only for the duration of an explanation. While holding it, switch common tools with their letter keys and select a color with <kbd>1</kbd>–<kbd>5</kbd>, without opening the toolbar. Releasing the shortcut does not cut off an active stroke: exit completes after the current action.</p>
+      <div class="callout"><strong>Useful combination.</strong> Enable Fading Annotations once, then use Push-to-annotate. A temporary explanation remains for the configured time, while releasing <kbd>Alt</kbd>+<kbd>A</kbd> immediately returns control to the source application.</div>
+    </section>
+
+    <section class="section" id="masks">
+      <h2>6. Masks and selected regions</h2>
+      <h3>Region Mask</h3><p>Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> and draw a rectangle. Create multiple masks, drag them, and resize them by their handles. Right-click a mask to change its style or delete it; <kbd>Delete</kbd> and <kbd>Backspace</kbd> also remove the selected mask. Styles include Solid, Stripes, a <strong>HIDE</strong> label, and stripes with the label. Choosing a new default style affects future masks; existing masks retain their own style.</p>
+      <p>Clear all masks from the toolbar or tray. No clear shortcut is assigned by default, but you can configure one.</p>
+      <div class="callout"><strong>How it works.</strong> A mask visually covers the selected region without changing the source window. When using a third-party recorder, it is useful to confirm beforehand whether its selected capture method includes overlays.</div>
+    </section>
+
+    <section class="section" id="timer">
+      <h2>7. Timers</h2>
+      <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> creates a timer. Multiple timers are supported and can remain over normal windows and boards.</p>
+      <table><thead><tr><th>Mode</th><th>Purpose</th></tr></thead><tbody><tr><td>Countdown</td><td>Counts a chosen duration down to zero.</td></tr><tr><td>Stopwatch</td><td>Counts elapsed time upward.</td></tr><tr><td>Clock</td><td>Shows current local time.</td></tr><tr><td>Until time</td><td>Counts down to a selected time of day.</td></tr></tbody></table>
+      <p>The context menu provides Start/Pause, Reset (Countdown and Stopwatch), mode selection, label and time editing, and Close. Styling includes Light, Dark, or Auto theme, 12/24-hour format, progress and label visibility, and finish blinking. Scale and opacity are adjustable. Maximum entered duration is 99:59:59, and up to ten recent labels are retained.</p>
+      <h3>Mouse and keyboard control</h3><p>Drag the timer body to move it. Double-click the label to edit it, or double-click the time to change it in a compatible mode. When a timer is selected, the following commands are available:</p>
+      <table><thead><tr><th>Command</th><th>Action</th></tr></thead><tbody><tr><td><kbd>Space</kbd></td><td>Start/Pause</td></tr><tr><td><kbd>R</kbd></td><td>Reset</td></tr><tr><td><kbd>Tab</kbd></td><td>Next mode</td></tr><tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Adjust by 1 second</td></tr><tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Adjust by 1 minute</td></tr><tr><td><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td>Adjust by 5 minutes</td></tr><tr><td>Wheel / <kbd>Shift</kbd>+wheel</td><td>Adjust by 1 / 5 minutes</td></tr><tr><td><kbd>Enter</kbd> or <kbd>F2</kbd></td><td>Edit label</td></tr><tr><td><kbd>Delete</kbd> or <kbd>Backspace</kbd></td><td>Close timer</td></tr><tr><td><kbd>Esc</kbd></td><td>Return focus to the previous window</td></tr></tbody></table>
+      <p>Changed values become defaults for the next timer. Open timers and their progress are not restored after restarting the application. Timer presets and sequences are not provided, and no audio alert is claimed.</p>
+    </section>
+
+    <section class="section" id="capture">
+      <h2>8. Screenshots and boards</h2>
+      <h3>Screenshot</h3><p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>E</kbd> captures the current monitor. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> selects a region and displays its exact size. After drawing it, move the frame or resize it by its handles; arrow keys move it by 1 pixel and <kbd>Shift</kbd>+arrow by 10. <kbd>Enter</kbd> captures and <kbd>Delete</kbd> discards the pending region. The PNG is copied to the clipboard and saved automatically under <strong>Pictures\FocusTool</strong>. The toolbar and cursor-following magnifier are hidden during capture.</p>
+      <h3>Screen Board</h3><p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd> creates a board from the current screen. FocusTool forms the base image and then restores visual regions above the board; a mask briefly disappearing during the transition is expected. Draw on the board and save the result as a screenshot.</p>
+      <h3>Black Board and White Board</h3><p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> opens a black board, and <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd> opens a white board. These are clean drawing backgrounds; timers may remain above them. Press <kbd>Esc</kbd> to close a board.</p>
+      <div class="callout"><strong>Frame composition.</strong> FocusTool's own captures include the annotations and visual regions intended for presentation. Third-party software may compose overlays differently depending on its selected capture type.</div>
+    </section>
+
+    <section class="section" id="stage">
+      <h2>9. Capture Stage</h2>
+      <p>Capture Stage presents a selected window in a separate borderless view fitted to the display work area, excluding the taskbar. Selection uses the Windows system picker. Multiple Stages can be opened and closed individually or together.</p>
+      <ul><li>Stage is a presentation view; clicks are not forwarded to the source window.</li><li>It selects an application window, not an individual browser tab.</li><li>FocusTool elements are composed over the view when their positions can be mapped to the selected window.</li><li>If the source is closed or lost, Stage reports that it is unavailable; select it again.</li><li>When minimized, source behavior depends on Windows and the app: the last available frame may remain, or the source may become unavailable.</li></ul>
+      <div class="callout"><strong>Compatibility.</strong> Some protected or hardware-accelerated windows do not expose an image to system capture. A source application may also draw its own cursor, producing a second pointer next to FocusTool effects.</div>
+    </section>
+
+    <section class="section" id="toolbar">
+      <h2>10. Toolbar and system tray</h2>
+      <p>Open the toolbar with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>. It collects mode toggles, drawing tools, colors, thickness, clear commands, and capture actions. Tooltips show a command name and its current shortcut.</p>
+      <p>The notification-area icon provides settings, region creation/clearing, timers, lenses, Capture Stage, and group close commands without opening the toolbar. Exit completely with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Q</kbd> or tray → Exit. Closing one overlay does not necessarily quit FocusTool.</p>
+    </section>
+
+    <section class="section" id="settings">
+      <h2>11. Settings</h2>
+      <table><thead><tr><th>Tab</th><th>Options</th></tr></thead><tbody><tr><td>Pointer</td><td>Laser and ring colors, point size, trail, fade, glow, Always/Hold behavior, ring radius/thickness, and Click Pulse.</td></tr><tr><td>Focus</td><td>Magnifier radius/zoom; Pinned Lens zoom/refresh rate; Spotlight radius/dim opacity.</td></tr><tr><td>Draw</td><td>Color slots, HEX color, thickness, text size, smoothing, Fading Annotations, and durations.</td></tr><tr><td>Mask</td><td>Color, HEX color, opacity, and style for new masks.</td></tr><tr><td>Shortcuts</td><td>Global modes, Draw tools, editing commands, captures, and boards.</td></tr></tbody></table>
+      <p><strong>Apply</strong> applies without closing, <strong>OK</strong> applies and closes, and <strong>Cancel</strong> discards unapplied changes. <strong>Restore defaults</strong> restores standard values. An empty/None shortcut disables that command.</p>
+      <div class="callout warning"><strong>Conflicts.</strong> Windows or another app may already own a shortcut. If a command does not trigger, assign another combination and avoid bare letters for global actions.</div>
+    </section>
+
+    <section class="section" id="hotkeys">
+      <h2>12. Default shortcuts</h2>
+      <h3>Global modes</h3>
+      <table><thead><tr><th>Action</th><th>Shortcut</th></tr></thead><tbody>
+        <tr><td>Laser — toggle / hold</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Z</kbd> / <kbd>Alt</kbd>+<kbd>Z</kbd></td></tr><tr><td>Draw — toggle / hold</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd> / <kbd>Alt</kbd>+<kbd>A</kbd></td></tr><tr><td>Cursor Highlight — toggle / hold</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd> / <kbd>Alt</kbd>+<kbd>X</kbd></td></tr><tr><td>Click Pulse</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd></td></tr><tr><td>Spotlight — toggle / hold</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd> / <kbd>Alt</kbd>+<kbd>S</kbd></td></tr><tr><td>Magnifier</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></td></tr><tr><td>Pinned Lens</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd></td></tr><tr><td>Region Mask</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd></td></tr><tr><td>Region Spotlight</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td></tr><tr><td>Fading Annotations</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd></td></tr><tr><td>Timer</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td></tr><tr><td>Toolbar</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd></td></tr><tr><td>Exit application</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Q</kbd></td></tr>
+      </tbody></table>
+      <h3>Captures and boards</h3><table><thead><tr><th>Action</th><th>Shortcut</th></tr></thead><tbody><tr><td>Screenshot</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>E</kbd></td></tr><tr><td>Region Screenshot</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td></tr><tr><td>Screen Board</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd></td></tr><tr><td>Black Board</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td></tr><tr><td>White Board</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd></td></tr></tbody></table>
+      <h3>Inside Draw</h3><table><thead><tr><th>Group</th><th>Keys</th></tr></thead><tbody><tr><td>Tools</td><td><kbd>A</kbd> Arrow, <kbd>R</kbd> Rectangle, <kbd>C</kbd> Ellipse, <kbd>S</kbd> Line, <kbd>W</kbd> Pencil, <kbd>F</kbd> Highlighter, <kbd>E</kbd> Eraser, <kbd>T</kbd> Text, <kbd>Q</kbd> Move, <kbd>D</kbd> Step</td></tr><tr><td>Color</td><td><kbd>1</kbd>…<kbd>5</kbd></td></tr><tr><td>Thickness</td><td><kbd>Shift</kbd>+<kbd>Z</kbd> decrease, <kbd>Shift</kbd>+<kbd>X</kbd> increase</td></tr><tr><td>History</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redo</td></tr><tr><td>Paste</td><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td></tr><tr><td>Delete</td><td><kbd>Backspace</kbd> selected object; <kbd>Delete</kbd> or <kbd>Shift</kbd>+<kbd>E</kbd> clear</td></tr><tr><td>Exit/cancel</td><td><kbd>Esc</kbd></td></tr></tbody></table>
+      <p class="muted">Clear all masks and clear all Region Spotlights have no default shortcut; assign one if needed.</p>
+    </section>
+
+    <section class="section" id="live">
+      <h2>13. Live wheel controls</h2>
+      <p>Hold <kbd>Ctrl</kbd> and rotate the wheel. Add <kbd>Shift</kbd> for the current mode's secondary parameter.</p>
+      <table><thead><tr><th>Context</th><th><kbd>Ctrl</kbd> + wheel</th><th><kbd>Ctrl</kbd>+<kbd>Shift</kbd> + wheel</th></tr></thead><tbody><tr><td>Magnifier</td><td>Zoom</td><td>Radius</td></tr><tr><td>Spotlight</td><td>Dim opacity</td><td>Radius</td></tr><tr><td>Selected annotation</td><td>Thickness or text size</td><td>—</td></tr><tr><td>Hovered/selected Pinned Lens</td><td>Zoom</td><td>—</td></tr></tbody></table>
+      <p>Only a function matching the current context is changed. If another window scrolls instead, point at the intended element or enable the relevant mode first.</p>
+    </section>
+
+    <section class="section" id="files">
+      <h2>14. Files, settings, and privacy</h2>
+      <ul><li>Captures are saved under <strong>Pictures\FocusTool</strong> and copied to the clipboard.</li><li>Settings are stored locally for the current Windows user.</li><li>Current drawings, timers, lenses, masks, and Stages are session state, not a saved project after the app exits.</li><li>FocusTool is not a source-document editor and never writes annotations back to the presented application.</li></ul>
+      <p>Before handing the computer to another person, inspect the clipboard, the capture folder, and remaining overlays. FocusTool does not replace access-control policy or metadata-removal tools.</p>
+    </section>
+
+    <section class="section" id="limits">
+      <h2>15. Compatibility and current capabilities</h2>
+      <ul><li>Windows 10/11 and the runtime required by the chosen build are supported. Results depend on the Windows version, video driver, DPI scaling, and source application.</li><li>Shape recognition, pen-pressure support, and a pixel eraser are not currently provided.</li><li>Shortcut profiles, timer sequences, timer sound, a keystroke overlay, and a webcam feature are outside the current feature set.</li><li>Capture Stage displays a window but does not control it or select individual browser tabs.</li><li>Protected media and exclusive full-screen output may not be available to system capture.</li><li>The contents of a third-party recording depend on the capture method selected in that recorder.</li><li>Masks visually cover an area without changing the source application's data.</li></ul>
+    </section>
+
+    <section class="section" id="problems">
+      <h2>16. Troubleshooting</h2>
+      <table><thead><tr><th>Symptom</th><th>What to check</th></tr></thead><tbody><tr><td>A shortcut does not work</td><td>Open Shortcuts, confirm it is assigned and not reserved by Windows or another app. Try a Ctrl+Alt combination.</td></tr><tr><td><kbd>Esc</kbd> did not close Draw immediately</td><td>Text, object editing, or selection is active. The first Esc cancels that sub-mode; press it again to exit.</td></tr><tr><td>An overlay is absent from a recording</td><td>Change the recorder's capture method and test. Window and desktop capture compose overlays differently.</td></tr><tr><td>Black image in Magnifier/Stage</td><td>The source may block capture or use a protected surface. Test a normal window and update the display driver.</td></tr><tr><td>Stage lost its source</td><td>The source window closed, changed, or became unavailable. Close Stage and select it again.</td></tr><tr><td>A line is too raw or too smoothed</td><td>Change Draw smoothing: Off retains more movement; Strong removes more jitter.</td></tr><tr><td>The Eraser leaves a circle</td><td>The circle is the live hit-radius indicator. It disappears after changing tools/exiting and is not an annotation.</td></tr><tr><td>Resource use is high</td><td>Lower Pinned Lens refresh rate, close unused lenses/Stages, and test without a graphics-heavy source.</td></tr></tbody></table>
+    </section>
+
+    <section class="section" id="workflow">
+      <h2>17. Practical workflows</h2>
+      <h3>Temporary explanation without manual clearing</h3><ol><li>Enable Fading Annotations once.</li><li>Hold <kbd>Alt</kbd>+<kbd>A</kbd> and select a tool with its letter key.</li><li>Draw and release the shortcut: control returns to the application and the mark disappears automatically.</li></ol>
+      <h3>Focus and magnify a small element</h3><ol><li>Enable Spotlight.</li><li>Enable Magnifier—the area around the enlarged content remains dimmed.</li><li>Set zoom with <kbd>Ctrl</kbd>+wheel and radius with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+wheel.</li></ol>
+      <h3>Electronic board for a lesson</h3><ol><li>Open White Board for a conventional diagram or Black Board for high contrast.</li><li>Use <kbd>Shift</kbd> for circles, squares, and 45-degree lines, and Step for sequence.</li><li>Add text or paste a prepared image with <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li><li>Save the result with the built-in Screenshot.</li></ol>
+      <h3>Review a static interface</h3><ol><li>Open Screen Board to freeze the current screen.</li><li>Add arrows, frames, text, and numbered steps without the source changing underneath.</li><li>Save the annotated frame, or clear it and repeat the explanation.</li></ol>
+      <h3>Step-by-step instruction with branches</h3><ol><li>Select Step Oval or Step Rect.</li><li>Use different color slots for independent numbering sequences.</li><li>Connect steps with arrows and add short text notes.</li></ol>
+      <h3>Compare details or states</h3><ol><li>Create several Pinned Lenses for the relevant regions.</li><li>Set each lens zoom with <kbd>Ctrl</kbd>+wheel.</li><li>Freeze one lens and compare its frame with the changing content in another.</li></ol>
+      <h3>Present a single application</h3><ol><li>Start Capture Stage and choose a window in the Windows system picker.</li><li>Add a pointer, annotations, or a timer over the presentation view.</li><li>Switch to the source window to interact with it; Stage remains the presentation view.</li></ol>
+      <h3>Capture a precise region</h3><ol><li>Open Region Screenshot and draw an approximate region.</li><li>Refine the frame with the mouse, arrow keys by 1 pixel, or <kbd>Shift</kbd>+arrows by 10.</li><li>Check the displayed dimensions and press <kbd>Enter</kbd>.</li></ol>
+      <h3>Show several important areas</h3><ol><li>Create several Region Spotlights around related elements.</li><li>Move and fine-tune selected regions with the arrow keys.</li><li>Delete completed regions individually or clear all from the toolbar.</li></ol>
+      <h3>Reveal material progressively</h3><ol><li>Cover not-yet-discussed fragments with several Region Masks.</li><li>Move or delete selected masks as the explanation progresses.</li><li>For recording, confirm the recorder's selected capture type beforehand.</li></ol>
+      <h3>Keep a presentation on schedule</h3><ol><li>Create a Countdown for the overall duration.</li><li>Add a Stopwatch for an exercise or question segment.</li><li>Control the selected timer with <kbd>Space</kbd>, <kbd>R</kbd>, and arrow keys without opening a menu.</li></ol>
+      <h3>Make mouse actions easy to follow</h3><ol><li>Enable Cursor Highlight so the pointer position is consistently visible.</li><li>Add Click Pulse for feedback on clicks.</li><li>Hold Laser temporarily when you need to point out the next element.</li></ol>
+      <p class="top"><a href="#top">Back to top ↑</a></p>
+    </section>
+    <footer>FocusTool 3.2.0 · Complete offline guide</footer>
+  </main>
+</div>
+</body>
+</html>

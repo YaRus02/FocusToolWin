@@ -35,9 +35,10 @@ coverage.cobertura.xml
 # Publish binaries and archives
 publish/**
 !publish/
-!publish/readme.ru.txt
-!publish/readme.eng.txt
 !publish/license.txt
+!publish/FocusTool-Manual-RU.html
+!publish/FocusTool-Manual-EN.html
+!publish/README.eng.md
 
 # Temporary files
 *.tmp

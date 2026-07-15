@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>FocusTool 3.2.0 — полное руководство</title>
+  <style>
+    :root{--bg:#f4f6f8;--panel:#fff;--text:#20252b;--muted:#64707d;--line:#dce2e8;--accent:#2468d8;--accent2:#eaf2ff;--note:#eef7ff;--warn:#fff5df;--limit:#fff0f0;--code:#edf1f5;--shadow:0 8px 28px rgba(25,39,52,.08)}
+    @media(prefers-color-scheme:dark){:root{--bg:#11151a;--panel:#1a2027;--text:#e7ebef;--muted:#a6b0bb;--line:#343d47;--accent:#79aaff;--accent2:#1d3150;--note:#172c3b;--warn:#382e19;--limit:#3b2023;--code:#252c34;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:1rem}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.62 system-ui,-apple-system,"Segoe UI",sans-serif}a{color:var(--accent)}.layout{display:grid;grid-template-columns:285px minmax(0,860px);gap:32px;max-width:1210px;margin:auto;padding:24px}.side{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:var(--shadow)}.brand{font-size:1.25rem;font-weight:750}.version,.muted{color:var(--muted)}nav{margin-top:16px}nav a{display:block;padding:5px 8px;border-radius:7px;color:var(--text);text-decoration:none}nav a:hover{background:var(--accent2);color:var(--accent)}main{min-width:0}.hero,.section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:30px;margin-bottom:22px;box-shadow:var(--shadow)}h1{font-size:2.25rem;line-height:1.15;margin:.2em 0}h2{font-size:1.55rem;line-height:1.25;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}h3{font-size:1.12rem;margin:24px 0 8px}p{margin:8px 0 14px}ul,ol{padding-left:23px}li+li{margin-top:5px}.lead{font-size:1.08rem;color:var(--muted)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.button{display:inline-block;padding:8px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;background:var(--accent2)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:10px;padding:15px}.card h3{margin:0 0 6px}.callout{border-left:4px solid var(--accent);background:var(--note);padding:13px 15px;margin:16px 0;border-radius:6px}.warning{background:var(--warn);border-color:#d38a16}.limit{background:var(--limit);border-color:#d14b56}table{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:.95rem}th,td{padding:9px 10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:650}kbd{display:inline-block;white-space:nowrap;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--code);padding:0 5px;font:600 .86em/1.6 system-ui}.tag{display:inline-block;padding:2px 7px;border-radius:999px;background:var(--accent2);color:var(--accent);font-size:.82rem}.top{text-align:right;font-size:.9rem}.checklist li{margin-bottom:7px}footer{text-align:center;color:var(--muted);padding:8px 20px 30px}@media(max-width:850px){.layout{display:block;padding:12px}.side{position:static;max-height:none;margin-bottom:16px}.side nav{columns:2}.hero,.section{padding:22px}.grid{grid-template-columns:1fr}}@media(max-width:520px){.side nav{columns:1}h1{font-size:1.8rem}.hero,.section{padding:18px;overflow-x:auto}}@media print{body{background:#fff;color:#000;font-size:11pt}.layout{display:block;max-width:none;padding:0}.side{display:none}.hero,.section{box-shadow:none;border:0;border-radius:0;padding:0;margin:0 0 24px;break-inside:avoid}.button,.top{display:none}a{color:#000;text-decoration:none}}
+  </style>
+</head>
+<body id="top">
+<div class="layout">
+  <aside class="side">
+    <div class="brand">FocusTool</div><div class="version">Полное руководство · 3.2.0</div>
+    <nav aria-label="Содержание">
+      <a href="#start">1. Быстрый старт</a><a href="#model">2. Как устроена утилита</a><a href="#pointer">3. Указатель</a><a href="#focus">4. Фокус и увеличение</a><a href="#draw">5. Рисование</a><a href="#masks">6. Маски и области</a><a href="#timer">7. Таймеры</a><a href="#capture">8. Снимки и доски</a><a href="#stage">9. Capture Stage</a><a href="#toolbar">10. Панель и трей</a><a href="#settings">11. Настройки</a><a href="#hotkeys">12. Горячие клавиши</a><a href="#live">13. Быстрая настройка</a><a href="#files">14. Файлы и данные</a><a href="#limits">15. Ограничения</a><a href="#problems">16. Решение проблем</a><a href="#workflow">17. Практические сценарии</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="hero">
+      <span class="tag">Офлайн-руководство</span>
+      <h1>FocusTool 3.2.0</h1>
+      <p class="lead">Указатель, подсветка, рисование поверх экрана, визуальные маски, таймеры, снимки, доски и представление окна — в одном приложении для Windows.</p>
+      <div class="actions"><a class="button" href="#start">Начать работу</a><a class="button" href="#hotkeys">Таблица клавиш</a><a class="button" href="FocusTool-Manual-EN.html" lang="en">English manual</a></div>
+      <div class="callout"><strong>Назначение.</strong> FocusTool дополняет демонстрируемые приложения визуальными инструментами и не изменяет их исходное содержимое.</div>
+    </header>
+
+    <section class="section" id="start">
+      <h2>1. Быстрый старт</h2>
+      <ol class="checklist">
+        <li>Запустите <strong>FocusTool.exe</strong>. Значок появится в области уведомлений Windows.</li>
+        <li>Откройте панель клавишами <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd> либо через меню значка в трее.</li>
+        <li>Для короткого указания удерживайте <kbd>Alt</kbd>+<kbd>Z</kbd> (лазер) или <kbd>Alt</kbd>+<kbd>X</kbd> (обводка курсора).</li>
+        <li>Нажмите <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd>, чтобы рисовать. Выберите инструмент на панели или клавишей, например <kbd>W</kbd> для пера и <kbd>F</kbd> для маркера.</li>
+        <li>Нажмите <kbd>Esc</kbd>, чтобы отменить текущую операцию или выйти из интерактивного режима. При активном редактировании первый <kbd>Esc</kbd> закрывает именно его.</li>
+      </ol>
+      <p>Все указанные сочетания — значения по умолчанию. Их можно заменить или отключить в <strong>Settings → Shortcuts</strong>. Изменённые настройки прежних версий сохраняются.</p>
+      <div class="callout warning"><strong>Windows SmartScreen.</strong> Если сборка не подписана цифровой подписью, Windows может показать предупреждение. Используйте только архив из источника, которому доверяете.</div>
+    </section>
+
+    <section class="section" id="model">
+      <h2>2. Как устроена утилита</h2>
+      <div class="grid">
+        <div class="card"><h3>Глобальные режимы</h3><p>Лазер, подсветка, таймер и другие функции включаются поверх текущей работы, без перехода в окно FocusTool.</p></div>
+        <div class="card"><h3>Интерактивные режимы</h3><p>Рисование, выбор области и доски принимают мышь и клавиатуру. <kbd>Esc</kbd> отменяет подрежим или закрывает их.</p></div>
+        <div class="card"><h3>Несколько мониторов</h3><p>Оверлеи используют экранные координаты и работают на многомониторном рабочем столе. Снимок всего экрана относится к текущему монитору.</p></div>
+        <div class="card"><h3>Поверх окон</h3><p>Элементы рассчитаны на показ поверх обычных окон. Полноэкранные игры, защищённое видео и некоторые системные поверхности могут обходить оверлей.</p></div>
+      </div>
+      <p>Большинство режимов можно включить панелью, меню в трее или назначенной глобальной клавишей. Сочетание <em>Hold</em> действует только пока удерживается; <em>Toggle</em> переключает постоянный режим.</p>
+    </section>
+
+    <section class="section" id="pointer">
+      <h2>3. Указатель и обратная связь</h2>
+      <h3>Laser Pointer</h3>
+      <p>Цветная точка следует за курсором; след постепенно исчезает. Настраиваются цветовые слоты, размер точки, длительность следа и затухания, свечение и режим Always/Hold. Постоянный режим: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Z</kbd>, временный: <kbd>Alt</kbd>+<kbd>Z</kbd>.</p>
+      <h3>Cursor Highlight</h3>
+      <p>Стабильное кольцо вокруг курсора. Имеет собственные цвета, радиус и толщину, не зависящие от лазера. Постоянный режим: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd>, временный: <kbd>Alt</kbd>+<kbd>X</kbd>.</p>
+      <h3>Click Pulse</h3>
+      <p>Короткая визуальная вспышка в точке клика. Она включается отдельно от кольца и вызывается клавишами <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd>. Это визуальный эффект, а не журнал или перехватчик ввода.</p>
+      <div class="callout"><strong>Совет.</strong> Для управления левой рукой удобно оставить временные режимы на <kbd>Alt</kbd>+<kbd>Z</kbd>/<kbd>X</kbd>, а постоянные — на соответствующих сочетаниях с <kbd>Ctrl</kbd>.</div>
+    </section>
+
+    <section class="section" id="focus">
+      <h2>4. Фокус и увеличение</h2>
+      <h3>Spotlight</h3>
+      <p>Затемняет экран вне круглой области у курсора. Настраиваются радиус и степень затемнения. Переключатель: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd>, временное удержание: <kbd>Alt</kbd>+<kbd>S</kbd>. В активном режиме <kbd>Ctrl</kbd>+колесо меняет степень затемнения, а <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+колесо — радиус.</p>
+      <h3>Magnifier</h3>
+      <p>Круглая лупа следует за курсором. Настраиваются радиус и увеличение. Включается <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd>. <kbd>Ctrl</kbd>+колесо меняет масштаб, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+колесо — радиус. Во время обычного снимка лупа временно скрывается, чтобы не закрывать выбранную область.</p>
+      <h3>Spotlight вместе с Magnifier</h3>
+      <p>Оба режима можно включить одновременно. В этом случае содержимое увеличивается внутри светлой области, а остальная часть экрана затемняется. Радиус общего окна берётся из Magnifier, поэтому комбинация ощущается как сфокусированная лупа и хорошо подходит для показа небольших элементов интерфейса.</p>
+      <h3>Pinned Lens</h3>
+      <p>Создаёт отдельную закреплённую лупу клавишами <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd>: сначала выделите источник, затем расположите появившееся окно. Линз может быть несколько. Их можно перемещать, менять размер и масштаб, замораживать и закрывать. <kbd>Ctrl</kbd>+колесо над линзой меняет масштаб. Контекстное меню содержит <strong>Freeze/Unfreeze</strong>, увеличение/уменьшение, закрытие одной или всех линз. Freeze полезен для сравнения зафиксированного состояния с изменяющимся экраном.</p>
+      <h3>Region Spotlight</h3>
+      <p>После <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> выделите прямоугольную область: всё вокруг неё будет затемнено. Обычный круглый Spotlight при начале выбора выключается, чтобы не мешать. Можно создать несколько областей, перемещать и изменять их размер. Стрелки сдвигают выбранную область на 1 пиксель, <kbd>Shift</kbd>+стрелка — на 10; <kbd>Delete</kbd> удаляет её, <kbd>Enter</kbd> завершает редактирование. Очистка всех областей доступна с панели или из трея; стандартной клавиши очистки нет.</p>
+      <div class="callout"><strong>Совместимость.</strong> Лупы используют изображение рабочего стола, доступное Windows. Защищённое видео и отдельные аппаратные поверхности могут не предоставлять кадр для увеличения.</div>
+      <p class="muted">Spotlight и Magnifier скрываются на Screen, Black и White Board, чтобы доска оставалась самостоятельным рабочим пространством.</p>
+    </section>
+
+    <section class="section" id="draw">
+      <h2>5. Рисование и аннотации</h2>
+      <p>Режим Draw включается <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd>. Для краткой аннотации удерживайте <kbd>Alt</kbd>+<kbd>A</kbd>. Толщина запоминается отдельно для разных инструментов.</p>
+      <table><thead><tr><th>Инструмент</th><th>Клавиша</th><th>Поведение</th></tr></thead><tbody>
+        <tr><td>Arrow</td><td><kbd>A</kbd></td><td>Стрелка от начальной к конечной точке.</td></tr>
+        <tr><td>Rectangle</td><td><kbd>R</kbd></td><td>Контур прямоугольника.</td></tr>
+        <tr><td>Ellipse</td><td><kbd>C</kbd></td><td>Контур эллипса.</td></tr>
+        <tr><td>Line</td><td><kbd>S</kbd></td><td>Прямой отрезок.</td></tr>
+        <tr><td>Pencil</td><td><kbd>W</kbd></td><td>Свободная непрозрачная линия со сглаживанием.</td></tr>
+        <tr><td>Highlighter</td><td><kbd>F</kbd></td><td>Полупрозрачный маркер с экранно-ориентированным прямоугольным пером.</td></tr>
+        <tr><td>Eraser</td><td><kbd>E</kbd></td><td>Удаляет аннотацию целиком, а не отдельные пиксели; вставленные изображения не затрагивает.</td></tr>
+        <tr><td>Text</td><td><kbd>T</kbd></td><td>Добавляет текст выбранного цвета и размера.</td></tr>
+        <tr><td>Move</td><td><kbd>Q</kbd></td><td>Выбор, перемещение и редактирование объектов.</td></tr>
+        <tr><td>Step</td><td><kbd>D</kbd></td><td>Нумерованные овальные или прямоугольные метки.</td></tr>
+      </tbody></table>
+      <h3>Перо и маркер</h3>
+      <p>Уровни сглаживания <strong>Off</strong>, <strong>Balanced</strong> и <strong>Strong</strong> уменьшают дрожание края. Они не распознают фигуры и не имитируют давление пера. У маркера фиксированное прямоугольное перо: горизонтальный штрих широкий, вертикальный — узкий, диагональный имеет промежуточную видимую ширину. Короткое удержание конечной точки выпрямляет текущий штрих.</p>
+      <h3>Точная геометрия с Shift</h3>
+      <p>Удерживайте <kbd>Shift</kbd> во время рисования: Rectangle станет квадратом, Ellipse — правильным кругом, Step Rectangle — квадратной меткой, а Line будет фиксироваться по направлениям с шагом 45°. Эти же ограничения работают при изменении размера уже созданных фигур; у Arrow при редактировании конечной точки также доступна фиксация направления по 45°. Вставленное изображение всегда изменяет размер с сохранением исходных пропорций.</p>
+      <h3>Ластик</h3>
+      <p>Клик удаляет верхнюю стираемую аннотацию под курсором; протягивание удаляет пересечённые аннотации одним отменяемым действием. Вставленные изображения Eraser пропускает, поэтому их можно использовать как подложку и удалять осознанно через Move и <kbd>Backspace</kbd>/<kbd>Delete</kbd>. Круг у курсора показывает радиус попадания и может менять цвет над целью. Он является индикатором инструмента и не добавляется в рисунок.</p>
+      <h3>Текст, изображения и редактирование</h3>
+      <p>Вставьте текст или изображение из буфера через <kbd>Ctrl</kbd>+<kbd>V</kbd>. <kbd>Enter</kbd> завершает ввод текста, <kbd>Shift</kbd>+<kbd>Enter</kbd> добавляет новую строку. Move позволяет выделить один или несколько объектов рамкой и перемещать их мышью. Двойной щелчок по тексту открывает его изменение, а по поддерживаемой фигуре — маркеры редактирования. <kbd>Ctrl</kbd>+колесо меняет толщину выбранной фигуры или размер выбранного текста. <kbd>Backspace</kbd> удаляет выбранное. Метки Step имеют собственную последовательность номеров для каждого цветового слота.</p>
+      <h3>История и очистка</h3>
+      <p><kbd>Ctrl</kbd>+<kbd>Z</kbd> — отмена, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> — повтор. <kbd>Delete</kbd> или <kbd>Shift</kbd>+<kbd>E</kbd> очищает аннотации. <kbd>Esc</kbd> сначала отменяет активное редактирование/выбор, затем выходит из режима, поэтому в подрежиме может понадобиться повторное нажатие.</p>
+      <h3>Fading Annotations</h3>
+      <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> включает временные аннотации. В настройках задаются время показа и длительность затухания. Это удобно для кратких пояснений без ручной очистки.</p>
+      <h3>Push-to-annotate</h3>
+      <p>Удерживайте <kbd>Alt</kbd>+<kbd>A</kbd>, чтобы открыть Draw только на время пояснения. Пока сочетание зажато, можно переключать основные инструменты их буквенными клавишами и выбирать цвет клавишами <kbd>1</kbd>–<kbd>5</kbd>, не открывая панель. Отпускание сочетания не обрывает активный штрих: выход завершается после текущего действия.</p>
+      <div class="callout"><strong>Удобная комбинация.</strong> Один раз включите Fading Annotations, затем используйте Push-to-annotate. Нарисованное временное пояснение появится только на заданный срок, а после отпускания <kbd>Alt</kbd>+<kbd>A</kbd> управление сразу вернётся исходному приложению.</div>
+    </section>
+
+    <section class="section" id="masks">
+      <h2>6. Маски и выделенные области</h2>
+      <h3>Region Mask</h3>
+      <p>Нажмите <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd> и выделите прямоугольник. Можно создать несколько масок, перетаскивать их и менять размер за маркеры. Правый щелчок по маске открывает выбор оформления и удаление; выбранную маску также удаляют <kbd>Delete</kbd> или <kbd>Backspace</kbd>. Доступны сплошная заливка, полосы, надпись <strong>HIDE</strong> и сочетание полос с надписью. Выбор нового оформления задаёт стиль следующих масок; существующие сохраняют собственный стиль.</p>
+      <p>Очистка всех масок доступна с панели и из меню в трее. Горячая клавиша очистки по умолчанию не назначена, но её можно задать.</p>
+      <div class="callout"><strong>Как это работает.</strong> Маска визуально перекрывает выбранную область, не изменяя содержимое исходного окна. При использовании сторонней программы записи полезно заранее проверить, включает ли выбранный ею метод захвата оверлеи.</div>
+    </section>
+
+    <section class="section" id="timer">
+      <h2>7. Таймеры</h2>
+      <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> создаёт таймер. Таймеров может быть несколько; они остаются поверх обычных окон и досок.</p>
+      <table><thead><tr><th>Режим</th><th>Назначение</th></tr></thead><tbody>
+        <tr><td>Countdown</td><td>Обратный отсчёт заданной длительности до нуля.</td></tr>
+        <tr><td>Stopwatch</td><td>Секундомер с прямым отсчётом.</td></tr>
+        <tr><td>Clock</td><td>Текущее локальное время.</td></tr>
+        <tr><td>Until time</td><td>Обратный отсчёт до выбранного времени суток.</td></tr>
+      </tbody></table>
+      <p>Через контекстное меню доступны Start/Pause, Reset (для обратного отсчёта и секундомера), выбор режима, изменение подписи и времени, а также закрытие. Стиль включает светлую, тёмную или автоматическую тему, формат 12/24 часа, показ прогресса и подписи, мигание по завершении. Доступны масштаб и прозрачность. Максимальная вводимая длительность — 99:59:59; история хранит до десяти недавних подписей.</p>
+      <h3>Управление мышью и клавиатурой</h3>
+      <p>Таймер перемещается перетаскиванием за корпус. Двойной щелчок по подписи открывает её редактирование, а по времени — изменение времени в подходящих режимах. Когда таймер выбран, доступны следующие команды:</p>
+      <table><thead><tr><th>Команда</th><th>Действие</th></tr></thead><tbody><tr><td><kbd>Space</kbd></td><td>Start/Pause</td></tr><tr><td><kbd>R</kbd></td><td>Reset</td></tr><tr><td><kbd>Tab</kbd></td><td>Следующий режим</td></tr><tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Изменить время на 1 секунду</td></tr><tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Изменить время на 1 минуту</td></tr><tr><td><kbd>Shift</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd></td><td>Изменить время на 5 минут</td></tr><tr><td>Колесо / <kbd>Shift</kbd>+колесо</td><td>Изменить время на 1 / 5 минут</td></tr><tr><td><kbd>Enter</kbd> или <kbd>F2</kbd></td><td>Редактировать подпись</td></tr><tr><td><kbd>Delete</kbd> или <kbd>Backspace</kbd></td><td>Закрыть таймер</td></tr><tr><td><kbd>Esc</kbd></td><td>Вернуть фокус предыдущему окну</td></tr></tbody></table>
+      <p>Изменённые параметры служат значениями по умолчанию для следующего таймера. Открытые таймеры и их текущий ход не восстанавливаются после перезапуска приложения. Последовательности и готовые пресеты таймеров не предусмотрены; звуковое оповещение не заявлено.</p>
+    </section>
+
+    <section class="section" id="capture">
+      <h2>8. Снимки экрана и доски</h2>
+      <h3>Screenshot</h3>
+      <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>E</kbd> снимает текущий монитор. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> позволяет выбрать область и показывает её точный размер. После выделения рамку можно переместить или изменить за маркеры; стрелки сдвигают её на 1 пиксель, <kbd>Shift</kbd>+стрелка — на 10. <kbd>Enter</kbd> выполняет снимок, <kbd>Delete</kbd> сбрасывает подготовленную область. PNG автоматически помещается в буфер обмена и сохраняется в <strong>Pictures\FocusTool</strong>. Панель и курсорная лупа на время захвата скрываются.</p>
+      <h3>Screen Board</h3>
+      <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd> создаёт доску из текущего экрана. FocusTool формирует базовый снимок, затем возвращает визуальные области поверх доски; краткое исчезновение маски во время переключения ожидаемо. На доске можно рисовать и сохранить результат как снимок.</p>
+      <h3>Black Board и White Board</h3>
+      <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> открывает чёрную доску, <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd> — белую. Это чистый фон для рисования; таймеры могут оставаться сверху. <kbd>Esc</kbd> закрывает доску.</p>
+      <div class="callout"><strong>Состав кадра.</strong> Собственные снимки FocusTool включают предназначенные для показа аннотации и визуальные области. Сторонние программы могут компоновать оверлеи иначе в зависимости от выбранного типа захвата.</div>
+    </section>
+
+    <section class="section" id="stage">
+      <h2>9. Capture Stage</h2>
+      <p>Capture Stage показывает выбранное окно в отдельном безрамочном представлении, растянутом на рабочую область экрана без панели задач. Выбор выполняется системным окном Windows. Можно открыть несколько Stage и закрыть их по одному или все сразу.</p>
+      <ul>
+        <li>Stage предназначен для просмотра и презентации; клики не передаются в исходное окно.</li>
+        <li>Выбирается окно приложения, а не отдельная вкладка браузера.</li>
+        <li>Элементы FocusTool накладываются поверх представления, когда их положение можно сопоставить с выбранным окном.</li>
+        <li>Если источник закрыт или потерян, Stage сообщает о недоступности; выберите окно заново.</li>
+        <li>При сворачивании поведение источника зависит от Windows и приложения: может сохраниться последний доступный кадр либо появиться состояние недоступности.</li>
+      </ul>
+      <div class="callout"><strong>Совместимость.</strong> Некоторые защищённые или аппаратно ускоренные окна не предоставляют изображение системному захвату. Если исходное приложение само рисует курсор, рядом с эффектами FocusTool может появиться второй указатель.</div>
+    </section>
+
+    <section class="section" id="toolbar">
+      <h2>10. Панель инструментов и системный трей</h2>
+      <p>Панель открывается <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd>. Она объединяет переключатели режимов, инструменты рисования, цвета, толщину, очистку и команды захвата. Всплывающие подсказки показывают название и текущую клавишу.</p>
+      <p>Значок в области уведомлений даёт доступ к функциям без панели: настройкам, созданию/очистке областей, таймерам, линзам, Capture Stage и закрытию групп окон. Полный выход из приложения: <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Q</kbd> или команда Exit в трее. Закрытие отдельного оверлея не обязательно завершает FocusTool.</p>
+    </section>
+
+    <section class="section" id="settings">
+      <h2>11. Настройки</h2>
+      <table><thead><tr><th>Вкладка</th><th>Что настраивается</th></tr></thead><tbody>
+        <tr><td>Pointer</td><td>Цвета лазера и кольца, размер точки, след, затухание, свечение, Always/Hold, радиус и толщина кольца, Click Pulse.</td></tr>
+        <tr><td>Focus</td><td>Радиус и масштаб лупы; масштаб и частота обновления закреплённой линзы; радиус и затемнение Spotlight.</td></tr>
+        <tr><td>Draw</td><td>Цветовые слоты, HEX-цвет, толщина, размер текста, сглаживание, временные аннотации и длительности.</td></tr>
+        <tr><td>Mask</td><td>Цвет, HEX-цвет, прозрачность и оформление новых масок.</td></tr>
+        <tr><td>Shortcuts</td><td>Глобальные режимы, инструменты Draw, команды редактирования, снимки и доски.</td></tr>
+      </tbody></table>
+      <p><strong>Apply</strong> применяет изменения без закрытия, <strong>OK</strong> применяет и закрывает, <strong>Cancel</strong> закрывает без неприменённых изменений. <strong>Restore defaults</strong> возвращает стандартные значения. Пустое значение/None отключает сочетание.</p>
+      <div class="callout warning"><strong>Конфликты.</strong> Windows или другое приложение может уже использовать сочетание. Если команда не срабатывает, назначьте другую комбинацию и избегайте одиночных букв для глобальных действий.</div>
+    </section>
+
+    <section class="section" id="hotkeys">
+      <h2>12. Горячие клавиши по умолчанию</h2>
+      <h3>Глобальные режимы</h3>
+      <table><thead><tr><th>Действие</th><th>Сочетание</th></tr></thead><tbody>
+        <tr><td>Laser — переключить / удерживать</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Z</kbd> / <kbd>Alt</kbd>+<kbd>Z</kbd></td></tr><tr><td>Draw — переключить / удерживать</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>A</kbd> / <kbd>Alt</kbd>+<kbd>A</kbd></td></tr><tr><td>Cursor Highlight — переключить / удерживать</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd> / <kbd>Alt</kbd>+<kbd>X</kbd></td></tr><tr><td>Click Pulse</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd></td></tr><tr><td>Spotlight — переключить / удерживать</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>S</kbd> / <kbd>Alt</kbd>+<kbd>S</kbd></td></tr><tr><td>Magnifier</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></td></tr><tr><td>Pinned Lens</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd></td></tr><tr><td>Region Mask</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd></td></tr><tr><td>Region Spotlight</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td></tr><tr><td>Fading Annotations</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd></td></tr><tr><td>Timer</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd></td></tr><tr><td>Toolbar</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd></td></tr><tr><td>Exit application</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>Q</kbd></td></tr>
+      </tbody></table>
+      <h3>Снимки и доски</h3>
+      <table><thead><tr><th>Действие</th><th>Сочетание</th></tr></thead><tbody><tr><td>Screenshot</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>E</kbd></td></tr><tr><td>Region Screenshot</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td></tr><tr><td>Screen Board</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd></td></tr><tr><td>Black Board</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td></tr><tr><td>White Board</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd></td></tr></tbody></table>
+      <h3>В режиме Draw</h3>
+      <table><thead><tr><th>Группа</th><th>Клавиши</th></tr></thead><tbody><tr><td>Инструменты</td><td><kbd>A</kbd> Arrow, <kbd>R</kbd> Rectangle, <kbd>C</kbd> Ellipse, <kbd>S</kbd> Line, <kbd>W</kbd> Pencil, <kbd>F</kbd> Highlighter, <kbd>E</kbd> Eraser, <kbd>T</kbd> Text, <kbd>Q</kbd> Move, <kbd>D</kbd> Step</td></tr><tr><td>Цвет</td><td><kbd>1</kbd>…<kbd>5</kbd></td></tr><tr><td>Толщина</td><td><kbd>Shift</kbd>+<kbd>Z</kbd> уменьшить, <kbd>Shift</kbd>+<kbd>X</kbd> увеличить</td></tr><tr><td>История</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> отменить, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> повторить</td></tr><tr><td>Вставка</td><td><kbd>Ctrl</kbd>+<kbd>V</kbd></td></tr><tr><td>Удаление</td><td><kbd>Backspace</kbd> выбранный объект; <kbd>Delete</kbd> или <kbd>Shift</kbd>+<kbd>E</kbd> очистить</td></tr><tr><td>Выход/отмена</td><td><kbd>Esc</kbd></td></tr></tbody></table>
+      <p class="muted">Очистка всех масок и всех Region Spotlight по умолчанию не имеет сочетания; его можно назначить самостоятельно.</p>
+    </section>
+
+    <section class="section" id="live">
+      <h2>13. Быстрая настройка колёсиком</h2>
+      <p>Удерживайте <kbd>Ctrl</kbd> и вращайте колесо. <kbd>Shift</kbd> выбирает второй параметр текущего режима.</p>
+      <table><thead><tr><th>Контекст</th><th><kbd>Ctrl</kbd> + колесо</th><th><kbd>Ctrl</kbd>+<kbd>Shift</kbd> + колесо</th></tr></thead><tbody>
+        <tr><td>Magnifier</td><td>Масштаб</td><td>Радиус</td></tr><tr><td>Spotlight</td><td>Степень затемнения</td><td>Радиус</td></tr><tr><td>Выбранная аннотация</td><td>Толщина или размер текста</td><td>—</td></tr><tr><td>Pinned Lens под курсором/выбранная</td><td>Масштаб</td><td>—</td></tr>
+      </tbody></table>
+      <p>Изменяется только функция, подходящая текущему контексту. Если колесо прокручивает другое окно, сначала наведите курсор на нужный элемент или активируйте соответствующий режим.</p>
+    </section>
+
+    <section class="section" id="files">
+      <h2>14. Файлы, настройки и приватность</h2>
+      <ul>
+        <li>Снимки сохраняются в <strong>Pictures\FocusTool</strong> и копируются в буфер обмена.</li>
+        <li>Настройки сохраняются локально для текущего пользователя Windows.</li>
+        <li>Текущие рисунки, таймеры, линзы, маски и Stage — состояние сеанса и после завершения приложения не считаются сохранённым проектом.</li>
+        <li>FocusTool не является редактором исходного документа и не записывает изменения обратно в демонстрируемое приложение.</li>
+      </ul>
+      <p>Перед передачей компьютера другому человеку проверьте буфер обмена, папку снимков и оставшиеся на экране оверлеи. Утилита не заменяет системные политики доступа или инструменты удаления метаданных.</p>
+    </section>
+
+    <section class="section" id="limits">
+      <h2>15. Совместимость и текущие возможности</h2>
+      <ul>
+        <li>Поддерживаются Windows 10/11 и совместимая среда .NET сборки. Поведение зависит от версии Windows, видеодрайвера, масштаба DPI и приложения-источника.</li>
+        <li>Распознавание рукописных фигур, чувствительность к нажатию и пиксельный ластик сейчас не предусмотрены.</li>
+        <li>Профили горячих клавиш, готовые последовательности таймеров, звуковой таймер, keystroke overlay и веб-камера не входят в текущий набор функций.</li>
+        <li>Capture Stage показывает окно, но не управляет им и не выбирает отдельные вкладки браузера.</li>
+        <li>Защищённый контент и эксклюзивный полноэкранный вывод могут не захватываться.</li>
+        <li>Состав сторонней записи экрана зависит от выбранного в рекордере метода захвата.</li>
+        <li>Маски визуально перекрывают область и не изменяют данные исходного приложения.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="problems">
+      <h2>16. Решение проблем</h2>
+      <table><thead><tr><th>Симптом</th><th>Что проверить</th></tr></thead><tbody>
+        <tr><td>Горячая клавиша не работает</td><td>Откройте Shortcuts, проверьте, что сочетание назначено и не занято Windows/другой программой. Попробуйте комбинацию с Ctrl+Alt.</td></tr>
+        <tr><td><kbd>Esc</kbd> не закрыл Draw сразу</td><td>Активно редактирование текста, объекта или выбор. Первый Esc отменяет подрежим; нажмите ещё раз для выхода.</td></tr>
+        <tr><td>Оверлей не виден в записи</td><td>Переключите метод захвата в рекордере и сделайте тест. Захват отдельного окна и всего рабочего стола компонуются по-разному.</td></tr>
+        <tr><td>Чёрный кадр в лупе/Stage</td><td>Источник может запрещать захват или использовать защищённую поверхность. Проверьте обычное окно и обновите драйвер.</td></tr>
+        <tr><td>Stage потерял источник</td><td>Исходное окно закрыто, изменилось или стало недоступным. Закройте Stage и выберите окно заново.</td></tr>
+        <tr><td>Линия кажется слишком плавной/сырой</td><td>Смените уровень smoothing в Draw: Off сохраняет больше движения, Strong сильнее сглаживает.</td></tr>
+        <tr><td>Ластик оставляет круг</td><td>Круг — живой индикатор радиуса. Он исчезает после смены инструмента/выхода и не является аннотацией.</td></tr>
+        <tr><td>Высокая нагрузка</td><td>Уменьшите частоту обновления Pinned Lens, закройте лишние линзы/Stage и проверьте без аппаратно тяжёлого источника.</td></tr>
+      </tbody></table>
+    </section>
+
+    <section class="section" id="workflow">
+      <h2>17. Практические сценарии</h2>
+      <h3>Временное пояснение без ручной очистки</h3><ol><li>Один раз включите Fading Annotations.</li><li>Удерживайте <kbd>Alt</kbd>+<kbd>A</kbd> и выберите инструмент буквенной клавишей.</li><li>Нарисуйте пояснение и отпустите сочетание: управление вернётся приложению, а след исчезнет автоматически.</li></ol>
+      <h3>Фокус и увеличение небольшого элемента</h3><ol><li>Включите Spotlight.</li><li>Включите Magnifier — затемнение останется вокруг увеличенной области.</li><li>Настройте масштаб через <kbd>Ctrl</kbd>+колесо, радиус через <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+колесо.</li></ol>
+      <h3>Электронная доска для занятия</h3><ol><li>Откройте White Board для обычной схемы или Black Board для контрастной подачи.</li><li>Используйте <kbd>Shift</kbd> для кругов, квадратов и линий по 45°, Step — для порядка действий.</li><li>Добавьте текст или вставьте подготовленное изображение через <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li><li>Сохраните итог встроенным Screenshot.</li></ol>
+      <h3>Разбор неподвижного интерфейса</h3><ol><li>Откройте Screen Board, чтобы зафиксировать текущий экран.</li><li>Добавьте стрелки, рамки, текст и нумерованные шаги, не опасаясь изменения исходного окна.</li><li>Сохраните размеченный кадр или очистите рисунок и повторите объяснение.</li></ol>
+      <h3>Пошаговая инструкция с несколькими ветками</h3><ol><li>Выберите Step Oval или Step Rect.</li><li>Используйте разные цветовые слоты для независимых последовательностей номеров.</li><li>Соедините шаги стрелками и добавьте короткие текстовые пояснения.</li></ol>
+      <h3>Сравнение деталей или состояний</h3><ol><li>Создайте несколько Pinned Lens для нужных областей.</li><li>Настройте каждой линзе масштаб через <kbd>Ctrl</kbd>+колесо.</li><li>Заморозьте одну линзу и сравнивайте её кадр с изменяющимся содержимым другой.</li></ol>
+      <h3>Показ одного приложения</h3><ol><li>Запустите Capture Stage и выберите окно в системном picker Windows.</li><li>Добавьте указатель, аннотации или таймер поверх представления.</li><li>Для взаимодействия переключайтесь в исходное окно; Stage служит презентационным видом.</li></ol>
+      <h3>Точный снимок фрагмента</h3><ol><li>Откройте Region Screenshot и приблизительно выделите область.</li><li>Уточните рамку мышью, стрелками по 1 пикселю или <kbd>Shift</kbd>+стрелками по 10.</li><li>Проверьте показанный размер и нажмите <kbd>Enter</kbd>.</li></ol>
+      <h3>Несколько важных зон одновременно</h3><ol><li>Создайте несколько Region Spotlight вокруг связанных элементов.</li><li>Переместите и точно подстройте выбранные области стрелками.</li><li>Удаляйте завершённые области по одной или очистите все с панели.</li></ol>
+      <h3>Постепенное раскрытие материала</h3><ol><li>Закройте ещё не обсуждаемые фрагменты несколькими Region Mask.</li><li>По ходу объяснения перемещайте или удаляйте выбранные маски.</li><li>Для записи заранее проверьте выбранный в рекордере тип захвата.</li></ol>
+      <h3>Выступление с регламентом</h3><ol><li>Создайте Countdown для общей продолжительности.</li><li>Добавьте Stopwatch для отдельного упражнения или блока вопросов.</li><li>Управляйте выбранным таймером клавишами <kbd>Space</kbd>, <kbd>R</kbd> и стрелками, не открывая меню.</li></ol>
+      <h3>Наглядная демонстрация действий мышью</h3><ol><li>Включите Cursor Highlight, чтобы положение курсора читалось стабильнее.</li><li>Добавьте Click Pulse для обратной связи при щелчках.</li><li>При необходимости временно удерживайте Laser, чтобы показать следующий элемент.</li></ol>
+      <p class="top"><a href="#top">Наверх ↑</a></p>
+    </section>
+    <footer>FocusTool 3.2.0 · Полное офлайн-руководство</footer>
+  </main>
+</div>
+</body>
+</html>

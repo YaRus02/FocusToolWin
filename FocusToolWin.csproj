@@ -32,4 +32,14 @@
     <EmbeddedResource Remove="Verification\**\*" />
     <None Remove="Verification\**\*" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="publish\FocusTool-Manual-RU.html">
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>FocusTool-Manual-RU.html</TargetPath>
+    </None>
+    <None Update="publish\FocusTool-Manual-EN.html">
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>FocusTool-Manual-EN.html</TargetPath>
+    </None>
+  </ItemGroup>
 </Project>
