@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Media.Imaging;
+
 namespace FocusTool.Win.Overlay;
 
 /// <summary>
@@ -6,7 +9,7 @@ namespace FocusTool.Win.Overlay;
 /// </summary>
 internal static class OverlayLayerComposer
 {
-    public static void CopyInto(OverlayLayer source, byte[] destination, int destinationWidth, int destinationHeight, int left, int top)
+    public static void CopyInto(BitmapSource source, byte[] destination, int destinationWidth, int destinationHeight, int left, int top)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
@@ -19,23 +22,18 @@ internal static class OverlayLayerComposer
         var sourceTop = Math.Max(0, -top);
         var destinationLeft = Math.Max(0, left);
         var destinationTop = Math.Max(0, top);
-        var copyWidth = Math.Min(source.Width - sourceLeft, destinationWidth - destinationLeft);
-        var copyHeight = Math.Min(source.Height - sourceTop, destinationHeight - destinationTop);
+        var copyWidth = Math.Min(source.PixelWidth - sourceLeft, destinationWidth - destinationLeft);
+        var copyHeight = Math.Min(source.PixelHeight - sourceTop, destinationHeight - destinationTop);
         if (copyWidth <= 0 || copyHeight <= 0)
         {
             return;
         }
 
         var destinationStride = destinationWidth * 4;
-        var bytesPerRow = copyWidth * 4;
-        for (var row = 0; row < copyHeight; row++)
-        {
-            Buffer.BlockCopy(
-                source.Pixels,
-                (sourceTop + row) * source.Stride + sourceLeft * 4,
-                destination,
-                (destinationTop + row) * destinationStride + destinationLeft * 4,
-                bytesPerRow);
-        }
+        source.CopyPixels(
+            new Int32Rect(sourceLeft, sourceTop, copyWidth, copyHeight),
+            destination,
+            destinationStride,
+            destinationTop * destinationStride + destinationLeft * 4);
     }
 }

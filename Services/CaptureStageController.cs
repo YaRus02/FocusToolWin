@@ -14,11 +14,13 @@ namespace FocusTool.Win.Services;
 /// Owns the Capture Stage windows: standalone mirror windows that screen-share
 /// and recording tools can grab via "Share window" while they carry the source
 /// window's live content plus FocusTool's overlays. v1 mirrors one source per
-/// stage. Overlays are refreshed on a throttled UI-thread timer (event/region
-/// optimization is a later step).
+/// stage. A throttled UI-thread timer observes lightweight surface/timer
+/// revisions and rebuilds snapshots only when their visuals or geometry change.
 /// </summary>
 internal sealed class CaptureStageController : IDisposable
 {
+    private readonly record struct StageOverlayState(ScreenRect Rect, OverlaySnapshotRevision Revision);
+
     private enum PickedWindowResolution
     {
         NotFound,
@@ -29,15 +31,21 @@ internal sealed class CaptureStageController : IDisposable
     private const int OverlayRefreshIntervalMs = 33;
 
     private readonly List<CaptureStageWindow> _stages = [];
-    private readonly Func<ScreenRect, OverlaySnapshotData?> _overlayProvider;
+    private readonly Dictionary<CaptureStageWindow, StageOverlayState> _overlayStates = [];
+    private readonly HashSet<CaptureStageWindow> _overlayFailures = [];
+    private readonly Func<ScreenRect, OverlaySnapshotData> _overlayProvider;
+    private readonly Func<OverlaySnapshotRevision> _overlayRevisionProvider;
     private readonly DispatcherTimer _overlayTimer;
     private Forms.Form? _pickerOwner;
     private bool _pickerOpen;
     private bool _disposed;
 
-    public CaptureStageController(Func<ScreenRect, OverlaySnapshotData?> overlayProvider)
+    public CaptureStageController(
+        Func<ScreenRect, OverlaySnapshotData> overlayProvider,
+        Func<OverlaySnapshotRevision> overlayRevisionProvider)
     {
         _overlayProvider = overlayProvider;
+        _overlayRevisionProvider = overlayRevisionProvider;
         _overlayTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(OverlayRefreshIntervalMs) };
         _overlayTimer.Tick += OnOverlayTimerTick;
     }
@@ -308,11 +316,32 @@ internal sealed class CaptureStageController : IDisposable
             return;
         }
 
+        var revision = _overlayRevisionProvider();
         foreach (var stage in _stages)
         {
-            if (stage.SourceAvailable && stage.TryGetSourceRect(out var rect) && _overlayProvider(rect) is { } snapshot)
+            if (!stage.SourceAvailable || !stage.TryGetSourceRect(out var rect))
             {
-                stage.UpdateOverlaySnapshot(snapshot);
+                continue;
+            }
+
+            var state = new StageOverlayState(rect, revision);
+            if (_overlayStates.TryGetValue(stage, out var previous) && previous == state)
+            {
+                continue;
+            }
+
+            try
+            {
+                stage.UpdateOverlaySnapshot(_overlayProvider(rect));
+                _overlayStates[stage] = state;
+                _overlayFailures.Remove(stage);
+            }
+            catch (Exception ex)
+            {
+                if (_overlayFailures.Add(stage))
+                {
+                    AppLog.Error("Capture Stage overlay snapshot failed; it will be retried.", ex);
+                }
             }
         }
     }
@@ -326,6 +355,8 @@ internal sealed class CaptureStageController : IDisposable
 
         stage.FormClosed -= OnStageClosed;
         _stages.Remove(stage);
+        _overlayStates.Remove(stage);
+        _overlayFailures.Remove(stage);
         stage.Dispose();
 
         if (_stages.Count == 0)
@@ -354,5 +385,7 @@ internal sealed class CaptureStageController : IDisposable
         }
 
         _stages.Clear();
+        _overlayStates.Clear();
+        _overlayFailures.Clear();
     }
 }

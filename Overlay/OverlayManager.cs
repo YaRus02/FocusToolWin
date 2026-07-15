@@ -28,6 +28,7 @@ internal sealed class OverlayManager : IDisposable
     private readonly Action? _afterTopmostReassert;
     private readonly List<OverlayWindow> _windows = [];
     private readonly System.Windows.Threading.DispatcherTimer _topmostTimer;
+    private long _captureRevision;
     private bool _visible;
     private bool _disposed;
 
@@ -114,6 +115,7 @@ internal sealed class OverlayManager : IDisposable
 
     public void Invalidate()
     {
+        _captureRevision++;
         if (!_visible)
         {
             return;
@@ -132,6 +134,7 @@ internal sealed class OverlayManager : IDisposable
     // position when the cursor crosses a monitor boundary.
     public void InvalidateForCursor(ScreenPoint current, ScreenPoint previous)
     {
+        _captureRevision++;
         if (!_visible)
         {
             return;
@@ -161,6 +164,8 @@ internal sealed class OverlayManager : IDisposable
             .Where(handle => handle != IntPtr.Zero)
             .ToArray();
     }
+
+    public long CaptureRevision => _captureRevision;
 
     public IDisposable? TryExcludeVisibleWindowsFromCapture()
     {
@@ -268,13 +273,9 @@ internal sealed class OverlayManager : IDisposable
                 continue;
             }
 
-            var segmentStride = bitmap.PixelWidth * 4;
-            var segmentPixels = new byte[segmentStride * bitmap.PixelHeight];
-            bitmap.CopyPixels(segmentPixels, segmentStride, 0);
-            var segment = new OverlayLayer(segmentPixels, bitmap.PixelWidth, bitmap.PixelHeight, segmentStride);
             var left = (int)Math.Round(intersection.Left - rect.Left);
             var top = (int)Math.Round(intersection.Top - rect.Top);
-            OverlayLayerComposer.CopyInto(segment, pixels, width, height, left, top);
+            OverlayLayerComposer.CopyInto(bitmap, pixels, width, height, left, top);
             capturedAny = true;
         }
 
@@ -322,6 +323,7 @@ internal sealed class OverlayManager : IDisposable
         var wasVisible = _visible;
         _topmostTimer.Stop();
         CloseWindows();
+        _captureRevision++;
 
         if (wasVisible)
         {

@@ -74,8 +74,8 @@ internal static class Program
     private static void VerifyOverlaySegmentsArePlacedInSourceCoordinates()
     {
         var destination = new byte[4 * 2 * 4];
-        var first = new OverlayLayer([1, 2, 3, 4, 5, 6, 7, 8], 2, 1, 8);
-        var second = new OverlayLayer([9, 10, 11, 12, 13, 14, 15, 16], 2, 1, 8);
+        var first = CreateBitmap(2, 1, [1, 2, 3, 4, 5, 6, 7, 8]);
+        var second = CreateBitmap(2, 1, [9, 10, 11, 12, 13, 14, 15, 16]);
 
         OverlayLayerComposer.CopyInto(first, destination, 4, 2, 0, 0);
         OverlayLayerComposer.CopyInto(second, destination, 4, 2, 2, 1);

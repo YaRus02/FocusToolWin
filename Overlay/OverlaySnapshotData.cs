@@ -1,5 +1,7 @@
 namespace FocusTool.Win.Overlay;
 
+internal readonly record struct OverlaySnapshotRevision(long Surface, long Sprites);
+
 /// <summary>
 /// What a Capture Stage needs to composite FocusTool's overlays over a captured
 /// source frame: the source-rect overlay <see cref="Surface"/> layer plus any

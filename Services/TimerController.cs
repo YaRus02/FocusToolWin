@@ -20,6 +20,7 @@ internal sealed class TimerController : IDisposable
     private readonly List<TimerWindow> _timers = [];
     private readonly System.Windows.Threading.DispatcherTimer _tick;
     private int _spawnIndex;
+    private long _captureRevision;
     private bool _disposed;
 
     public TimerController(
@@ -39,6 +40,7 @@ internal sealed class TimerController : IDisposable
     }
 
     public int ActiveCount => _timers.Count;
+    public long CaptureRevision => _captureRevision;
 
     public void NewTimer()
     {
@@ -51,10 +53,21 @@ internal sealed class TimerController : IDisposable
         defaults.Normalize();
         var model = new TimerModel(defaults, _clockMs());
         var window = new TimerWindow(model, defaults, _clockMs);
-        window.DefaultsChanged += (_, _) => _onDefaultsChanged(window.CaptureDefaults());
-        window.LabelCommitted += (_, label) => _onLabelCommitted(label);
+        window.DefaultsChanged += (_, _) =>
+        {
+            _captureRevision++;
+            _onDefaultsChanged(window.CaptureDefaults());
+        };
+        window.LabelCommitted += (_, label) =>
+        {
+            _captureRevision++;
+            _onLabelCommitted(label);
+        };
         window.Closed += (_, _) => OnTimerClosed(window);
+        window.LocationChanged += (_, _) => _captureRevision++;
+        window.SizeChanged += (_, _) => _captureRevision++;
         _timers.Add(window);
+        _captureRevision++;
         _onActiveCountChanged();
 
         window.Show();
@@ -133,6 +146,7 @@ internal sealed class TimerController : IDisposable
     private void OnTimerClosed(TimerWindow window)
     {
         _timers.Remove(window);
+        _captureRevision++;
         _onActiveCountChanged();
         if (!_disposed)
         {
@@ -148,6 +162,11 @@ internal sealed class TimerController : IDisposable
 
     private void OnTick(object? sender, EventArgs e)
     {
+        if (_timers.Count > 0)
+        {
+            _captureRevision++;
+        }
+
         foreach (var window in _timers)
         {
             window.Refresh();
