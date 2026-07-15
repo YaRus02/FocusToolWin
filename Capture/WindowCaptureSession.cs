@@ -25,11 +25,12 @@ internal sealed class WindowCaptureSession : IDisposable
     private readonly bool _captureCursor;
     private bool _disposed;
 
-    public WindowCaptureSession(ID3D11Device device, IntPtr sourceWindow, bool captureCursor)
+    public WindowCaptureSession(ID3D11Device device, GraphicsCaptureItem item, bool captureCursor)
     {
+        ArgumentNullException.ThrowIfNull(item);
         _captureCursor = captureCursor;
         _winrtDevice = CaptureInterop.CreateDirect3DDevice(device);
-        _item = CaptureInterop.CreateItemForWindow(sourceWindow);
+        _item = item;
         _item.Closed += OnItemClosed;
         _lastSize = _item.Size;
     }
@@ -38,6 +39,8 @@ internal sealed class WindowCaptureSession : IDisposable
     public event Action<ID3D11Texture2D, SizeInt32>? FrameArrived;
 
     public event EventHandler? SourceClosed;
+
+    public event Action<Exception>? CaptureFailed;
 
     public SizeInt32 SourceSize => _lastSize;
 
@@ -62,34 +65,48 @@ internal sealed class WindowCaptureSession : IDisposable
 
     private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
     {
-        using var frame = sender.TryGetNextFrame();
-        if (frame is null)
+        try
         {
-            return;
-        }
-
-        var contentSize = frame.ContentSize;
-        var handler = FrameArrived;
-        if (handler is not null)
-        {
-            using var texture = CaptureInterop.GetTexture(frame.Surface);
-            handler(texture, contentSize);
-        }
-
-        if (contentSize.Width == _lastSize.Width && contentSize.Height == _lastSize.Height)
-        {
-            return;
-        }
-
-        lock (_gate)
-        {
-            if (_disposed || _framePool is null)
+            using var frame = sender.TryGetNextFrame();
+            if (frame is null)
             {
                 return;
             }
 
-            _lastSize = contentSize;
-            _framePool.Recreate(_winrtDevice, PixelFormat, BufferCount, contentSize);
+            var contentSize = frame.ContentSize;
+            var handler = FrameArrived;
+            if (handler is not null)
+            {
+                using var texture = CaptureInterop.GetTexture(frame.Surface);
+                handler(texture, contentSize);
+            }
+
+            if (contentSize.Width == _lastSize.Width && contentSize.Height == _lastSize.Height)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (_disposed || _framePool is null)
+                {
+                    return;
+                }
+
+                _lastSize = contentSize;
+                _framePool.Recreate(_winrtDevice, PixelFormat, BufferCount, contentSize);
+            }
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                CaptureFailed?.Invoke(ex);
+            }
+            catch
+            {
+                // Never let exceptions escape the native capture callback.
+            }
         }
     }
 
@@ -111,6 +128,7 @@ internal sealed class WindowCaptureSession : IDisposable
         }
 
         _item.Closed -= OnItemClosed;
+        CaptureFailed = null;
         if (_framePool is not null)
         {
             _framePool.FrameArrived -= OnFrameArrived;

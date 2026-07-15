@@ -245,41 +245,40 @@ internal sealed class OverlayManager : IDisposable
     // source rect. The Capture Stage can draw it straight onto its back buffer.
     public OverlayLayer? CaptureOverlayLayer(ScreenRect rect)
     {
-        var window = PickOverlayWindowForRect(rect);
-        var bitmap = window?.CaptureSurfaceRegion(rect, OverlayRenderOptions.CaptureStage);
-        if (bitmap is null)
+        var width = (int)Math.Round(rect.Width);
+        var height = (int)Math.Round(rect.Height);
+        if (width <= 0 || height <= 0)
         {
             return null;
         }
 
-        var width = bitmap.PixelWidth;
-        var height = bitmap.PixelHeight;
         var stride = width * 4;
         var pixels = new byte[stride * height];
-        bitmap.CopyPixels(pixels, stride, 0);
-        return new OverlayLayer(pixels, width, height, stride);
-    }
-
-    // Prefer the monitor containing the source rect's center (where the window
-    // mostly lives); fall back to the first intersecting monitor.
-    private OverlayWindow? PickOverlayWindowForRect(ScreenRect rect)
-    {
-        var center = new ScreenPoint((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2);
-        OverlayWindow? firstIntersecting = null;
+        var capturedAny = false;
         foreach (var window in _windows)
         {
-            if (window.Contains(center))
+            if (!rect.TryIntersect(window.ScreenBounds, out var intersection))
             {
-                return window;
+                continue;
             }
 
-            if (firstIntersecting is null && window.Intersects(rect))
+            var bitmap = window.CaptureSurfaceRegion(intersection, OverlayRenderOptions.CaptureStage);
+            if (bitmap is null)
             {
-                firstIntersecting = window;
+                continue;
             }
+
+            var segmentStride = bitmap.PixelWidth * 4;
+            var segmentPixels = new byte[segmentStride * bitmap.PixelHeight];
+            bitmap.CopyPixels(segmentPixels, segmentStride, 0);
+            var segment = new OverlayLayer(segmentPixels, bitmap.PixelWidth, bitmap.PixelHeight, segmentStride);
+            var left = (int)Math.Round(intersection.Left - rect.Left);
+            var top = (int)Math.Round(intersection.Top - rect.Top);
+            OverlayLayerComposer.CopyInto(segment, pixels, width, height, left, top);
+            capturedAny = true;
         }
 
-        return firstIntersecting;
+        return capturedAny ? new OverlayLayer(pixels, width, height, stride) : null;
     }
 
     public void Dispose()

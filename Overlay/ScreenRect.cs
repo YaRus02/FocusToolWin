@@ -42,4 +42,20 @@ internal readonly record struct ScreenRect(double Left, double Top, double Right
     {
         return Left < other.Right && Right > other.Left && Top < other.Bottom && Bottom > other.Top;
     }
+
+    public bool TryIntersect(ScreenRect other, out ScreenRect intersection)
+    {
+        var left = Math.Max(Left, other.Left);
+        var top = Math.Max(Top, other.Top);
+        var right = Math.Min(Right, other.Right);
+        var bottom = Math.Min(Bottom, other.Bottom);
+        if (left >= right || top >= bottom)
+        {
+            intersection = default;
+            return false;
+        }
+
+        intersection = new ScreenRect(left, top, right, bottom);
+        return true;
+    }
 }

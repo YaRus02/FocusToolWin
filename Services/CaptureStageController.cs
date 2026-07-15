@@ -19,6 +19,13 @@ namespace FocusTool.Win.Services;
 /// </summary>
 internal sealed class CaptureStageController : IDisposable
 {
+    private enum PickedWindowResolution
+    {
+        NotFound,
+        Ambiguous,
+        Resolved,
+    }
+
     private const int OverlayRefreshIntervalMs = 33;
 
     private readonly List<CaptureStageWindow> _stages = [];
@@ -78,13 +85,20 @@ internal sealed class CaptureStageController : IDisposable
             return;
         }
 
-        if (!TryResolveWindowFromPickedItem(item, out var sourceWindow))
+        var resolution = ResolveWindowFromPickedItem(item, out var sourceWindow);
+        if (resolution == PickedWindowResolution.NotFound)
         {
             ShowInfo($"Couldn't map \"{item.DisplayName}\" to an application window. Pick an application window - capturing a whole screen is not supported yet.");
             return;
         }
 
-        StartForWindow(sourceWindow);
+        if (resolution == PickedWindowResolution.Ambiguous)
+        {
+            ShowInfo($"More than one application window matches \"{item.DisplayName}\". Capture Stage was not opened because its overlays couldn't be aligned reliably.");
+            return;
+        }
+
+        StartStage(item, sourceWindow, GetWindowTitle(sourceWindow));
     }
 
     public void StartForWindow(IntPtr sourceWindow)
@@ -111,8 +125,23 @@ internal sealed class CaptureStageController : IDisposable
             return;
         }
 
-        var sourceTitle = GetWindowTitle(target);
-        var stage = new CaptureStageWindow(target, sourceTitle);
+        GraphicsCaptureItem item;
+        try
+        {
+            item = CaptureInterop.CreateItemForWindow(target);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Capture Stage could not create a capture source for the focused window.", ex);
+            return;
+        }
+
+        StartStage(item, target, GetWindowTitle(target));
+    }
+
+    private void StartStage(GraphicsCaptureItem item, IntPtr sourceWindow, string sourceTitle)
+    {
+        var stage = new CaptureStageWindow(item, sourceWindow, sourceTitle);
         stage.FormClosed += OnStageClosed;
         _stages.Add(stage);
         stage.Show();
@@ -154,12 +183,12 @@ internal sealed class CaptureStageController : IDisposable
         }
     }
 
-    private static bool TryResolveWindowFromPickedItem(GraphicsCaptureItem item, out IntPtr window)
+    private static PickedWindowResolution ResolveWindowFromPickedItem(GraphicsCaptureItem item, out IntPtr window)
     {
         if (string.IsNullOrWhiteSpace(item.DisplayName))
         {
             window = IntPtr.Zero;
-            return false;
+            return PickedWindowResolution.NotFound;
         }
 
         var candidates = new List<(IntPtr Window, int Score)>();
@@ -176,11 +205,18 @@ internal sealed class CaptureStageController : IDisposable
         if (candidates.Count == 0)
         {
             window = IntPtr.Zero;
-            return false;
+            return PickedWindowResolution.NotFound;
         }
 
-        window = candidates.OrderByDescending(candidate => candidate.Score).First().Window;
-        return true;
+        var ordered = candidates.OrderByDescending(candidate => candidate.Score).ToArray();
+        if (ordered.Length > 1 && ordered[0].Score == ordered[1].Score)
+        {
+            window = IntPtr.Zero;
+            return PickedWindowResolution.Ambiguous;
+        }
+
+        window = ordered[0].Window;
+        return PickedWindowResolution.Resolved;
     }
 
     private static bool IsWindowCandidate(IntPtr window)

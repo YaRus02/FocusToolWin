@@ -6,6 +6,7 @@ using Vortice.Direct3D11;
 using Vortice.DXGI;
 using Vortice.Mathematics;
 using Windows.Graphics;
+using Windows.Graphics.Capture;
 using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
 using FocusTool.Win.Services;
@@ -29,6 +30,7 @@ internal sealed class CaptureStageWindow : Form
 
     private readonly object _gate = new();
     private readonly IntPtr _sourceWindow;
+    private readonly GraphicsCaptureItem _captureItem;
     private readonly string _sourceTitle;
     private readonly System.Windows.Forms.Label _statusLabel;
     private bool _deviceLost;
@@ -51,8 +53,9 @@ internal sealed class CaptureStageWindow : Form
     private bool _sourceAvailable = true;
     private bool _sourceUnavailableQueued;
 
-    public CaptureStageWindow(IntPtr sourceWindow, string sourceTitle)
+    public CaptureStageWindow(GraphicsCaptureItem captureItem, IntPtr sourceWindow, string sourceTitle)
     {
+        _captureItem = captureItem ?? throw new ArgumentNullException(nameof(captureItem));
         _sourceWindow = sourceWindow;
         _sourceTitle = string.IsNullOrWhiteSpace(sourceTitle) ? "Window" : sourceTitle.Trim();
         Text = $"FocusTool Capture Stage - {_sourceTitle}";
@@ -129,7 +132,7 @@ internal sealed class CaptureStageWindow : Form
         _device = CreateDevice();
         _context = _device.ImmediateContext;
         CreateD2DDevice();
-        _session = new WindowCaptureSession(_device, _sourceWindow, captureCursor: false);
+        _session = new WindowCaptureSession(_device, _captureItem, captureCursor: false);
 
         var size = _session.SourceSize;
         var width = Math.Max(1, size.Width);
@@ -139,6 +142,7 @@ internal sealed class CaptureStageWindow : Form
 
         _session.FrameArrived += OnFrameArrived;
         _session.SourceClosed += OnSourceClosed;
+        _session.CaptureFailed += OnCaptureFailed;
         _session.Start();
     }
 
@@ -231,32 +235,39 @@ internal sealed class CaptureStageWindow : Form
     {
         lock (_gate)
         {
-            if (!_sourceAvailable || _graphicsDisposed || _swapChain is null || _backBuffer is null || _context is null)
+            try
             {
-                return;
-            }
+                if (!_sourceAvailable || _graphicsDisposed || _swapChain is null || _backBuffer is null || _context is null)
+                {
+                    return;
+                }
 
-            var description = texture.Description;
-            var textureWidth = (int)description.Width;
-            var textureHeight = (int)description.Height;
-            if (textureWidth != _swapSize.Width || textureHeight != _swapSize.Height)
+                var description = texture.Description;
+                var textureWidth = (int)description.Width;
+                var textureHeight = (int)description.Height;
+                if (textureWidth != _swapSize.Width || textureHeight != _swapSize.Height)
+                {
+                    ResizeSwapChain(textureWidth, textureHeight);
+                }
+
+                if (textureWidth != _swapSize.Width || textureHeight != _swapSize.Height)
+                {
+                    return;
+                }
+
+                EnsureSourceFrame(textureWidth, textureHeight);
+                if (_sourceFrame is null)
+                {
+                    return;
+                }
+
+                _context.CopyResource(_sourceFrame, texture);
+                RenderCurrentFrame(syncInterval: 1);
+            }
+            catch (Exception ex)
             {
-                ResizeSwapChain(textureWidth, textureHeight);
+                HandleRenderFailure(ex);
             }
-
-            if (textureWidth != _swapSize.Width || textureHeight != _swapSize.Height)
-            {
-                return;
-            }
-
-            EnsureSourceFrame(textureWidth, textureHeight);
-            if (_sourceFrame is null)
-            {
-                return;
-            }
-
-            _context.CopyResource(_sourceFrame, texture);
-            RenderCurrentFrame(syncInterval: 1);
         }
     }
 
@@ -545,6 +556,14 @@ internal sealed class CaptureStageWindow : Form
         QueueSourceUnavailable("Source window was closed.");
     }
 
+    private void OnCaptureFailed(Exception exception)
+    {
+        lock (_gate)
+        {
+            HandleRenderFailure(exception);
+        }
+    }
+
     private void QueueSourceUnavailable(string message)
     {
         if (_sourceUnavailableQueued || !_sourceAvailable || !IsHandleCreated || IsDisposed)
@@ -598,6 +617,7 @@ internal sealed class CaptureStageWindow : Form
 
         session.FrameArrived -= OnFrameArrived;
         session.SourceClosed -= OnSourceClosed;
+        session.CaptureFailed -= OnCaptureFailed;
         session.Dispose();
     }
 
@@ -626,6 +646,7 @@ internal sealed class CaptureStageWindow : Form
         {
             session.FrameArrived -= OnFrameArrived;
             session.SourceClosed -= OnSourceClosed;
+            session.CaptureFailed -= OnCaptureFailed;
             session.Dispose();
         }
 

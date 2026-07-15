@@ -1,5 +1,6 @@
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using FocusTool.Win.Overlay;
 using FocusTool.Win.Services;
 
 namespace FocusTool.Verification;
@@ -14,7 +15,8 @@ internal static class Program
             VerifyHalfTransparentPrivacyPixel();
             VerifyOpaquePrivacyPixel();
             VerifyMismatchedDimensionsFail();
-            Console.WriteLine("Screen Board compositor checks passed.");
+            VerifyOverlaySegmentsArePlacedInSourceCoordinates();
+            Console.WriteLine("FocusTool verification checks passed.");
             return 0;
         }
         catch (Exception ex)
@@ -67,6 +69,26 @@ internal static class Program
         }
 
         throw new InvalidOperationException("Mismatched compositor dimensions were accepted.");
+    }
+
+    private static void VerifyOverlaySegmentsArePlacedInSourceCoordinates()
+    {
+        var destination = new byte[4 * 2 * 4];
+        var first = new OverlayLayer([1, 2, 3, 4, 5, 6, 7, 8], 2, 1, 8);
+        var second = new OverlayLayer([9, 10, 11, 12, 13, 14, 15, 16], 2, 1, 8);
+
+        OverlayLayerComposer.CopyInto(first, destination, 4, 2, 0, 0);
+        OverlayLayerComposer.CopyInto(second, destination, 4, 2, 2, 1);
+
+        var expected = new byte[]
+        {
+            1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 9, 10, 11, 12, 13, 14, 15, 16,
+        };
+        if (!destination.SequenceEqual(expected))
+        {
+            throw new InvalidOperationException("Multi-monitor overlay segments were placed incorrectly.");
+        }
     }
 
     private static BitmapSource CreateBitmap(int width, int height, byte[] pixels)
