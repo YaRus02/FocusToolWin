@@ -269,6 +269,34 @@ internal static class Program
         {
             throw new InvalidOperationException("Eraser click did not remove only the topmost object.");
         }
+
+        var imageOverlap = new AnnotationDocument(() => 1000);
+        AddLine(imageOverlap, settings, 40, "#FFFF0000");
+        var image = BitmapSource.Create(
+            1,
+            1,
+            96,
+            96,
+            PixelFormats.Bgra32,
+            null,
+            new byte[] { 255, 255, 255, 255 },
+            4);
+        imageOverlap.AddPastedImage(image, new ScreenRect(0, 0, 80, 100));
+        imageOverlap.BeginEraseGesture(new ScreenPoint(40, 50));
+        imageOverlap.EndEraseGesture(new ScreenPoint(40, 50));
+        if (imageOverlap.Shapes.Count != 1 || imageOverlap.Shapes[0].Tool != AnnotationTool.Image)
+        {
+            throw new InvalidOperationException("Image blocked erasing an annotation beneath it or was erased itself.");
+        }
+
+        imageOverlap.BeginEraseGesture(new ScreenPoint(40, 50));
+        imageOverlap.EndEraseGesture(new ScreenPoint(40, 50));
+        if (imageOverlap.Shapes.Count != 1
+            || imageOverlap.Shapes[0].Tool != AnnotationTool.Image
+            || imageOverlap.EraserHoverShape is not null)
+        {
+            throw new InvalidOperationException("Eraser treated a pasted image as an erasable target.");
+        }
     }
 
     private static void VerifyStrokeSmoothingPreservesEndpointsAndCorners()

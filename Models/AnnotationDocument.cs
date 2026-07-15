@@ -505,11 +505,10 @@ internal sealed class AnnotationDocument
     public void UpdateEraserHover(ScreenPoint point)
     {
         EraserPoint = point;
-        _eraserHoverIndex = AnnotationHitTesting.TryFindShapeAt(
+        _eraserHoverIndex = AnnotationHitTesting.TryFindErasableShapeAt(
             _shapes,
             point,
             out var index,
-            AnnotationHitTesting.EraserRadius,
             _clockProvider()) ? index : -1;
         OnDraftProgressed();
     }
@@ -1059,11 +1058,10 @@ internal sealed class AnnotationDocument
 
     private void EraseTopmostAt(ScreenPoint point)
     {
-        if (!AnnotationHitTesting.TryFindShapeAt(
+        if (!AnnotationHitTesting.TryFindErasableShapeAt(
                 _shapes,
                 point,
                 out var index,
-                AnnotationHitTesting.EraserRadius,
                 _clockProvider()))
         {
             UpdateEraserHoverIndex(point);
@@ -1096,11 +1094,10 @@ internal sealed class AnnotationDocument
 
     private void UpdateEraserHoverIndex(ScreenPoint point)
     {
-        _eraserHoverIndex = AnnotationHitTesting.TryFindShapeAt(
+        _eraserHoverIndex = AnnotationHitTesting.TryFindErasableShapeAt(
             _shapes,
             point,
             out var index,
-            AnnotationHitTesting.EraserRadius,
             _clockProvider()) ? index : -1;
     }
 

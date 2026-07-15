@@ -13,9 +13,34 @@ internal static class AnnotationHitTesting
         double tolerance = 6,
         double? nowMs = null)
     {
+        return TryFindShapeAtCore(shapes, point, out index, tolerance, nowMs, includeImages: true);
+    }
+
+    public static bool TryFindErasableShapeAt(
+        IReadOnlyList<AnnotationShape> shapes,
+        ScreenPoint point,
+        out int index,
+        double? nowMs = null)
+    {
+        return TryFindShapeAtCore(shapes, point, out index, EraserRadius, nowMs, includeImages: false);
+    }
+
+    private static bool TryFindShapeAtCore(
+        IReadOnlyList<AnnotationShape> shapes,
+        ScreenPoint point,
+        out int index,
+        double tolerance,
+        double? nowMs,
+        bool includeImages)
+    {
         var hitRect = new ScreenRect(point.X, point.Y, point.X, point.Y).Inflate(tolerance);
         for (var i = shapes.Count - 1; i >= 0; i--)
         {
+            if (!includeImages && shapes[i].Tool == AnnotationTool.Image)
+            {
+                continue;
+            }
+
             if (nowMs is { } currentTime && shapes[i].IsExpired(currentTime))
             {
                 continue;
@@ -64,7 +89,7 @@ internal static class AnnotationHitTesting
             var point = new ScreenPoint(
                 start.X + (end.X - start.X) * amount,
                 start.Y + (end.Y - start.Y) * amount);
-            if (TryFindShapeAt(shapes, point, out var index, EraserRadius, nowMs))
+            if (TryFindErasableShapeAt(shapes, point, out var index, nowMs))
             {
                 hits.Add(shapes[index]);
             }
