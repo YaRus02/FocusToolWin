@@ -10,6 +10,7 @@ internal sealed class GlobalHotKeyController : IDisposable
     private readonly Action _toggleAnnotate;
     private readonly Action _startPushToAnnotate;
     private readonly Action _toggleCursorHighlight;
+    private readonly Action _toggleClickPulse;
     private readonly Action _toggleSpotlight;
     private readonly Action _toggleMagnifier;
     private readonly Action _togglePinnedLens;
@@ -35,6 +36,7 @@ internal sealed class GlobalHotKeyController : IDisposable
         Action toggleAnnotate,
         Action startPushToAnnotate,
         Action toggleCursorHighlight,
+        Action toggleClickPulse,
         Action toggleSpotlight,
         Action toggleMagnifier,
         Action togglePinnedLens,
@@ -58,6 +60,7 @@ internal sealed class GlobalHotKeyController : IDisposable
         _toggleAnnotate = toggleAnnotate;
         _startPushToAnnotate = startPushToAnnotate;
         _toggleCursorHighlight = toggleCursorHighlight;
+        _toggleClickPulse = toggleClickPulse;
         _toggleSpotlight = toggleSpotlight;
         _toggleMagnifier = toggleMagnifier;
         _togglePinnedLens = togglePinnedLens;
@@ -84,6 +87,7 @@ internal sealed class GlobalHotKeyController : IDisposable
         AddIfEnabled(registrations, shortcuts.ToggleAnnotate, _toggleAnnotate);
         AddIfEnabled(registrations, shortcuts.PushToAnnotate, _startPushToAnnotate);
         AddIfEnabled(registrations, shortcuts.ToggleCursorHighlight, _toggleCursorHighlight);
+        AddIfEnabled(registrations, shortcuts.ToggleClickPulse, _toggleClickPulse);
         AddIfEnabled(registrations, shortcuts.ToggleSpotlight, _toggleSpotlight);
         AddIfEnabled(registrations, shortcuts.ToggleMagnifier, _toggleMagnifier);
         AddIfEnabled(registrations, shortcuts.TogglePinnedLens, _togglePinnedLens);
@@ -121,6 +125,7 @@ internal sealed class GlobalHotKeyController : IDisposable
             && string.Equals(left.ToggleAnnotate, right.ToggleAnnotate, StringComparison.Ordinal)
             && string.Equals(left.PushToAnnotate, right.PushToAnnotate, StringComparison.Ordinal)
             && string.Equals(left.ToggleCursorHighlight, right.ToggleCursorHighlight, StringComparison.Ordinal)
+            && string.Equals(left.ToggleClickPulse, right.ToggleClickPulse, StringComparison.Ordinal)
             && string.Equals(left.ToggleSpotlight, right.ToggleSpotlight, StringComparison.Ordinal)
             && string.Equals(left.ToggleMagnifier, right.ToggleMagnifier, StringComparison.Ordinal)
             && string.Equals(left.TogglePinnedLens, right.TogglePinnedLens, StringComparison.Ordinal)

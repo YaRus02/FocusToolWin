@@ -20,17 +20,20 @@ internal sealed class SettingsShortcutFieldsBinder
     private readonly IReadOnlyList<SettingsShortcutFieldBinding> _fields;
     private readonly WpfTextBox _laserHoldBox;
     private readonly WpfTextBox _cursorHighlightHoldBox;
+    private readonly WpfTextBox _spotlightHoldBox;
     private readonly Action<string, string> _showWarning;
 
     public SettingsShortcutFieldsBinder(
         IReadOnlyList<SettingsShortcutFieldBinding> fields,
         WpfTextBox laserHoldBox,
         WpfTextBox cursorHighlightHoldBox,
+        WpfTextBox spotlightHoldBox,
         Action<string, string> showWarning)
     {
         _fields = fields;
         _laserHoldBox = laserHoldBox;
         _cursorHighlightHoldBox = cursorHighlightHoldBox;
+        _spotlightHoldBox = spotlightHoldBox;
         _showWarning = showWarning;
     }
 
@@ -38,6 +41,7 @@ internal sealed class SettingsShortcutFieldsBinder
     {
         _laserHoldBox.Text = settings.LaserHoldShortcut;
         _cursorHighlightHoldBox.Text = settings.CursorHighlightHoldShortcut;
+        _spotlightHoldBox.Text = settings.Shortcuts.HoldSpotlight;
         foreach (var field in _fields)
         {
             field.Box.Text = field.Get(settings.Shortcuts);
@@ -50,6 +54,7 @@ internal sealed class SettingsShortcutFieldsBinder
 
         updated.LaserHoldShortcut = ReadShortcutText(_laserHoldBox);
         updated.CursorHighlightHoldShortcut = ReadShortcutText(_cursorHighlightHoldBox);
+        shortcuts.HoldSpotlight = ReadShortcutText(_spotlightHoldBox);
         foreach (var field in _fields)
         {
             field.Set(shortcuts, ReadShortcutText(field.Box));
@@ -63,6 +68,11 @@ internal sealed class SettingsShortcutFieldsBinder
 
         if (updated.GetCursorHighlightActivationMode() == LaserActivationMode.Hold
             && !ValidateShortcut("Hold cursor highlight", updated.CursorHighlightHoldShortcut, allowMouseButton: true, allowDisabled: false))
+        {
+            return false;
+        }
+
+        if (!ValidateShortcut("Hold spotlight", shortcuts.HoldSpotlight, allowMouseButton: true))
         {
             return false;
         }
@@ -151,6 +161,8 @@ internal sealed class SettingsShortcutFieldsBinder
         {
             entries.Add(("Hold laser", updated.LaserHoldShortcut));
         }
+
+        entries.Add(("Hold spotlight", shortcuts.HoldSpotlight));
 
         foreach (var field in _fields)
         {

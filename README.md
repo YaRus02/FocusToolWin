@@ -100,26 +100,26 @@
 
 | Действие | Хоткей |
 |---|---|
-| Laser mode `Always / Hold` | `Ctrl+Alt+L` |
-| Draw mode | `Ctrl+Alt+D` |
+| Laser mode `Always / Hold` | `Ctrl+Alt+Z` |
+| Draw mode | `Ctrl+Alt+A` |
 | Push-to-annotate | `Alt+A` |
-| Cursor Highlight | `Ctrl+Alt+U` |
+| Cursor Highlight | `Ctrl+Alt+X` |
+| Click Pulse | `Ctrl+Alt+C` |
 | Spotlight | `Ctrl+Alt+S` |
-| Magnifier | `Ctrl+Alt+M` |
-| Live Pinned Lens | `Ctrl+Alt+P` |
-| Region Mask | `Ctrl+Alt+H` |
-| Clear Region Masks | `Ctrl+Alt+Shift+H` |
+| Spotlight hold key | `Alt+S` |
+| Magnifier | `Ctrl+Alt+V` |
+| Live Pinned Lens | `Ctrl+Alt+F` |
+| Region Mask | `Ctrl+Alt+R` |
 | Region Spotlight | `Ctrl+Alt+Shift+S` |
-| Clear Region Spotlights | `Ctrl+Alt+Shift+X` |
-| Fading annotations | `Ctrl+Alt+F` |
-| Overlay Timer | `Ctrl+Alt+N` |
-| Overlay toolbar | `Ctrl+Alt+T` |
-| Screenshot | `Ctrl+Alt+C` |
-| Region Screenshot | `Ctrl+Alt+Shift+C` |
-| Screen Board | `Ctrl+Alt+G` |
-| Black Board | `Ctrl+Alt+B` |
+| Fading annotations | `Ctrl+Alt+D` |
+| Overlay Timer | `Ctrl+Alt+T` |
+| Overlay toolbar | `Ctrl+Alt+G` |
+| Screenshot | `Ctrl+Alt+E` |
+| Region Screenshot | `Ctrl+Alt+Shift+E` |
+| Screen Board | `Ctrl+Alt+B` |
+| Black Board | `Ctrl+Alt+Shift+B` |
 | White Board | `Ctrl+Alt+W` |
-| Exit FocusTool | `Ctrl+Alt+Q` |
+| Exit FocusTool | `Ctrl+Alt+Shift+Q` |
 | Laser hold key | `Alt+Z` |
 | Cursor Highlight hold key | `Alt+X` |
 
@@ -130,17 +130,17 @@
 | Arrow | `A` |
 | Rectangle | `R` |
 | Oval / Circle | `C` |
-| Line | `L` |
-| Pen | `P` |
-| Highlighter | `H` |
+| Line | `S` |
+| Pen | `W` |
+| Highlighter | `F` |
 | Text | `T` |
-| Move | `M` |
-| Step marker | `N` |
+| Move | `Q` |
+| Step marker | `D` |
 | Color slot 1-5 | `1`-`5` |
-| Line thickness | `[` / `]` |
-| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
+| Line thickness | `Shift+Z` / `Shift+X` |
+| Undo / Redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Delete selected | `Backspace` |
-| Clear annotations | `Delete` или `E` |
+| Clear annotations | `Delete` или `Shift+E` |
 | Exit visual mode | `Esc` |
 | Paste image/text | `Ctrl+V` |
 
@@ -169,7 +169,7 @@
 
 ### Live Pinned Lens
 
-`Ctrl+Alt+P` запускает выбор области. После выделения появляется live-окно с увеличенной копией выбранного фрагмента. Окно можно перетаскивать, масштабировать через контекстное меню или `Ctrl + колесо мыши`, замораживать, закрывать отдельно или закрывать все pinned lens.
+`Ctrl+Alt+F` запускает выбор области. После выделения появляется live-окно с увеличенной копией выбранного фрагмента. Окно можно перетаскивать, масштабировать через контекстное меню или `Ctrl + колесо мыши`, замораживать, закрывать отдельно или закрывать все pinned lens.
 
 Аннотации рисуются поверх pinned lens. Region masks остаются видимыми внутри увеличенного изображения, поэтому увеличенная копия показывает тот же закрытый фрагмент.
 

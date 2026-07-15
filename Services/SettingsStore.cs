@@ -34,6 +34,14 @@ internal sealed class SettingsStore
             {
                 var json = File.ReadAllText(SettingsFilePath);
                 var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                using var document = JsonDocument.Parse(json);
+                if (!document.RootElement.TryGetProperty(nameof(AppSettings.Shortcuts), out var shortcutsElement)
+                    || !shortcutsElement.TryGetProperty(nameof(ShortcutSettings.LayoutVersion), out _))
+                {
+                    settings.Shortcuts ??= new ShortcutSettings();
+                    settings.Shortcuts.LayoutVersion = 0;
+                }
+
                 settings.Normalize();
                 return settings;
             }

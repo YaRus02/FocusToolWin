@@ -1,5 +1,6 @@
 using FocusTool.Win.Models;
 using FocusTool.Win.Overlay;
+using Shortcut = FocusTool.Win.Native.Shortcut;
 
 namespace FocusTool.Win.Services;
 
@@ -9,6 +10,8 @@ internal sealed class VisualEffectsController
     private readonly Action _invalidateOverlay;
     private readonly Action<ScreenPoint, ScreenPoint> _invalidateForCursor;
     private readonly double _movementThresholdPixels;
+    private Shortcut _spotlightHoldShortcut;
+    private bool _spotlightHoldActive;
     private bool _hasSpotlightCursor;
     private ScreenPoint _spotlightCursor;
 
@@ -25,6 +28,7 @@ internal sealed class VisualEffectsController
     }
 
     public bool SpotlightEnabled { get; set; }
+    public bool SpotlightHoldActive => _spotlightHoldActive;
     public bool HasSpotlightCursor => _hasSpotlightCursor;
 
     public bool TryGetSpotlightCursor(out ScreenPoint point)
@@ -35,7 +39,41 @@ internal sealed class VisualEffectsController
 
     public bool IsSpotlightVisibleInMode(InteractionMode mode)
     {
-        return SpotlightEnabled && !IsVisualBoardMode(mode);
+        return (SpotlightEnabled || _spotlightHoldActive) && !IsVisualBoardMode(mode);
+    }
+
+    public void ConfigureSpotlightHoldShortcut(string shortcutText)
+    {
+        _spotlightHoldShortcut = !ShortcutSettings.IsShortcutDisabled(shortcutText)
+            && Shortcut.TryParse(shortcutText, out var shortcut)
+            ? shortcut
+            : default;
+        if (_spotlightHoldShortcut == default && _spotlightHoldActive)
+        {
+            _spotlightHoldActive = false;
+            _invalidateOverlay();
+        }
+    }
+
+    public void UpdateSpotlightHold(bool suppressed)
+    {
+        var active = !suppressed
+            && _spotlightHoldShortcut != default
+            && _spotlightHoldShortcut.IsPressedWithExactModifiers();
+        if (active == _spotlightHoldActive)
+        {
+            return;
+        }
+
+        _spotlightHoldActive = active;
+        if (active)
+        {
+            UpdateSpotlightCursor(force: true);
+        }
+        else
+        {
+            _invalidateOverlay();
+        }
     }
 
     public ScreenPoint? GetSpotlightPoint(InteractionMode mode, bool magnifierEnabled)

@@ -298,6 +298,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             ToggleAnnotateMode,
             StartPushToAnnotate,
             ToggleCursorHighlight,
+            ToggleClickPulse,
             ToggleSpotlight,
             ToggleMagnifierMode,
             TogglePinnedLens,
@@ -402,7 +403,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
         {
             _trayIcon.ShowMessage(
                 "FocusTool is running",
-                $"{Settings.Shortcuts.ToggleAnnotate} = annotate, {Settings.Shortcuts.ToggleLaserActivation} = laser mode, {Settings.Shortcuts.ToggleSpotlight} = spotlight, {Settings.Shortcuts.ToggleMagnifier} = magnifier.");
+                $"Hold {Settings.Shortcuts.PushToAnnotate} = draw, {Settings.LaserHoldShortcut} = laser, {Settings.CursorHighlightHoldShortcut} = cursor; {Settings.Shortcuts.ToggleClickPulse} = click pulse.");
         }
     }
 
@@ -458,6 +459,11 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     public void SetClickPulseEnabled(bool enabled)
     {
         _settingsCommands.SetClickPulseEnabled(enabled);
+    }
+
+    public void ToggleClickPulse()
+    {
+        SetClickPulseEnabled(!Settings.ClickPulseEnabled);
     }
 
     public void AdjustCursorHighlightRadius(double delta)
@@ -1590,6 +1596,7 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         _pointerVisuals.CacheParsedSettings();
         _pushToAnnotate.ConfigureShortcut();
+        _visualEffects.ConfigureSpotlightHoldShortcut(Settings.Shortcuts.HoldSpotlight);
     }
 
     private static bool IsAnnotationMode(InteractionMode mode)

@@ -162,9 +162,12 @@ internal sealed class TrayIconController : IDisposable
         _cursorHighlightHoldModeItem.Checked = _controller.Settings.GetCursorHighlightActivationMode() == LaserActivationMode.Hold;
         _cursorHighlightHoldModeItem.ShortcutKeyDisplayString = _controller.Settings.CursorHighlightHoldShortcut;
         _cursorHighlightPulseItem.Checked = _controller.ClickPulseEnabled;
+        _cursorHighlightPulseItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleClickPulse;
 
         _spotlightItem.Checked = _controller.SpotlightEnabled;
-        _spotlightItem.ShortcutKeyDisplayString = _controller.Settings.Shortcuts.ToggleSpotlight;
+        _spotlightItem.ShortcutKeyDisplayString = ShortcutSettings.IsShortcutDisabled(_controller.Settings.Shortcuts.HoldSpotlight)
+            ? _controller.Settings.Shortcuts.ToggleSpotlight
+            : $"{_controller.Settings.Shortcuts.ToggleSpotlight} / hold {_controller.Settings.Shortcuts.HoldSpotlight}";
         _regionSpotlightMenuItem.Checked = _controller.RegionSpotlightSelectionActive || _controller.RegionSpotlightActive;
         _regionSpotlightMenuItem.Text = _controller.RegionSpotlightSelectionActive
             ? "Region Spotlight: select area"

@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using FocusTool.Win.Overlay;
+using FocusTool.Win.Models;
 using FocusTool.Win.Services;
 
 namespace FocusTool.Verification;
@@ -16,6 +17,9 @@ internal static class Program
             VerifyOpaquePrivacyPixel();
             VerifyMismatchedDimensionsFail();
             VerifyOverlaySegmentsArePlacedInSourceCoordinates();
+            VerifyLegacyDefaultShortcutsMigrate();
+            VerifyCustomizedLegacyShortcutsArePreserved();
+            VerifyCustomizedLegacyHoldShortcutIsPreserved();
             Console.WriteLine("FocusTool verification checks passed.");
             return 0;
         }
@@ -89,6 +93,104 @@ internal static class Program
         {
             throw new InvalidOperationException("Multi-monitor overlay segments were placed incorrectly.");
         }
+    }
+
+    private static void VerifyLegacyDefaultShortcutsMigrate()
+    {
+        var shortcuts = CreateLegacyShortcuts();
+        shortcuts.Normalize();
+
+        if (shortcuts.LayoutVersion != ShortcutSettings.CurrentLayoutVersion
+            || shortcuts.ToggleAnnotate != "Ctrl+Alt+A"
+            || shortcuts.ToggleClickPulse != "Ctrl+Alt+C"
+            || shortcuts.HoldSpotlight != "Alt+S"
+            || shortcuts.ToolPencil != "W"
+            || shortcuts.Redo != "Ctrl+Shift+Z")
+        {
+            throw new InvalidOperationException("Legacy default shortcuts were not migrated to the left-hand layout.");
+        }
+    }
+
+    private static void VerifyCustomizedLegacyShortcutsArePreserved()
+    {
+        var shortcuts = CreateLegacyShortcuts();
+        shortcuts.ToggleAnnotate = "Ctrl+Shift+A";
+        shortcuts.Normalize();
+
+        if (shortcuts.ToggleAnnotate != "Ctrl+Shift+A"
+            || shortcuts.ToggleLaserActivation != "Ctrl+Alt+L"
+            || shortcuts.ToggleClickPulse != ShortcutSettings.DisabledShortcut
+            || shortcuts.HoldSpotlight != ShortcutSettings.DisabledShortcut)
+        {
+            throw new InvalidOperationException("Customized legacy shortcuts were overwritten during migration.");
+        }
+    }
+
+    private static void VerifyCustomizedLegacyHoldShortcutIsPreserved()
+    {
+        var settings = new AppSettings
+        {
+            LaserHoldShortcut = "Mouse4",
+            Shortcuts = CreateLegacyShortcuts(),
+        };
+        settings.Normalize();
+
+        if (settings.LaserHoldShortcut != "Mouse4"
+            || settings.Shortcuts.ToggleLaserActivation != "Ctrl+Alt+L"
+            || settings.Shortcuts.HoldSpotlight != ShortcutSettings.DisabledShortcut)
+        {
+            throw new InvalidOperationException("A customized legacy hold shortcut did not prevent automatic layout migration.");
+        }
+    }
+
+    private static ShortcutSettings CreateLegacyShortcuts()
+    {
+        return new ShortcutSettings
+        {
+            LayoutVersion = 0,
+            ToggleLaserActivation = "Ctrl+Alt+L",
+            ToggleAnnotate = "Ctrl+Alt+D",
+            PushToAnnotate = "Alt+A",
+            ToggleCursorHighlight = "Ctrl+Alt+U",
+            ToggleSpotlight = "Ctrl+Alt+S",
+            ToggleMagnifier = "Ctrl+Alt+M",
+            TogglePinnedLens = "Ctrl+Alt+P",
+            ToggleRegionMask = "Ctrl+Alt+H",
+            ClearRegionMasks = "Ctrl+Alt+Shift+H",
+            ToggleRegionSpotlight = "Ctrl+Alt+Shift+S",
+            ClearRegionSpotlights = "Ctrl+Alt+Shift+X",
+            ToggleFadingAnnotations = "Ctrl+Alt+F",
+            ToggleTimer = "Ctrl+Alt+N",
+            ToggleToolbar = "Ctrl+Alt+T",
+            TakeScreenshot = "Ctrl+Alt+C",
+            TakeRegionScreenshot = "Ctrl+Alt+Shift+C",
+            ToggleScreenBoard = "Ctrl+Alt+G",
+            ToggleBlackScreen = "Ctrl+Alt+B",
+            ToggleWhiteScreen = "Ctrl+Alt+W",
+            ExitApp = "Ctrl+Alt+Q",
+            ToolArrow = "A",
+            ToolRectangle = "R",
+            ToolEllipse = "C",
+            ToolLine = "L",
+            ToolPencil = "P",
+            ToolHighlighter = "H",
+            ToolText = "T",
+            ToolMove = "M",
+            ToolStep = "N",
+            Color1 = "1",
+            Color2 = "2",
+            Color3 = "3",
+            Color4 = "4",
+            Color5 = "5",
+            ThicknessDown = "[",
+            ThicknessUp = "]",
+            Undo = "Ctrl+Z",
+            Redo = "Ctrl+Y",
+            DeleteSelection = "Backspace",
+            Clear = "Delete",
+            ClearAlternate = "E",
+            ExitAnnotate = "Esc",
+        };
     }
 
     private static BitmapSource CreateBitmap(int width, int height, byte[] pixels)

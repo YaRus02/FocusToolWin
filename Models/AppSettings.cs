@@ -255,7 +255,9 @@ public sealed class AppSettings
         FadingAnnotationVisibleMs = Math.Clamp(FadingAnnotationVisibleMs, 500, 60000);
         FadingAnnotationFadeMs = Math.Clamp(FadingAnnotationFadeMs, 100, 10000);
         Shortcuts ??= new ShortcutSettings();
-        Shortcuts.Normalize();
+        var holdShortcutsUseLegacyDefaults = string.Equals(LaserHoldShortcut, "Alt+Z", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(CursorHighlightHoldShortcut, "Alt+X", StringComparison.OrdinalIgnoreCase);
+        Shortcuts.Normalize(holdShortcutsUseLegacyDefaults);
         Timer ??= new TimerSettings();
         Timer.Normalize();
     }

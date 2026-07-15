@@ -69,6 +69,7 @@ internal sealed class OverlayTickController
 
         var fadingAnnotationsAnimating = _updateFadingAnnotations();
         var mode = _modeProvider();
+        _visualEffects.UpdateSpotlightHold(_pushToAnnotate.Active);
         var magnifierActive = _magnifierEnabledProvider();
         var suppressPointerVisuals = magnifierActive;
         var cursorHighlightAnimating = false;

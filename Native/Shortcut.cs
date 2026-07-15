@@ -46,6 +46,32 @@ internal readonly record struct Shortcut(ModifierKeys Modifiers, Key Key, int Vi
             || TryGetTopRowDigit(Key, out var digit) && IsVirtualKeyPressed(VkNumpadDigit(digit));
     }
 
+    public bool IsPressedWithExactModifiers()
+    {
+        var pressedModifiers = ModifierKeys.None;
+        if (IsVirtualKeyPressed(VkControl))
+        {
+            pressedModifiers |= ModifierKeys.Control;
+        }
+
+        if (IsVirtualKeyPressed(VkAlt))
+        {
+            pressedModifiers |= ModifierKeys.Alt;
+        }
+
+        if (IsVirtualKeyPressed(VkShift))
+        {
+            pressedModifiers |= ModifierKeys.Shift;
+        }
+
+        if (IsVirtualKeyPressed(VkLeftWin) || IsVirtualKeyPressed(VkRightWin))
+        {
+            pressedModifiers |= ModifierKeys.Windows;
+        }
+
+        return pressedModifiers == Modifiers && IsPressed();
+    }
+
     public uint ToNativeModifiers()
     {
         uint modifiers = NativeMethods.ModNoRepeat;

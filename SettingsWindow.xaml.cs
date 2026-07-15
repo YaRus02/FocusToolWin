@@ -40,6 +40,7 @@ public partial class SettingsWindow : Window
             BuildShortcutBindings(),
             LaserHoldBox,
             CursorHighlightHoldBox,
+            SpotlightHoldBox,
             (title, message) => System.Windows.MessageBox.Show(this, message, title, MessageBoxButton.OK, MessageBoxImage.Warning));
 
         LoadSettings(settings, settingsPath);
@@ -291,6 +292,7 @@ public partial class SettingsWindow : Window
         new(PushToAnnotateBox, "Push annotate", s => s.PushToAnnotate, (s, v) => s.PushToAnnotate = v, true),
         new(ToggleLaserActivationBox, "Toggle laser mode", s => s.ToggleLaserActivation, (s, v) => s.ToggleLaserActivation = v, true),
         new(ToggleCursorHighlightBox, "Cursor highlight", s => s.ToggleCursorHighlight, (s, v) => s.ToggleCursorHighlight = v, true),
+        new(ToggleClickPulseBox, "Click pulse", s => s.ToggleClickPulse, (s, v) => s.ToggleClickPulse = v, true),
         new(ToggleSpotlightBox, "Toggle spotlight", s => s.ToggleSpotlight, (s, v) => s.ToggleSpotlight = v, true),
         new(ToggleMagnifierBox, "Toggle magnifier", s => s.ToggleMagnifier, (s, v) => s.ToggleMagnifier = v, true),
         new(TogglePinnedLensBox, "Pinned lens", s => s.TogglePinnedLens, (s, v) => s.TogglePinnedLens = v, true),
