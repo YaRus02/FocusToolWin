@@ -119,24 +119,28 @@ internal static class AnnotationStrokeGeometry
         return result;
     }
 
-    public static IReadOnlyList<IReadOnlyList<ScreenPoint>> BuildFixedNibSweeps(
+    public static FixedNibGeometry BuildFixedNibGeometry(
         IReadOnlyList<ScreenPoint> centerLine,
         double nibWidth,
         double nibHeight)
     {
         if (centerLine.Count == 0)
         {
-            return [];
+            return FixedNibGeometry.Empty;
         }
 
         var halfWidth = Math.Max(0.5, nibWidth / 2);
         var halfHeight = Math.Max(0.5, nibHeight / 2);
+        var figureCapacity = Math.Max(1, centerLine.Count - 1);
+        var points = new List<ScreenPoint>(figureCapacity * 6);
+        var figureEnds = new List<int>(figureCapacity);
         if (centerLine.Count == 1)
         {
-            return [RectangleAt(centerLine[0], halfWidth, halfHeight)];
+            AppendRectangle(centerLine[0], halfWidth, halfHeight, points);
+            figureEnds.Add(points.Count);
+            return new FixedNibGeometry(points, figureEnds);
         }
 
-        var sweeps = new List<IReadOnlyList<ScreenPoint>>(centerLine.Count - 1);
         for (var i = 1; i < centerLine.Count; i++)
         {
             var start = centerLine[i - 1];
@@ -146,16 +150,17 @@ internal static class AnnotationStrokeGeometry
                 continue;
             }
 
-            // A fixed rectangular marker tip does not rotate with the path.
-            // Its swept segment is the convex hull of the tip at both samples.
-            var candidates = RectangleAt(start, halfWidth, halfHeight)
-                .Concat(RectangleAt(end, halfWidth, halfHeight));
-            sweeps.Add(ConvexHull(candidates));
+            AppendSweepHull(start, end, halfWidth, halfHeight, points);
+            figureEnds.Add(points.Count);
         }
 
-        return sweeps.Count > 0
-            ? sweeps
-            : [RectangleAt(centerLine[0], halfWidth, halfHeight)];
+        if (figureEnds.Count == 0)
+        {
+            AppendRectangle(centerLine[0], halfWidth, halfHeight, points);
+            figureEnds.Add(points.Count);
+        }
+
+        return new FixedNibGeometry(points, figureEnds);
     }
 
     private static List<ScreenPoint> ResampleUniform(IReadOnlyList<ScreenPoint> points, double spacing)
@@ -232,56 +237,101 @@ internal static class AnnotationStrokeGeometry
             : (firstX * secondX + firstY * secondY) / (firstLength * secondLength);
     }
 
-    private static IReadOnlyList<ScreenPoint> RectangleAt(ScreenPoint center, double halfWidth, double halfHeight)
+    private static void AppendRectangle(
+        ScreenPoint center,
+        double halfWidth,
+        double halfHeight,
+        ICollection<ScreenPoint> output)
     {
-        return
-        [
-            center.Offset(-halfWidth, -halfHeight),
-            center.Offset(halfWidth, -halfHeight),
-            center.Offset(halfWidth, halfHeight),
-            center.Offset(-halfWidth, halfHeight)
-        ];
+        output.Add(center.Offset(-halfWidth, -halfHeight));
+        output.Add(center.Offset(halfWidth, -halfHeight));
+        output.Add(center.Offset(halfWidth, halfHeight));
+        output.Add(center.Offset(-halfWidth, halfHeight));
     }
 
-    private static IReadOnlyList<ScreenPoint> ConvexHull(IEnumerable<ScreenPoint> points)
+    private static void AppendSweepHull(
+        ScreenPoint start,
+        ScreenPoint end,
+        double halfWidth,
+        double halfHeight,
+        ICollection<ScreenPoint> output)
     {
-        var sorted = points
-            .Distinct()
-            .OrderBy(point => point.X)
-            .ThenBy(point => point.Y)
-            .ToArray();
-        if (sorted.Length <= 2)
+        // Stack storage keeps live highlighter rendering allocation-free per
+        // segment. Only the two flat output buffers grow with stroke length.
+        Span<ScreenPoint> candidates = stackalloc ScreenPoint[8];
+        candidates[0] = start.Offset(-halfWidth, -halfHeight);
+        candidates[1] = start.Offset(halfWidth, -halfHeight);
+        candidates[2] = start.Offset(halfWidth, halfHeight);
+        candidates[3] = start.Offset(-halfWidth, halfHeight);
+        candidates[4] = end.Offset(-halfWidth, -halfHeight);
+        candidates[5] = end.Offset(halfWidth, -halfHeight);
+        candidates[6] = end.Offset(halfWidth, halfHeight);
+        candidates[7] = end.Offset(-halfWidth, halfHeight);
+        SortPoints(candidates);
+
+        var uniqueCount = 1;
+        for (var i = 1; i < candidates.Length; i++)
         {
-            return sorted;
+            if (candidates[i] != candidates[uniqueCount - 1])
+            {
+                candidates[uniqueCount++] = candidates[i];
+            }
         }
 
-        var lower = new List<ScreenPoint>();
-        foreach (var point in sorted)
+        Span<ScreenPoint> hull = stackalloc ScreenPoint[16];
+        var hullCount = 0;
+        for (var i = 0; i < uniqueCount; i++)
         {
-            while (lower.Count >= 2 && Cross(lower[^2], lower[^1], point) <= 0)
+            while (hullCount >= 2 && Cross(hull[hullCount - 2], hull[hullCount - 1], candidates[i]) <= 0)
             {
-                lower.RemoveAt(lower.Count - 1);
+                hullCount--;
             }
 
-            lower.Add(point);
+            hull[hullCount++] = candidates[i];
         }
 
-        var upper = new List<ScreenPoint>();
-        for (var i = sorted.Length - 1; i >= 0; i--)
+        var upperStart = hullCount + 1;
+        for (var i = uniqueCount - 2; i >= 0; i--)
         {
-            var point = sorted[i];
-            while (upper.Count >= 2 && Cross(upper[^2], upper[^1], point) <= 0)
+            while (hullCount >= upperStart && Cross(hull[hullCount - 2], hull[hullCount - 1], candidates[i]) <= 0)
             {
-                upper.RemoveAt(upper.Count - 1);
+                hullCount--;
             }
 
-            upper.Add(point);
+            hull[hullCount++] = candidates[i];
         }
 
-        lower.RemoveAt(lower.Count - 1);
-        upper.RemoveAt(upper.Count - 1);
-        lower.AddRange(upper);
-        return lower;
+        if (hullCount > 1)
+        {
+            hullCount--;
+        }
+
+        for (var i = 0; i < hullCount; i++)
+        {
+            output.Add(hull[i]);
+        }
+    }
+
+    private static void SortPoints(Span<ScreenPoint> points)
+    {
+        for (var i = 1; i < points.Length; i++)
+        {
+            var current = points[i];
+            var index = i - 1;
+            while (index >= 0 && ComparePoints(points[index], current) > 0)
+            {
+                points[index + 1] = points[index];
+                index--;
+            }
+
+            points[index + 1] = current;
+        }
+    }
+
+    private static int ComparePoints(ScreenPoint left, ScreenPoint right)
+    {
+        var xComparison = left.X.CompareTo(right.X);
+        return xComparison != 0 ? xComparison : left.Y.CompareTo(right.Y);
     }
 
     private static double Cross(ScreenPoint origin, ScreenPoint first, ScreenPoint second)
@@ -289,4 +339,12 @@ internal static class AnnotationStrokeGeometry
         return (first.X - origin.X) * (second.Y - origin.Y)
             - (first.Y - origin.Y) * (second.X - origin.X);
     }
+}
+
+internal readonly record struct FixedNibGeometry(
+    IReadOnlyList<ScreenPoint> Points,
+    IReadOnlyList<int> FigureEnds)
+{
+    public static FixedNibGeometry Empty { get; } = new([], []);
+    public bool IsEmpty => FigureEnds.Count == 0;
 }

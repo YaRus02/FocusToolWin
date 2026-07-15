@@ -21,6 +21,7 @@ internal sealed class PinnedLensController : IDisposable
     private readonly KeyboardHook _deleteKeyHook;
     private readonly MouseHook _selectionMouseHook;
     private PinnedLensHostWindow? _selectedHost;
+    private IntPtr _selectionForegroundWindow;
 
     public PinnedLensController(
         Func<AppSettings> settingsProvider,
@@ -326,6 +327,7 @@ internal sealed class PinnedLensController : IDisposable
         if (ReferenceEquals(_selectedHost, host))
         {
             host.SetSelected(true);
+            _selectionForegroundWindow = NativeMethods.GetForegroundWindow();
             EnsureSelectionHooks();
             return;
         }
@@ -333,6 +335,7 @@ internal sealed class PinnedLensController : IDisposable
         _selectedHost?.SetSelected(false);
         _selectedHost = host;
         _selectedHost.SetSelected(true);
+        _selectionForegroundWindow = NativeMethods.GetForegroundWindow();
         EnsureSelectionHooks();
         _stateChanged();
     }
@@ -358,6 +361,7 @@ internal sealed class PinnedLensController : IDisposable
             _selectedHost = null;
         }
 
+        _selectionForegroundWindow = IntPtr.Zero;
         _deleteKeyHook.Uninstall();
         _selectionMouseHook.Uninstall();
     }
@@ -379,6 +383,20 @@ internal sealed class PinnedLensController : IDisposable
     {
         if (_selectedHost is null)
         {
+            return;
+        }
+
+        var foreground = NativeMethods.GetForegroundWindow();
+        if (_selectionForegroundWindow == IntPtr.Zero
+            || foreground != _selectionForegroundWindow
+            || !NativeMethods.IsWindow(foreground))
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is not null)
+            {
+                dispatcher.BeginInvoke(ClearSelection);
+            }
+
             return;
         }
 

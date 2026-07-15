@@ -367,11 +367,11 @@ internal sealed class AnnotationRenderer
             : AnnotationStrokeGeometry.Smooth(shape.Points, smoothing, finalize);
         var nibHeight = Math.Max(12, shape.Thickness * 4.2);
         var nibWidth = Math.Max(2, shape.Thickness * 0.72);
-        var sweeps = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+        var nibGeometry = AnnotationStrokeGeometry.BuildFixedNibGeometry(
             centerLine,
             nibWidth,
             nibHeight);
-        if (sweeps.Count == 0)
+        if (nibGeometry.IsEmpty)
         {
             return Geometry.Empty;
         }
@@ -379,18 +379,22 @@ internal sealed class AnnotationRenderer
         var geometry = new StreamGeometry { FillRule = FillRule.Nonzero };
         using (var context = geometry.Open())
         {
-            foreach (var sweep in sweeps)
+            var figureStart = 0;
+            foreach (var figureEnd in nibGeometry.FigureEnds)
             {
-                if (sweep.Count < 3)
+                if (figureEnd - figureStart < 3)
                 {
+                    figureStart = figureEnd;
                     continue;
                 }
 
-                context.BeginFigure(_toLocal(sweep[0]), isFilled: true, isClosed: true);
-                for (var i = 1; i < sweep.Count; i++)
+                context.BeginFigure(_toLocal(nibGeometry.Points[figureStart]), isFilled: true, isClosed: true);
+                for (var i = figureStart + 1; i < figureEnd; i++)
                 {
-                    context.LineTo(_toLocal(sweep[i]), isStroked: true, isSmoothJoin: false);
+                    context.LineTo(_toLocal(nibGeometry.Points[i]), isStroked: true, isSmoothJoin: false);
                 }
+
+                figureStart = figureEnd;
             }
         }
 

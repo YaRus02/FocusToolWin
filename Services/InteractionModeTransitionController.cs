@@ -87,7 +87,8 @@ internal sealed class InteractionModeTransitionController
         _cancelPushToAnnotateIfLeavingAnnotate(mode);
 
         var leavingAnnotationInput = IsAnnotationMode(currentMode) && !IsAnnotationMode(mode);
-        var enteringAnnotationInput = !IsAnnotationMode(currentMode) && IsAnnotationMode(mode);
+        var enteringForegroundInput = !OwnsForegroundInput(currentMode) && OwnsForegroundInput(mode);
+        var leavingForegroundInput = OwnsForegroundInput(currentMode) && !OwnsForegroundInput(mode);
         var leavingRectSelection = IsRectSelectionMode(currentMode) && currentMode != mode;
         var leavingRegionMaskSelection = currentMode == InteractionMode.RegionMaskSelect && mode != InteractionMode.RegionMaskSelect;
         var leavingScreenBoard = currentMode == InteractionMode.ScreenBoard && mode != InteractionMode.ScreenBoard;
@@ -95,7 +96,7 @@ internal sealed class InteractionModeTransitionController
         var enteringVisualBoard = IsVisualBoardMode(mode);
         var exitVisualHotKeyWasNeeded = _exitVisualHotKeyNeededProvider(currentMode);
 
-        if (enteringAnnotationInput)
+        if (enteringForegroundInput)
         {
             var foreground = NativeMethods.GetForegroundWindow();
             _ = NativeMethods.GetWindowThreadProcessId(foreground, out var processId);
@@ -152,7 +153,7 @@ internal sealed class InteractionModeTransitionController
 
         _invalidateOverlay();
 
-        if (leavingAnnotationInput && _previousForegroundWindow != IntPtr.Zero)
+        if (leavingForegroundInput && _previousForegroundWindow != IntPtr.Zero)
         {
             NativeMethods.SetForegroundWindow(_previousForegroundWindow);
             _previousForegroundWindow = IntPtr.Zero;
@@ -221,6 +222,11 @@ internal sealed class InteractionModeTransitionController
             or InteractionMode.RegionMaskSelect
             or InteractionMode.ScreenshotRegionSelect
             or InteractionMode.RegionSpotlightSelect;
+    }
+
+    private static bool OwnsForegroundInput(InteractionMode mode)
+    {
+        return IsAnnotationMode(mode) || IsRectSelectionMode(mode);
     }
 
     private static bool IsVisualBoardMode(InteractionMode mode)

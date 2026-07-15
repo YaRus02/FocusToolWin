@@ -8,6 +8,7 @@ public partial class App : System.Windows.Application
 {
     private Mutex? _singleInstanceMutex;
     private FocusToolController? _controller;
+    private bool _fatalShutdownStarted;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -22,23 +23,61 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        DispatcherUnhandledException += (_, args) =>
-        {
-            // Log-only and keep running. A modal dialog here would storm and freeze
-            // the UI thread if the exception originates in the 60 Hz render loop;
-            // failures are recorded in %APPDATA%\FocusTool\log.txt instead.
-            Services.AppLog.Error("Unhandled dispatcher exception", args.Exception);
-            args.Handled = true;
-        };
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
 
-        _controller = new FocusToolController();
-        _controller.Start();
+        try
+        {
+            _controller = new FocusToolController();
+            _controller.Start();
+        }
+        catch (Exception ex)
+        {
+            Services.AppLog.Error("FocusTool startup failed", ex);
+            DisposeControllerSafely();
+            Shutdown(-1);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _controller?.Dispose();
+        DispatcherUnhandledException -= OnDispatcherUnhandledException;
+        DisposeControllerSafely();
         _singleInstanceMutex?.Dispose();
         base.OnExit(e);
+    }
+
+    private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs args)
+    {
+        Services.AppLog.Error("Unhandled dispatcher exception; shutting down safely", args.Exception);
+        args.Handled = true;
+        if (_fatalShutdownStarted)
+        {
+            return;
+        }
+
+        _fatalShutdownStarted = true;
+        DisposeControllerSafely();
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Send,
+            () => Shutdown(-1));
+    }
+
+    private void DisposeControllerSafely()
+    {
+        var controller = _controller;
+        _controller = null;
+        if (controller is null)
+        {
+            return;
+        }
+
+        try
+        {
+            controller.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Services.AppLog.Error("FocusTool cleanup failed", ex);
+        }
     }
 }

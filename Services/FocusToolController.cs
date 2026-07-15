@@ -1164,14 +1164,52 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             return;
         }
 
+        var modifiers = GetCurrentModifierKeys();
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            e.Handled = dispatcher.Invoke(() => TryHandleLiveControlMouseWheel(e.Point, e.Delta, Keyboard.Modifiers));
+            if (!CanHandleLiveControlMouseWheel(e.Point, e.Delta, modifiers))
+            {
+                return;
+            }
+
+            // Low-level hook callbacks must not wait for the UI thread. Decide
+            // whether the gesture belongs to FocusTool from the current snapshot,
+            // consume it immediately, then apply the command asynchronously.
+            e.Handled = true;
+            dispatcher.BeginInvoke(() => TryHandleLiveControlMouseWheel(e.Point, e.Delta, modifiers));
             return;
         }
 
-        e.Handled = TryHandleLiveControlMouseWheel(e.Point, e.Delta, Keyboard.Modifiers);
+        e.Handled = TryHandleLiveControlMouseWheel(e.Point, e.Delta, modifiers);
+    }
+
+    private bool CanHandleLiveControlMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
+    {
+        if (_disposed || delta == 0 || !IsLiveControlWheelModifiers(modifiers))
+        {
+            return false;
+        }
+
+        if (_pinnedLenses.HasLiveControlTargetAt(point))
+        {
+            return true;
+        }
+
+        if (IsRectSelectionMode(_mode))
+        {
+            return false;
+        }
+
+        if (IsAnnotationMode(_mode))
+        {
+            return (modifiers & ModifierKeys.Shift) == 0
+                && !_annotations.HasTextInput
+                && _annotations.HasSelection
+                && (CurrentTool == AnnotationTool.Text || IsThicknessLiveControlTool(CurrentTool));
+        }
+
+        return Settings.MagnifierEnabled || _visualEffects.SpotlightEnabled;
     }
 
     private bool TryHandleLiveControlMouseWheel(ScreenPoint point, int delta, ModifierKeys modifiers)
@@ -1624,6 +1662,33 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
     {
         return (modifiers & ModifierKeys.Control) != 0
             && (modifiers & ~(ModifierKeys.Control | ModifierKeys.Shift)) == 0;
+    }
+
+    private static ModifierKeys GetCurrentModifierKeys()
+    {
+        var modifiers = ModifierKeys.None;
+        if ((NativeMethods.GetAsyncKeyState(0x10) & 0x8000) != 0)
+        {
+            modifiers |= ModifierKeys.Shift;
+        }
+
+        if ((NativeMethods.GetAsyncKeyState(0x11) & 0x8000) != 0)
+        {
+            modifiers |= ModifierKeys.Control;
+        }
+
+        if ((NativeMethods.GetAsyncKeyState(0x12) & 0x8000) != 0)
+        {
+            modifiers |= ModifierKeys.Alt;
+        }
+
+        if ((NativeMethods.GetAsyncKeyState(0x5B) & 0x8000) != 0
+            || (NativeMethods.GetAsyncKeyState(0x5C) & 0x8000) != 0)
+        {
+            modifiers |= ModifierKeys.Windows;
+        }
+
+        return modifiers;
     }
 
     private static bool IsThicknessLiveControlTool(AnnotationTool tool)

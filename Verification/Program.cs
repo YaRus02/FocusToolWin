@@ -9,10 +9,16 @@ namespace FocusTool.Verification;
 internal static class Program
 {
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         try
         {
+            if (args.Contains("--benchmark-highlighter", StringComparer.OrdinalIgnoreCase))
+            {
+                RunHighlighterBenchmark();
+                return 0;
+            }
+
             VerifyHalfTransparentPrivacyPixel();
             VerifyOpaquePrivacyPixel();
             VerifyMismatchedDimensionsFail();
@@ -33,6 +39,61 @@ internal static class Program
             Console.Error.WriteLine(ex);
             return 1;
         }
+    }
+
+    private static void RunHighlighterBenchmark()
+    {
+        const int sampleCount = 800;
+        var raw = new List<ScreenPoint>(sampleCount);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var generatedSweepPoints = 0L;
+        for (var index = 0; index < sampleCount; index++)
+        {
+            raw.Add(new ScreenPoint(
+                index * 4.5,
+                300 + Math.Sin(index * 0.08) * 80 + (index % 2 == 0 ? 0.8 : -0.8)));
+            if (raw.Count < 3)
+            {
+                continue;
+            }
+
+            var smoothed = AnnotationStrokeGeometry.Smooth(raw, StrokeSmoothingLevel.Strong, finalize: false);
+            var geometry = AnnotationStrokeGeometry.BuildFixedNibGeometry(smoothed, 4, 24);
+            generatedSweepPoints += geometry.Points.Count;
+        }
+
+        stopwatch.Stop();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Console.WriteLine(
+            $"Highlighter live replay: {sampleCount} samples, {stopwatch.ElapsedMilliseconds} ms, "
+            + $"{allocated / (1024.0 * 1024.0):0.0} MiB allocated, {generatedSweepPoints} generated vertices.");
+
+        const int repeatCount = 100;
+        var phaseWatch = System.Diagnostics.Stopwatch.StartNew();
+        allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        IReadOnlyList<ScreenPoint> finalSmoothed = raw;
+        for (var index = 0; index < repeatCount; index++)
+        {
+            finalSmoothed = AnnotationStrokeGeometry.Smooth(raw, StrokeSmoothingLevel.Strong, finalize: false);
+        }
+
+        phaseWatch.Stop();
+        allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Console.WriteLine(
+            $"  smoothing x{repeatCount}: {phaseWatch.ElapsedMilliseconds} ms, {allocated / (1024.0 * 1024.0):0.0} MiB");
+
+        phaseWatch.Restart();
+        allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (var index = 0; index < repeatCount; index++)
+        {
+            _ = AnnotationStrokeGeometry.BuildFixedNibGeometry(finalSmoothed, 4, 24);
+        }
+
+        phaseWatch.Stop();
+        allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Console.WriteLine(
+            $"  nib geometry x{repeatCount}: {phaseWatch.ElapsedMilliseconds} ms, {allocated / (1024.0 * 1024.0):0.0} MiB");
     }
 
     private static void VerifyHalfTransparentPrivacyPixel()
@@ -242,27 +303,29 @@ internal static class Program
 
     private static void VerifyHighlighterUsesFixedRectangularNib()
     {
-        var horizontal = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+        var horizontal = AnnotationStrokeGeometry.BuildFixedNibGeometry(
             [new ScreenPoint(10, 20), new ScreenPoint(110, 20)],
             4,
-            24).Single();
-        var vertical = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+            24);
+        var vertical = AnnotationStrokeGeometry.BuildFixedNibGeometry(
             [new ScreenPoint(10, 20), new ScreenPoint(10, 120)],
             4,
-            24).Single();
-        var horizontalThickness = horizontal.Max(point => point.Y) - horizontal.Min(point => point.Y);
-        var verticalThickness = vertical.Max(point => point.X) - vertical.Min(point => point.X);
+            24);
+        var horizontalThickness = horizontal.Points.Max(point => point.Y) - horizontal.Points.Min(point => point.Y);
+        var verticalThickness = vertical.Points.Max(point => point.X) - vertical.Points.Min(point => point.X);
         if (Math.Abs(horizontalThickness - 24) > 0.001
             || Math.Abs(verticalThickness - 4) > 0.001)
         {
             throw new InvalidOperationException("Highlighter tip rotated with the stroke instead of staying fixed.");
         }
 
-        var corner = AnnotationStrokeGeometry.BuildFixedNibSweeps(
+        var corner = AnnotationStrokeGeometry.BuildFixedNibGeometry(
             [new ScreenPoint(10, 20), new ScreenPoint(110, 20), new ScreenPoint(110, 120)],
             4,
             24);
-        if (corner.Count != 2 || !corner.All(sweep => sweep.Count >= 4))
+        if (corner.FigureEnds.Count != 2
+            || corner.FigureEnds[0] < 4
+            || corner.FigureEnds[1] - corner.FigureEnds[0] < 4)
         {
             throw new InvalidOperationException("Fixed highlighter sweeps left a disconnected corner.");
         }
