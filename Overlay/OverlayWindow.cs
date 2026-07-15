@@ -279,6 +279,22 @@ internal sealed class OverlayWindow : Window
     // (far less per-frame work and GC pressure).
     public BitmapSource? CaptureSurfaceRegion(ScreenRect sourceRect, OverlayRenderOptions options)
     {
+        return CaptureSurfaceRegionCore(sourceRect, dc =>
+        {
+            _surface.RenderSnapshot(dc, options);
+            return true;
+        });
+    }
+
+    public BitmapSource? CaptureRegionMaskSurfaceRegion(ScreenRect sourceRect)
+    {
+        return CaptureSurfaceRegionCore(sourceRect, _surface.RenderRegionMaskSnapshot);
+    }
+
+    private BitmapSource? CaptureSurfaceRegionCore(
+        ScreenRect sourceRect,
+        Func<DrawingContext, bool> renderContent)
+    {
         if (_surface.ActualWidth <= 1 || _surface.ActualHeight <= 1)
         {
             return null;
@@ -287,7 +303,6 @@ internal sealed class OverlayWindow : Window
         _surface.UpdateLayout();
         var dpi = VisualTreeHelper.GetDpi(_surface);
         var bounds = _screen.Bounds;
-
         var widthPx = (int)Math.Round(sourceRect.Right - sourceRect.Left);
         var heightPx = (int)Math.Round(sourceRect.Bottom - sourceRect.Top);
         if (widthPx <= 0 || heightPx <= 0)
@@ -299,18 +314,28 @@ internal sealed class OverlayWindow : Window
         var viewTopDip = (sourceRect.Top - bounds.Top) / dpi.DpiScaleY;
         var viewWidthDip = widthPx / dpi.DpiScaleX;
         var viewHeightDip = heightPx / dpi.DpiScaleY;
-
-        var bitmap = new RenderTargetBitmap(widthPx, heightPx, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap(
+            widthPx,
+            heightPx,
+            96 * dpi.DpiScaleX,
+            96 * dpi.DpiScaleY,
+            PixelFormats.Pbgra32);
         var visual = new DrawingVisual();
+        bool rendered;
         using (var dc = visual.RenderOpen())
         {
             var target = new System.Windows.Rect(0, 0, viewWidthDip, viewHeightDip);
             dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, target);
             dc.PushClip(new RectangleGeometry(target));
             dc.PushTransform(new TranslateTransform(-viewLeftDip, -viewTopDip));
-            _surface.RenderSnapshot(dc, options);
+            rendered = renderContent(dc);
             dc.Pop();
             dc.Pop();
+        }
+
+        if (!rendered)
+        {
+            return null;
         }
 
         bitmap.Render(visual);

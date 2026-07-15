@@ -40,13 +40,15 @@ internal sealed class RegionMaskRenderer
         int selectedId,
         ScreenRect screenBounds,
         double surfaceWidth,
-        double surfaceHeight)
+        double surfaceHeight,
+        IReadOnlySet<int>? excludedMaskIds = null)
     {
         var drewMask = false;
 
         foreach (var mask in masks)
         {
-            if (!mask.Rect.Intersects(screenBounds))
+            if (excludedMaskIds?.Contains(mask.Id) == true
+                || !mask.Rect.Intersects(screenBounds))
             {
                 continue;
             }

@@ -222,11 +222,16 @@ internal sealed class FocusToolController : IDisposable, IOverlayInputHandler
             () => Settings.MagnifierEnabled,
             CloseMagnifierHost,
             UpdateMagnifierHost,
-            () => _overlayManager?.Hide(),
-            () => _overlayManager?.Show(),
+            () => _overlayManager?.TryExcludeVisibleWindowsFromCapture(),
             _pinnedLenses.HideForBoard,
             _pinnedLenses.RestoreAfterBoard,
             () => IsVisualBoardMode(_mode),
+            bounds => _overlayManager?.CaptureScreenBoardPrivacySnapshot(bounds)
+                ?? new ScreenBoardPrivacySnapshot(
+                    layer: null,
+                    maskIds: _regionMasks.Masks
+                        .Where(mask => mask.Rect.Intersects(bounds))
+                        .Select(mask => mask.Id)),
             frame => _overlayManager?.CaptureScreenBoardFrame(frame),
             (title, text) => _trayIcon?.ShowMessage(title, text));
         _boards = new BoardController(

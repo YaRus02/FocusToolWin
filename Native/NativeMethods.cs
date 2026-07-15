@@ -13,6 +13,7 @@ internal static class NativeMethods
     public const int WsChild = 0x40000000;
     public const int WsVisible = 0x10000000;
     public const uint LwaAlpha = 0x00000002;
+    public const uint WdaExcludeFromCapture = 0x00000011;
 
     public const uint SwpNoActivate = 0x0010;
     public const uint SwpNoMove = 0x0002;
@@ -224,6 +225,12 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint pdwAffinity);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern IntPtr CreateWindowEx(

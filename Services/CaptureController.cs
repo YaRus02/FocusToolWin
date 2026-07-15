@@ -14,11 +14,11 @@ internal sealed class CaptureController
     private readonly Func<bool> _isMagnifierEnabled;
     private readonly Action _closeMagnifierHost;
     private readonly Action _updateMagnifierHost;
-    private readonly Action _hideOverlay;
-    private readonly Action _showOverlay;
+    private readonly Func<IDisposable?> _excludeOverlayFromCapture;
     private readonly Action _hidePinnedLensesForBoard;
     private readonly Action _restorePinnedLensesAfterBoard;
     private readonly Func<bool> _isVisualBoardMode;
+    private readonly Func<ScreenRect, ScreenBoardPrivacySnapshot> _captureScreenBoardPrivacySnapshot;
     private readonly Func<ScreenBoardFrame, BitmapSource?> _captureScreenBoardFrame;
     private readonly Action<string, string> _showMessage;
 
@@ -30,11 +30,11 @@ internal sealed class CaptureController
         Func<bool> isMagnifierEnabled,
         Action closeMagnifierHost,
         Action updateMagnifierHost,
-        Action hideOverlay,
-        Action showOverlay,
+        Func<IDisposable?> excludeOverlayFromCapture,
         Action hidePinnedLensesForBoard,
         Action restorePinnedLensesAfterBoard,
         Func<bool> isVisualBoardMode,
+        Func<ScreenRect, ScreenBoardPrivacySnapshot> captureScreenBoardPrivacySnapshot,
         Func<ScreenBoardFrame, BitmapSource?> captureScreenBoardFrame,
         Action<string, string> showMessage)
     {
@@ -45,11 +45,11 @@ internal sealed class CaptureController
         _isMagnifierEnabled = isMagnifierEnabled;
         _closeMagnifierHost = closeMagnifierHost;
         _updateMagnifierHost = updateMagnifierHost;
-        _hideOverlay = hideOverlay;
-        _showOverlay = showOverlay;
+        _excludeOverlayFromCapture = excludeOverlayFromCapture;
         _hidePinnedLensesForBoard = hidePinnedLensesForBoard;
         _restorePinnedLensesAfterBoard = restorePinnedLensesAfterBoard;
         _isVisualBoardMode = isVisualBoardMode;
+        _captureScreenBoardPrivacySnapshot = captureScreenBoardPrivacySnapshot;
         _captureScreenBoardFrame = captureScreenBoardFrame;
         _showMessage = showMessage;
     }
@@ -172,26 +172,61 @@ internal sealed class CaptureController
         IsCaptureInProgress = true;
         var toolbarWasVisible = _isToolbarVisible();
         var magnifierWasEnabled = _isMagnifierEnabled();
+        var boardBounds = _screenshotService.GetCurrentMonitorBounds();
+        ScreenBoardPrivacySnapshot privacySnapshot;
+        try
+        {
+            privacySnapshot = _captureScreenBoardPrivacySnapshot(boardBounds);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Could not render the Screen Board privacy layer.", ex);
+            _showMessage("Screen Board cancelled", "Region masks could not be secured in the board snapshot.");
+            IsCaptureInProgress = false;
+            return;
+        }
+
+        if (!privacySnapshot.IsComplete)
+        {
+            AppLog.Error("Screen Board privacy layer was unavailable while region masks were active.");
+            _showMessage("Screen Board cancelled", "Region masks could not be secured in the board snapshot.");
+            IsCaptureInProgress = false;
+            return;
+        }
+
+        using var overlayCaptureExclusion = _excludeOverlayFromCapture();
+        if (overlayCaptureExclusion is null)
+        {
+            AppLog.Error("Screen Board could not exclude the live overlay from capture.");
+            _showMessage("Screen Board cancelled", "The live privacy overlay could not be excluded from capture.");
+            IsCaptureInProgress = false;
+            return;
+        }
+
         if (toolbarWasVisible)
         {
             _hideToolbar();
         }
 
-        _hideOverlay();
         _closeMagnifierHost();
         _hidePinnedLensesForBoard();
         await WaitForScreenRefreshAsync();
 
         try
         {
-            var frame = await _screenshotService.CaptureCurrentMonitorFrameAsync();
+            var frame = await _screenshotService.CaptureFrameAsync(boardBounds);
+            if (privacySnapshot.Layer is { } privacyLayer)
+            {
+                var protectedImage = ScreenBoardCompositor.CompositePrivacyLayer(frame.Image, privacyLayer);
+                frame = new ScreenBoardFrame(frame.Bounds, protectedImage, privacySnapshot.MaskIds);
+            }
+
             enterScreenBoard(frame);
         }
         catch (Exception ex)
         {
             AppLog.Error("Could not capture screen board.", ex);
             _showMessage("Screen board failed", ex.Message);
-            _showOverlay();
             restorePreviousMode();
         }
         finally

@@ -32,14 +32,20 @@ internal sealed class ScreenshotService
         }
     }
 
-    public async Task<ScreenBoardFrame> CaptureCurrentMonitorFrameAsync()
+    public ScreenRect GetCurrentMonitorBounds()
+    {
+        var bounds = GetCursorScreen().Bounds;
+        return new ScreenRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+    }
+
+    public async Task<ScreenBoardFrame> CaptureFrameAsync(ScreenRect bounds)
     {
         return await Task.Run(() =>
         {
-            var screen = GetCursorScreen();
-            using var bitmap = CaptureScreenBitmap(screen);
+            var integerBounds = ToIntegerBounds(bounds);
+            using var bitmap = CaptureScreenBitmap(integerBounds);
             var image = ToBitmapSource(bitmap);
-            return CreateFrame(screen.Bounds, image);
+            return CreateFrame(integerBounds, image);
         });
     }
 

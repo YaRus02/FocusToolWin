@@ -172,6 +172,17 @@ internal sealed class OverlaySurface : FrameworkElement
         RenderOverlay(drawingContext, options);
     }
 
+    public bool RenderRegionMaskSnapshot(DrawingContext drawingContext)
+    {
+        if (PresentationSource.FromVisual(this) is null)
+        {
+            return false;
+        }
+
+        DrawRegionMasks(drawingContext, showHandles: false, excludedMaskIds: null);
+        return true;
+    }
+
     private void RenderOverlay(DrawingContext drawingContext, OverlayRenderOptions options)
     {
         // ToLocal/PointFromScreen require a live PresentationSource; during teardown
@@ -339,7 +350,19 @@ internal sealed class OverlaySurface : FrameworkElement
 
     private void DrawRegionMasks(DrawingContext drawingContext)
     {
-        var showHandles = _modeProvider() == InteractionMode.RegionMaskSelect;
+        var mode = _modeProvider();
+        var showHandles = mode == InteractionMode.RegionMaskSelect;
+        var excludedMaskIds = mode == InteractionMode.ScreenBoard
+            ? _screenBoardProvider()?.BakedRegionMaskIds
+            : null;
+        DrawRegionMasks(drawingContext, showHandles, excludedMaskIds);
+    }
+
+    private void DrawRegionMasks(
+        DrawingContext drawingContext,
+        bool showHandles,
+        IReadOnlySet<int>? excludedMaskIds)
+    {
         _regionMaskRenderer.Draw(
             drawingContext,
             _regionMaskProvider(),
@@ -347,7 +370,8 @@ internal sealed class OverlaySurface : FrameworkElement
             showHandles ? _regionMaskSelectionProvider() : -1,
             _screenBounds,
             ActualWidth,
-            ActualHeight);
+            ActualHeight,
+            excludedMaskIds);
     }
 
     private static void DrawRectHandles(DrawingContext drawingContext, Rect rect)

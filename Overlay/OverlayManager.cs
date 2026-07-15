@@ -1,5 +1,6 @@
 ﻿using FocusTool.Win.Models;
 using Microsoft.Win32;
+using FocusTool.Win.Native;
 using System.Windows.Media.Imaging;
 using Screen = System.Windows.Forms.Screen;
 
@@ -161,6 +162,17 @@ internal sealed class OverlayManager : IDisposable
             .ToArray();
     }
 
+    public IDisposable? TryExcludeVisibleWindowsFromCapture()
+    {
+        var handles = _windows
+            .Where(window => window.IsVisible)
+            .Select(window => window.Handle)
+            .ToArray();
+        return handles.Any(handle => handle == IntPtr.Zero)
+            ? null
+            : WindowCaptureExclusionScope.TryCreate(handles);
+    }
+
     public double GetDpiScaleForPoint(ScreenPoint point)
     {
         OverlayWindow? nearestWindow = null;
@@ -211,6 +223,22 @@ internal sealed class OverlayManager : IDisposable
         }
 
         return null;
+    }
+
+    public ScreenBoardPrivacySnapshot CaptureScreenBoardPrivacySnapshot(ScreenRect bounds)
+    {
+        var maskIds = _regionMaskProvider()
+            .Where(mask => mask.Rect.Intersects(bounds))
+            .Select(mask => mask.Id)
+            .ToHashSet();
+        if (maskIds.Count == 0)
+        {
+            return new ScreenBoardPrivacySnapshot(layer: null, maskIds: maskIds);
+        }
+
+        var window = _windows.FirstOrDefault(candidate => candidate.Intersects(bounds));
+        var layer = window?.CaptureRegionMaskSurfaceRegion(bounds);
+        return new ScreenBoardPrivacySnapshot(layer, maskIds);
     }
 
     // Snapshot only the part of the overlay surface that overlaps the captured
