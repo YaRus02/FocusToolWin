@@ -16,8 +16,9 @@ internal sealed class PushToAnnotateController
     private readonly Action<AnnotationTool> _setAnnotationTool;
     private readonly Action _selectStepTool;
     private readonly Action<int> _setAnnotationPresetColor;
+    private readonly Func<Shortcut, bool> _isShortcutPressed;
+    private readonly HoldShortcutSession _holdSession;
     private Shortcut _shortcut;
-    private bool _active;
     private bool _exitPending;
 
     public PushToAnnotateController(
@@ -30,7 +31,9 @@ internal sealed class PushToAnnotateController
         Action clearAnnotations,
         Action<AnnotationTool> setAnnotationTool,
         Action selectStepTool,
-        Action<int> setAnnotationPresetColor)
+        Action<int> setAnnotationPresetColor,
+        Func<Shortcut, bool>? isShortcutPressed = null,
+        Func<Shortcut, bool>? isAnyShortcutComponentPressed = null)
     {
         _settingsProvider = settingsProvider;
         _modeProvider = modeProvider;
@@ -42,10 +45,12 @@ internal sealed class PushToAnnotateController
         _setAnnotationTool = setAnnotationTool;
         _selectStepTool = selectStepTool;
         _setAnnotationPresetColor = setAnnotationPresetColor;
+        _isShortcutPressed = isShortcutPressed ?? (static shortcut => shortcut.IsPressed());
+        _holdSession = new HoldShortcutSession(_isShortcutPressed, isAnyShortcutComponentPressed);
     }
 
-    public bool Active => _active;
-    public Shortcut Shortcut => _shortcut;
+    public bool Active => _holdSession.Active;
+    public Shortcut Shortcut => _holdSession.Active ? _holdSession.Shortcut : _shortcut;
 
     public void ConfigureShortcut()
     {
@@ -69,24 +74,26 @@ internal sealed class PushToAnnotateController
         var settings = _settingsProvider();
         var mode = _modeProvider();
         if (disposed
-            || _active
+            || Active
             || IsAnnotationMode(mode)
             || mode != InteractionMode.Passthrough
-            || ShortcutSettings.IsShortcutDisabled(settings.Shortcuts.PushToAnnotate))
+            || ShortcutSettings.IsShortcutDisabled(settings.Shortcuts.PushToAnnotate)
+            || _shortcut == default)
         {
             return;
         }
 
-        _active = true;
+        _holdSession.Begin(_shortcut, HoldShortcutReleasePolicy.AllComponentsReleased);
         _exitPending = false;
         _polledShortcutDown.Clear();
         _setTimerInterval(_activeInterval);
         _setMode(InteractionMode.Annotate);
+        PollShortcuts(executeActions: false);
     }
 
     public void CancelIfLeavingAnnotate(InteractionMode nextMode)
     {
-        if (_active && nextMode != InteractionMode.Annotate)
+        if (Active && nextMode != InteractionMode.Annotate)
         {
             Cancel();
         }
@@ -94,7 +101,7 @@ internal sealed class PushToAnnotateController
 
     public void Update(bool canExit)
     {
-        if (!_active)
+        if (!Active)
         {
             return;
         }
@@ -104,7 +111,7 @@ internal sealed class PushToAnnotateController
             PollShortcuts();
         }
 
-        if (!_exitPending && _shortcut.IsPressed())
+        if (!_exitPending && _holdSession.ShouldRemainActive())
         {
             _setTimerInterval(_activeInterval);
             return;
@@ -113,7 +120,7 @@ internal sealed class PushToAnnotateController
         _polledShortcutDown.Clear();
         _exitPending = true;
         TryCompleteExit(canExit);
-        if (_active)
+        if (Active)
         {
             _setTimerInterval(_activeInterval);
         }
@@ -121,7 +128,7 @@ internal sealed class PushToAnnotateController
 
     public void TryCompleteExit(bool canExit)
     {
-        if (!_active || !_exitPending || !canExit)
+        if (!Active || !_exitPending || !canExit)
         {
             return;
         }
@@ -135,17 +142,22 @@ internal sealed class PushToAnnotateController
 
     private void Cancel()
     {
-        _active = false;
+        _holdSession.End();
         _exitPending = false;
         _polledShortcutDown.Clear();
     }
 
-    private void PollShortcuts()
+    private void PollShortcuts(bool executeActions = true)
     {
-        if (_modeProvider() != InteractionMode.Annotate || _hasTextInput())
+        if (_modeProvider() != InteractionMode.Annotate)
         {
             _polledShortcutDown.Clear();
             return;
+        }
+
+        if (_hasTextInput())
+        {
+            executeActions = false;
         }
 
         var shortcuts = _settingsProvider().Shortcuts;
@@ -156,6 +168,7 @@ internal sealed class PushToAnnotateController
         PollShortcut("tool-line", shortcuts.ToolLine, () => _setAnnotationTool(AnnotationTool.Line));
         PollShortcut("tool-pencil", shortcuts.ToolPencil, () => _setAnnotationTool(AnnotationTool.Pencil));
         PollShortcut("tool-highlighter", shortcuts.ToolHighlighter, () => _setAnnotationTool(AnnotationTool.Highlighter));
+        PollShortcut("tool-eraser", shortcuts.ToolEraser, () => _setAnnotationTool(AnnotationTool.Eraser));
         PollShortcut("tool-text", shortcuts.ToolText, () => _setAnnotationTool(AnnotationTool.Text));
         PollShortcut("tool-move", shortcuts.ToolMove, () => _setAnnotationTool(AnnotationTool.Move));
         PollShortcut("tool-step", shortcuts.ToolStep, _selectStepTool);
@@ -164,9 +177,14 @@ internal sealed class PushToAnnotateController
         PollShortcut("color-3", shortcuts.Color3, () => _setAnnotationPresetColor(2));
         PollShortcut("color-4", shortcuts.Color4, () => _setAnnotationPresetColor(3));
         PollShortcut("color-5", shortcuts.Color5, () => _setAnnotationPresetColor(4));
+
+        void PollShortcut(string id, string shortcutText, Action action)
+        {
+            PollShortcutState(id, shortcutText, executeActions ? action : null);
+        }
     }
 
-    private void PollShortcut(string id, string shortcutText, Action action)
+    private void PollShortcutState(string id, string shortcutText, Action? action)
     {
         if (ShortcutSettings.IsShortcutDisabled(shortcutText) || !Shortcut.TryParse(shortcutText, out var shortcut))
         {
@@ -174,7 +192,7 @@ internal sealed class PushToAnnotateController
             return;
         }
 
-        if (!shortcut.IsPressed())
+        if (!_isShortcutPressed(shortcut))
         {
             _polledShortcutDown.Remove(id);
             return;
@@ -182,7 +200,7 @@ internal sealed class PushToAnnotateController
 
         if (_polledShortcutDown.Add(id))
         {
-            action();
+            action?.Invoke();
         }
     }
 

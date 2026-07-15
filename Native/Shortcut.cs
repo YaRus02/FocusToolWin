@@ -42,8 +42,17 @@ internal readonly record struct Shortcut(ModifierKeys Modifiers, Key Key, int Vi
             return false;
         }
 
-        return IsVirtualKeyPressed(VirtualKey)
-            || TryGetTopRowDigit(Key, out var digit) && IsVirtualKeyPressed(VkNumpadDigit(digit));
+        return IsPrimaryInputPressed();
+    }
+
+    public bool IsAnyComponentPressed()
+    {
+        return IsPrimaryInputPressed()
+            || (Modifiers & ModifierKeys.Control) != 0 && IsVirtualKeyPressed(VkControl)
+            || (Modifiers & ModifierKeys.Alt) != 0 && IsVirtualKeyPressed(VkAlt)
+            || (Modifiers & ModifierKeys.Shift) != 0 && IsVirtualKeyPressed(VkShift)
+            || (Modifiers & ModifierKeys.Windows) != 0
+                && (IsVirtualKeyPressed(VkLeftWin) || IsVirtualKeyPressed(VkRightWin));
     }
 
     public bool IsPressedWithExactModifiers()
@@ -217,6 +226,12 @@ internal readonly record struct Shortcut(ModifierKeys Modifiers, Key Key, int Vi
     {
         return virtualKey == VirtualKey
             || TryGetTopRowDigit(Key, out var digit) && virtualKey == VkNumpadDigit(digit);
+    }
+
+    private bool IsPrimaryInputPressed()
+    {
+        return IsVirtualKeyPressed(VirtualKey)
+            || TryGetTopRowDigit(Key, out var digit) && IsVirtualKeyPressed(VkNumpadDigit(digit));
     }
 
     private static bool TryGetTopRowDigit(Key key, out int digit)

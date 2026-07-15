@@ -1,5 +1,6 @@
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using FocusTool.Win.Native;
 using FocusTool.Win.Overlay;
 using FocusTool.Win.Models;
 using FocusTool.Win.Services;
@@ -28,6 +29,7 @@ internal static class Program
             VerifyCustomizedLegacyHoldShortcutIsPreserved();
             VerifyEraserShortcutMigrationAvoidsConflict();
             VerifyObjectEraserGestureUndoRedo();
+            VerifyPushToAnnotateUsesLatchedShortcutComponents();
             VerifyStrokeSmoothingPreservesEndpointsAndCorners();
             VerifyHighlighterUsesFixedRectangularNib();
             VerifyHighlighterDrawAndHoldLocksAndTracksEndpoint();
@@ -296,6 +298,99 @@ internal static class Program
             || imageOverlap.EraserHoverShape is not null)
         {
             throw new InvalidOperationException("Eraser treated a pasted image as an erasable target.");
+        }
+    }
+
+    private static void VerifyPushToAnnotateUsesLatchedShortcutComponents()
+    {
+        VerifyPushToAnnotateShortcutScenario("Alt+A", "A", AnnotationTool.Arrow);
+        VerifyPushToAnnotateShortcutScenario("Ctrl+Shift+W", "W", AnnotationTool.Pencil);
+        VerifyPushToAnnotateShortcutScenario("F", "F", AnnotationTool.Highlighter);
+
+        Shortcut.TryParse("Ctrl+Shift+W", out var shortcut);
+        var chordPressed = false;
+        var anyComponentPressed = true;
+        var holdSession = new HoldShortcutSession(_ => chordPressed, _ => anyComponentPressed);
+        holdSession.Begin(shortcut, HoldShortcutReleasePolicy.ChordBreak);
+        if (holdSession.ShouldRemainActive())
+        {
+            throw new InvalidOperationException("ChordBreak hold policy ignored a broken shortcut chord.");
+        }
+
+        holdSession.Begin(shortcut, HoldShortcutReleasePolicy.AllComponentsReleased);
+        if (!holdSession.ShouldRemainActive())
+        {
+            throw new InvalidOperationException("AllComponentsReleased hold policy exited while a shortcut component was still held.");
+        }
+    }
+
+    private static void VerifyPushToAnnotateShortcutScenario(
+        string pushShortcut,
+        string conflictingToolShortcut,
+        AnnotationTool expectedTool)
+    {
+        var settings = new AppSettings();
+        settings.Shortcuts.PushToAnnotate = pushShortcut;
+        settings.Shortcuts.ToolArrow = expectedTool == AnnotationTool.Arrow ? conflictingToolShortcut : "A";
+        settings.Shortcuts.ToolPencil = expectedTool == AnnotationTool.Pencil ? conflictingToolShortcut : "W";
+        settings.Shortcuts.ToolHighlighter = expectedTool == AnnotationTool.Highlighter ? conflictingToolShortcut : "F";
+
+        var mode = InteractionMode.Passthrough;
+        var pressedShortcuts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { conflictingToolShortcut };
+        var anyTriggerComponentPressed = true;
+        var hasTextInput = false;
+        var selectedTools = new List<AnnotationTool>();
+        var controller = new PushToAnnotateController(
+            () => settings,
+            () => mode,
+            next => mode = next,
+            _ => { },
+            () => hasTextInput,
+            TimeSpan.FromMilliseconds(8),
+            () => { },
+            selectedTools.Add,
+            () => { },
+            _ => { },
+            shortcut => pressedShortcuts.Contains(shortcut.DisplayText),
+            _ => anyTriggerComponentPressed);
+
+        controller.ConfigureShortcut();
+        controller.Start(disposed: false);
+        controller.Update(canExit: true);
+        if (mode != InteractionMode.Annotate || selectedTools.Count != 0)
+        {
+            throw new InvalidOperationException($"Push-to-annotate {pushShortcut} activated its conflicting tool on entry.");
+        }
+
+        hasTextInput = true;
+        controller.Update(canExit: false);
+        hasTextInput = false;
+        controller.Update(canExit: true);
+        if (selectedTools.Count != 0)
+        {
+            throw new InvalidOperationException($"Push-to-annotate {pushShortcut} lost its shortcut latch during text input.");
+        }
+
+        pressedShortcuts.Remove(conflictingToolShortcut);
+        controller.Update(canExit: true);
+        if (!controller.Active)
+        {
+            throw new InvalidOperationException($"Push-to-annotate {pushShortcut} exited before all shortcut components were released.");
+        }
+
+        pressedShortcuts.Add(conflictingToolShortcut);
+        controller.Update(canExit: true);
+        if (selectedTools.Count != 1 || selectedTools[0] != expectedTool)
+        {
+            throw new InvalidOperationException($"Push-to-annotate {pushShortcut} did not accept a fresh conflicting tool press.");
+        }
+
+        pressedShortcuts.Clear();
+        anyTriggerComponentPressed = false;
+        controller.Update(canExit: true);
+        if (controller.Active || mode != InteractionMode.Passthrough)
+        {
+            throw new InvalidOperationException($"Push-to-annotate {pushShortcut} did not exit after all shortcut components were released.");
         }
     }
 
