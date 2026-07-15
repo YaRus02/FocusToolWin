@@ -27,7 +27,7 @@ It adds, on top of the desktop:
 The main idea of FocusTool is minimum visual noise and fast access through
 hotkeys, the tray menu, and a compact panel over the screen.
 
-Documentation is current for version 3.1.0.
+Documentation is current for version 3.2.0.
 
 Development note: AI assistance was used while building FocusTool as an
 engineering aid. Architecture, integration, behavior checks, and final changes
